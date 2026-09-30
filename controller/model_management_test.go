@@ -23,6 +23,7 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/config"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -107,6 +108,105 @@ func modelManagementRequest(t *testing.T, handler gin.HandlerFunc, method, path 
 		require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), output), recorder.Body.String())
 	}
 	return recorder
+}
+
+func TestModelPricingStatusFilter(t *testing.T) {
+	for _, dialect := range []struct{ kind, env string }{{"sqlite", ""}, {"mysql", "TEST_MYSQL_DSN"}, {"postgres", "TEST_POSTGRES_DSN"}} {
+		t.Run(dialect.kind, func(t *testing.T) {
+			if dialect.env != "" && os.Getenv(dialect.env) == "" {
+				t.Skip("set " + dialect.env + " to run this database")
+			}
+			db := modelManagementDB(t, dialect.kind, os.Getenv(dialect.env))
+			previousSelfUse := operation_setting.SelfUseModeEnabled
+			operation_setting.SelfUseModeEnabled = false
+			t.Cleanup(func() { operation_setting.SelfUseModeEnabled = previousSelfUse })
+			vendor := model.Vendor{Name: "Pricing filter vendor"}
+			require.NoError(t, db.Create(&vendor).Error)
+			for _, row := range []model.Model{
+				{ModelName: "pricing-filter-fixed", VendorID: vendor.Id, Status: 1},
+				{ModelName: "pricing-filter-ratio", VendorID: vendor.Id, Status: 1},
+				{ModelName: "pricing-filter-expr", Status: 1},
+				{ModelName: "pricing-filter-plugin", Status: 1},
+				{ModelName: "pricing-filter-unset-visible", VendorID: vendor.Id, Status: 1},
+				{ModelName: "pricing-filter-unset-hidden", VendorID: vendor.Id, Status: 0},
+			} {
+				require.NoError(t, row.Insert())
+			}
+			require.NoError(t, ratio_setting.UpdateModelPriceByJSONString(`{"pricing-filter-fixed":0}`))
+			require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"pricing-filter-ratio":1}`))
+			config.UpdateConfigFromMap(config.GlobalConfig.Get("billing_setting"), map[string]string{
+				"billing_mode":        `{"pricing-filter-expr":"tiered_expr"}`,
+				"billing_expr":        `{"pricing-filter-expr":"tier(\"base\", p * 1 + c * 2)"}`,
+				"plugin_billing_expr": `{"pricing-filter-plugin-key::pricing-filter-plugin":"tier(\"task\", u(\"seconds\") * 0.5)"}`,
+			})
+			const source = `
+export const meta = {apiVersion:1,key:"pricing-filter-plugin-key",name:"Pricing filter plugin",version:"1.0.0",author:{name:"Test"},models:["pricing-filter-plugin"],fetchMode:"per_task",usageSchema:{seconds:{type:"number",unit:"second"}}};
+export function buildSubmitRequest(){return {};}
+export function parseSubmitResponse(){return {};}
+export function buildQueryRequest(){return {};}
+export function parseTaskResult(){return {};}
+`
+			_, err := jsplugin.DefaultRegistry.Register(source, jsplugin.Options{})
+			require.NoError(t, err)
+			t.Cleanup(func() { jsplugin.DefaultRegistry.Unregister("pricing-filter-plugin-key") })
+			channel := model.Channel{Name: "Pricing filter channel", Type: 1, Key: "fixture", Models: "pricing-filter-unset-visible", Group: "default", Status: common.ChannelStatusEnabled}
+			require.NoError(t, channel.Insert())
+
+			type response struct {
+				Success bool
+				Data    struct {
+					Items []model.Model
+					Total int
+				}
+			}
+			for _, tc := range []struct {
+				name, query string
+				names       []string
+			}{
+				{"all", "", []string{"pricing-filter-fixed", "pricing-filter-ratio", "pricing-filter-expr", "pricing-filter-plugin", "pricing-filter-unset-visible", "pricing-filter-unset-hidden"}},
+				{"all_explicit", "&pricing_status=all", []string{"pricing-filter-fixed", "pricing-filter-ratio", "pricing-filter-expr", "pricing-filter-plugin", "pricing-filter-unset-visible", "pricing-filter-unset-hidden"}},
+				{"configured", "&pricing_status=configured", []string{"pricing-filter-fixed", "pricing-filter-ratio", "pricing-filter-expr", "pricing-filter-plugin"}},
+				{"unset", "&pricing_status=unset", []string{"pricing-filter-unset-visible", "pricing-filter-unset-hidden"}},
+				{"vendor", fmt.Sprintf("&pricing_status=unset&vendor=%d", vendor.Id), []string{"pricing-filter-unset-visible", "pricing-filter-unset-hidden"}},
+				{"visibility", "&pricing_status=unset&square_state=visible", []string{"pricing-filter-unset-visible"}},
+				{"vendor_and_visibility", fmt.Sprintf("&pricing_status=unset&vendor=%d&square_state=visible", vendor.Id), []string{"pricing-filter-unset-visible"}},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					var got response
+					modelManagementRequest(t, SearchModelsMeta, http.MethodGet, "/api/models/search?keyword=pricing-filter-"+tc.query+"&page_size=20", nil, &got)
+					require.True(t, got.Success)
+					assert.Equal(t, len(tc.names), got.Data.Total)
+					actual := make([]string, 0, len(got.Data.Items))
+					for _, item := range got.Data.Items {
+						actual = append(actual, item.ModelName)
+					}
+					assert.ElementsMatch(t, tc.names, actual)
+				})
+			}
+			for page, name := range []string{"pricing-filter-unset-hidden", "pricing-filter-unset-visible"} {
+				var got response
+				modelManagementRequest(t, SearchModelsMeta, http.MethodGet, fmt.Sprintf("/api/models/search?keyword=pricing-filter-&pricing_status=unset&page_size=1&p=%d", page+1), nil, &got)
+				require.True(t, got.Success)
+				assert.Equal(t, 2, got.Data.Total)
+				require.Len(t, got.Data.Items, 1)
+				assert.Equal(t, name, got.Data.Items[0].ModelName)
+			}
+			var beyond response
+			modelManagementRequest(t, SearchModelsMeta, http.MethodGet, "/api/models/search?keyword=pricing-filter-&pricing_status=unset&page_size=1&p=3", nil, &beyond)
+			require.True(t, beyond.Success)
+			assert.Equal(t, 2, beyond.Data.Total)
+			assert.Empty(t, beyond.Data.Items)
+			for _, status := range []string{"unknown", "configured%20extra"} {
+				recorder := modelManagementRequest(t, GetAllModelsMeta, http.MethodGet, "/api/models/?pricing_status="+status, nil, nil)
+				assert.Equal(t, http.StatusBadRequest, recorder.Code)
+			}
+			operation_setting.SelfUseModeEnabled = true
+			var selfUse response
+			modelManagementRequest(t, SearchModelsMeta, http.MethodGet, "/api/models/search?keyword=pricing-filter-&pricing_status=unset&page_size=20", nil, &selfUse)
+			require.True(t, selfUse.Success)
+			assert.Equal(t, 2, selfUse.Data.Total, "self-use fallback is not a configured price")
+		})
+	}
 }
 
 func TestModelPricingConversionDatabaseMatrix(t *testing.T) {

@@ -65,6 +65,7 @@ export function ModelsTable() {
       { columnId: 'square_state', searchKey: 'square_state', type: 'array' },
       { columnId: 'vendor_id', searchKey: 'vendor', type: 'array' },
       { columnId: 'sync_official', searchKey: 'sync', type: 'array' },
+      { columnId: 'pricing', searchKey: 'pricing', type: 'array' },
     ],
   })
 
@@ -81,6 +82,8 @@ export function ModelsTable() {
   const syncFilter =
     (columnFilters.find((f) => f.id === 'sync_official')?.value as string[]) ||
     []
+  const pricingFilter =
+    (columnFilters.find((f) => f.id === 'pricing')?.value as string[]) || []
 
   // Fetch vendors for filter
   const { data: vendorsData } = useQuery({
@@ -116,6 +119,10 @@ export function ModelsTable() {
     syncFilter.length > 0 && !syncFilter.includes('all')
       ? syncFilter[0]
       : undefined
+  const pricingStatus =
+    pricingFilter[0] === 'configured' || pricingFilter[0] === 'unset'
+      ? pricingFilter[0]
+      : undefined
 
   // Use search API whenever any filter is active so status/sync are applied server-side
   const shouldSearch = Boolean(
@@ -123,7 +130,8 @@ export function ModelsTable() {
     activeVendorFilter ||
     statusFilterValue ||
     squareState ||
-    syncFilterValue
+    syncFilterValue ||
+    pricingStatus
   )
 
   // Fetch models data
@@ -136,6 +144,7 @@ export function ModelsTable() {
       status: statusFilterValue,
       square_state: squareState,
       sync_official: syncFilterValue,
+      pricing_status: pricingStatus,
       p: pagination.pageIndex + 1,
       page_size: pagination.pageSize,
     }),
@@ -149,6 +158,7 @@ export function ModelsTable() {
             status: statusFilterValue,
             square_state: squareState,
             sync_official: syncFilterValue,
+            pricing_status: pricingStatus,
             p: pagination.pageIndex + 1,
             page_size: pagination.pageSize,
           })
@@ -289,9 +299,24 @@ export function ModelsTable() {
             ],
             singleSelect: true,
           },
+          {
+            columnId: 'pricing',
+            title: t('Pricing'),
+            options: [
+              { label: t('All'), value: 'all' },
+              { label: t('Configured'), value: 'configured' },
+              { label: t('Unset'), value: 'unset' },
+            ],
+            singleSelect: true,
+          },
         ],
       }}
-      bulkActions={<DataTableBulkActions table={table} />}
+      bulkActions={
+        <DataTableBulkActions
+          table={table}
+          allowSyntheticHide={pricingStatus === 'unset'}
+        />
+      }
     />
   )
 }

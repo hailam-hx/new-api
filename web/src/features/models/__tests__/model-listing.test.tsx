@@ -123,6 +123,7 @@ async function renderList(
     waitForPricing?: boolean
     initialUrl?: string
     total?: number
+    vendors?: { id: number; name: string }[]
   } = {}
 ) {
   useAuthStore.getState().auth.setUser({ id: 1, username: 'admin', role: 100 })
@@ -137,6 +138,9 @@ async function renderList(
     }
     if (url === '/api/models/7') {
       return { data: { success: true, data: metadata } }
+    }
+    if (url === '/api/vendors/') {
+      return { data: { success: true, data: { items: options.vendors ?? [] } } }
     }
     if (url === '/api/option/model_pricing') {
       return {
@@ -817,6 +821,90 @@ it('keeps an active visibility filter when its server result is empty', async ()
   expect(get).toHaveBeenCalledWith('/api/models/search', {
     params: expect.objectContaining({ square_state: 'unavailable', p: 1 }),
   })
+})
+
+it('sends Pricing with vendor and visibility filters and keeps bulk hide available', async () => {
+  const { get, router } = await renderList([metadata], {
+    vendors: [{ id: 4, name: 'Claude' }],
+  })
+  const user = userEvent.setup()
+  await user.click(screen.getAllByRole('button', { name: 'Pricing' })[0])
+  await user.click(screen.getByRole('option', { name: 'Unset' }))
+  await user.keyboard('{Escape}')
+  await user.click(screen.getByRole('button', { name: 'Vendor' }))
+  await user.click(screen.getByRole('option', { name: 'Claude' }))
+  await user.keyboard('{Escape}')
+  await user.click(
+    screen.getByRole('button', { name: 'Model square visibility' })
+  )
+  await user.click(screen.getByRole('option', { name: 'Unavailable' }))
+  await waitFor(() =>
+    expect(get).toHaveBeenCalledWith('/api/models/search', {
+      params: expect.objectContaining({
+        pricing_status: 'unset',
+        vendor: '4',
+        square_state: 'unavailable',
+        p: 1,
+      }),
+    })
+  )
+  expect(router.state.location.search).toMatchObject({ pricing: ['unset'] })
+  await user.click(screen.getByRole('checkbox', { name: 'Select all' }))
+  expect(
+    screen.getByRole('button', {
+      name: 'Hide selected models from model square',
+    })
+  ).toBeEnabled()
+})
+
+it('offers Configured and All pricing choices in the existing filter', async () => {
+  const { get, router } = await renderList([metadata])
+  const user = userEvent.setup()
+  await user.click(screen.getAllByRole('button', { name: 'Pricing' })[0])
+  await user.click(screen.getByRole('option', { name: 'Configured' }))
+  await waitFor(() =>
+    expect(get).toHaveBeenCalledWith('/api/models/search', {
+      params: expect.objectContaining({ pricing_status: 'configured' }),
+    })
+  )
+  expect(router.state.location.search).toMatchObject({
+    pricing: ['configured'],
+  })
+  get.mockClear()
+  await user.keyboard('{Escape}')
+  await user.click(screen.getByRole('button', { name: /Pricing.*Configured/ }))
+  await user.click(screen.getByRole('option', { name: 'All' }))
+  await waitFor(() =>
+    expect(router.state.location.search).toMatchObject({ pricing: ['all'] })
+  )
+  await waitFor(() =>
+    expect(get).toHaveBeenCalledWith('/api/models/', {
+      params: expect.not.objectContaining({ pricing_status: 'configured' }),
+    })
+  )
+})
+
+it('allows bulk hide for selected unpriced channel models by creating hidden metadata', async () => {
+  await renderList([channel], {
+    initialUrl: '/models/metadata?pricing=%5B%22unset%22%5D',
+  })
+  const post = vi.spyOn(api, 'post').mockResolvedValue({
+    data: { success: true, data: { ...channel, id: 9, status: 0 } },
+  })
+  const user = userEvent.setup()
+  await user.click(screen.getByRole('checkbox', { name: 'Select all' }))
+  const hide = screen.getByRole('button', {
+    name: 'Hide selected models from model square',
+  })
+  expect(hide).toBeEnabled()
+  await user.click(hide)
+  await waitFor(() =>
+    expect(post).toHaveBeenCalledWith(
+      '/api/models/',
+      expect.objectContaining({ model_name: 'channel-only', status: 0 }),
+      expect.anything()
+    )
+  )
 })
 
 it.each([

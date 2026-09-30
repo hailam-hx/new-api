@@ -22,7 +22,8 @@ import { toast } from 'sonner'
 
 import { handleServerError } from '@/lib/handle-server-error'
 
-import { updateModelStatus } from '../api'
+import { createModel, updateModelStatus } from '../api'
+import type { Model } from '../types'
 import { invalidateVendorData } from '../vendor-api'
 
 // ============================================================================
@@ -156,15 +157,26 @@ export async function handleBatchEnableModels(
 export async function handleBatchDisableModels(
   ids: number[],
   queryClient?: QueryClient,
-  onSuccess?: () => void
+  onSuccess?: () => void,
+  syntheticModels: Model[] = []
 ): Promise<void> {
-  if (ids.length === 0) {
+  if (ids.length === 0 && syntheticModels.length === 0) {
     toast.error(i18next.t('Please select at least one model'))
     return
   }
 
   try {
-    const disablePromises = ids.map((id) => updateModelStatus(id, 0))
+    const disablePromises = [
+      ...ids.map((id) => updateModelStatus(id, 0)),
+      ...syntheticModels.map((item) =>
+        createModel({
+          model_name: item.model_name,
+          name_rule: 0,
+          status: 0,
+          sync_official: 1,
+        })
+      ),
+    ]
     const results = await Promise.all(disablePromises)
 
     let successCount = 0

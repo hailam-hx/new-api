@@ -95,6 +95,7 @@ export interface PrefillGroup {
  */
 export interface GetModelsParams {
   square_state?: ModelSquareState
+  pricing_status?: 'configured' | 'unset'
   include_channel_models?: boolean
   p?: number
   page_size?: number
@@ -108,6 +109,7 @@ export interface GetModelsParams {
  */
 export interface SearchModelsParams {
   square_state?: ModelSquareState
+  pricing_status?: 'configured' | 'unset'
   include_channel_models?: boolean
   keyword?: string
   vendor?: string // vendor ID to filter by

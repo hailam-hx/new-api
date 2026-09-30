@@ -40,10 +40,12 @@ import { VendorOperationDialog } from './dialogs/vendor-operation-dialog'
 
 interface DataTableBulkActionsProps<TData> {
   table: Table<TData>
+  allowSyntheticHide?: boolean
 }
 
 export function DataTableBulkActions<TData>({
   table,
+  allowSyntheticHide = false,
 }: DataTableBulkActionsProps<TData>) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
@@ -77,7 +79,15 @@ export function DataTableBulkActions<TData>({
   }
 
   const handleDisableAll = () => {
-    handleBatchDisableModels(selectedIds, queryClient, handleClearSelection)
+    const syntheticModels = allowSyntheticHide
+      ? selectedModels.filter((model) => model.id <= 0)
+      : []
+    handleBatchDisableModels(
+      selectedIds,
+      queryClient,
+      handleClearSelection,
+      syntheticModels
+    )
   }
 
   const handleCopyNames = async () => {
@@ -194,7 +204,7 @@ export function DataTableBulkActions<TData>({
               <Button
                 variant='outline'
                 size='icon'
-                disabled={hasMissingMetadata}
+                disabled={hasMissingMetadata && !allowSyntheticHide}
                 onClick={handleDisableAll}
                 className='size-8'
                 aria-label={t('Hide selected models from model square')}
@@ -210,7 +220,7 @@ export function DataTableBulkActions<TData>({
           <TooltipContent>
             <p>
               {t(
-                hasMissingMetadata
+                hasMissingMetadata && !allowSyntheticHide
                   ? 'Add metadata to all selected models first.'
                   : 'Hide selected models from model square'
               )}
