@@ -4458,6 +4458,7 @@
     "Plugin-defined interfaces": "Собственные интерфейсы плагина",
     "Plugins": "Плагины",
     "Plugins can access channel credentials. Review the source and differences before installing.": "Плагины могут получать доступ к учётным данным каналов. Перед установкой проверьте исходный код и различия.",
+    "Points": "Баллы",
     "Policy JSON": "JSON политики",
     "Polling": "Опрос",
     "Polling mode requires Redis and memory cache, otherwise performance will be significantly degraded": "Режим опроса требует Redis и кэш памяти, в противном случае производительность будет значительно снижена",

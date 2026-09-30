@@ -1,9 +1,10 @@
-// dflop-canary is a local evidence planner. Its paid transport is deliberately
-// disconnected from the CLI during Phase 8.
+// dflop-canary prepares and audits local canary evidence. Paid execution
+// remains disconnected from the CLI.
 package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -18,10 +19,40 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/pricing/dflop"
 	"github.com/glebarez/sqlite"
+	"github.com/shopspring/decimal"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
+
+type auditProposal struct {
+	Status                string   `json:"status"`
+	InvocationID          string   `json:"invocation_id"`
+	CaseID                string   `json:"case_id"`
+	ChannelID             int      `json:"channel_id"`
+	CredentialFingerprint string   `json:"credential_fingerprint"`
+	CatalogHash           string   `json:"catalog_hash"`
+	Model                 string   `json:"model"`
+	BillingFeatures       []string `json:"billing_features"`
+	RequestHash           string   `json:"request_hash"`
+	MaxCostPoints         string   `json:"max_cost_points"`
+	MaxCostUSD            string   `json:"max_cost_usd"`
+}
+
+type auditReport struct {
+	Mode                          string              `json:"mode"`
+	Proposal                      auditProposal       `json:"proposal"`
+	CatalogETag                   string              `json:"catalog_etag"`
+	SchemaVersion                 string              `json:"schema_version"`
+	PointsPerCNY                  string              `json:"points_per_cny"`
+	CNYToUSD                      string              `json:"cny_to_usd"`
+	Balance                       dflop.CanaryBalance `json:"balance"`
+	PreviousCatalogHash           string              `json:"previous_catalog_hash,omitempty"`
+	PreviousCredentialFingerprint string              `json:"previous_credential_fingerprint,omitempty"`
+	RecoveryDirectoryWritable     bool                `json:"recovery_directory_writable"`
+	RedactionPassed               bool                `json:"redaction_passed"`
+	Blockers                      []string            `json:"blockers"`
+}
 
 func run(args []string) error {
 	mode := "plan"
@@ -33,6 +64,7 @@ func run(args []string) error {
 	manualRate := flags.String("cny-to-usd", "", "current CNY-to-USD reporting rate when pricing sync has no configured rate")
 	dbPath := flags.String("sqlite-db", "one-api.db", "local SQLite database path")
 	output := flags.String("output", filepath.Join(os.TempDir(), "new-api-dflop-canary", "dflop-canary-plan.json"), "plan output path")
+	auditOutput := flags.String("audit-output", filepath.Join(os.TempDir(), "new-api-dflop-canary", "dflop-canary-audit.json"), "non-secret audit proposal path")
 	caseID := flags.String("case", "", "single canary case")
 	maxUSD := flags.String("max-cost-usd", "", "single invocation USD ceiling")
 	maxPoints := flags.String("max-cost-points", "", "single invocation provider points ceiling")
@@ -131,8 +163,8 @@ func run(args []string) error {
 		fmt.Println(path)
 		return nil
 	}
-	if mode != "plan" && mode != "execute" {
-		return errors.New("mode must be plan, execute, capture, or verify")
+	if mode != "plan" && mode != "audit" && mode != "execute" {
+		return errors.New("mode must be plan, audit, execute, capture, or verify")
 	}
 	if *channelID <= 0 {
 		return errors.New("select an existing channel with --channel-id; implicit selection is disabled")
@@ -159,7 +191,7 @@ func run(args []string) error {
 	if err := config.ValidateForPreview(); err != nil {
 		return err
 	}
-	_, key, err := dflop.LoadSourceChannel(*channelID)
+	source, key, err := dflop.LoadSourceChannel(*channelID)
 	if err != nil {
 		return err
 	}
@@ -177,6 +209,104 @@ func run(args []string) error {
 	plan, err := dflop.BuildCanaryPlan(*channelID, catalog.Body, currency, catalog.ETag, config.CNYToUSD)
 	if err != nil {
 		return err
+	}
+	if mode == "audit" {
+		var selected *dflop.CanaryCase
+		for i := range plan.Cases {
+			if plan.Cases[i].ID == "tts-async" {
+				selected = &plan.Cases[i]
+				break
+			}
+		}
+		if selected == nil {
+			return errors.New("CANARY_TTS_NOT_CALLABLE")
+		}
+		request, err := dflop.BuildCanaryRequest(*selected)
+		if err != nil {
+			return err
+		}
+		balance, err := (dflop.CanaryTransport{BaseURL: source.BaseURL, Key: key}).FetchCanaryBalance(ctx)
+		if err != nil {
+			return err
+		}
+		id, err := dflop.NewCanaryInvocationID()
+		if err != nil {
+			return err
+		}
+		fingerprint := fmt.Sprintf("%x", sha256.Sum256([]byte(key)))
+		audit := auditReport{
+			Mode: "AUDIT",
+			Proposal: auditProposal{
+				Status:                "PROPOSAL_NOT_AUTHORIZATION",
+				InvocationID:          id,
+				CaseID:                selected.ID,
+				ChannelID:             *channelID,
+				CredentialFingerprint: fingerprint,
+				CatalogHash:           plan.CatalogHash,
+				Model:                 selected.Model,
+				BillingFeatures:       selected.BillingFeatures,
+				RequestHash:           request.RequestHash,
+				MaxCostPoints:         selected.EstimatedMaxPoints,
+				MaxCostUSD:            selected.EstimatedMaxUSD,
+			},
+			CatalogETag:   plan.ETag,
+			SchemaVersion: plan.SchemaVersion,
+			PointsPerCNY:  plan.PointsPerCNY,
+			CNYToUSD:      plan.CNYToUSD,
+			Balance:       balance,
+			Blockers:      []string{"EXPLICIT_OPERATOR_AUTHORIZATION_MISSING", "CANARY_EXECUTION_NOT_ENABLED", "PRODUCTION_TTS_BINDING_NOT_INTEGRATED"},
+		}
+		if prior, err := os.ReadFile(*auditOutput); err == nil {
+			var previous auditReport
+			if common.Unmarshal(prior, &previous) == nil {
+				audit.PreviousCatalogHash = previous.Proposal.CatalogHash
+				audit.PreviousCredentialFingerprint = previous.Proposal.CredentialFingerprint
+				if previous.Proposal.CredentialFingerprint != "" && previous.Proposal.CredentialFingerprint != fingerprint {
+					audit.Blockers = append(audit.Blockers, "CREDENTIAL_CHANGED_SINCE_PRIOR_AUDIT")
+				}
+			}
+		}
+		if audit.PreviousCredentialFingerprint == "" {
+			audit.Blockers = append(audit.Blockers, "CREDENTIAL_BASELINE_UNAVAILABLE")
+		}
+		if audit.PreviousCatalogHash != "" && audit.PreviousCatalogHash != plan.CatalogHash {
+			audit.Blockers = append(audit.Blockers, "CATALOG_CHANGED_SINCE_PRIOR_AUDIT")
+		}
+		remaining, _ := decimal.NewFromString(balance.RemainingUSD)
+		needed, _ := decimal.NewFromString(selected.EstimatedMaxUSD)
+		if remaining.LessThan(needed) {
+			audit.Blockers = append(audit.Blockers, "CANARY_INSUFFICIENT_BALANCE")
+		}
+		recoveryDir := filepath.Join(os.TempDir(), "new-api-dflop-canary", "invocations")
+		if err := os.MkdirAll(recoveryDir, 0700); err == nil {
+			if info, err := os.Stat(recoveryDir); err == nil && info.IsDir() && info.Mode().Perm()&0077 == 0 {
+				if probe, err := os.CreateTemp(recoveryDir, ".audit-"); err == nil {
+					closeErr := probe.Close()
+					removeErr := os.Remove(probe.Name())
+					audit.RecoveryDirectoryWritable = closeErr == nil && removeErr == nil
+				}
+			}
+		}
+		if !audit.RecoveryDirectoryWritable {
+			audit.Blockers = append(audit.Blockers, "CANARY_RECOVERY_DIRECTORY_UNWRITABLE")
+		}
+		probe, err := dflop.RedactCanaryJSON([]byte(`{"authorization":"Bearer audit-secret","audio_url":"https://media.example/secret?token=value"}`), "audit-secret")
+		audit.RedactionPassed = err == nil && !strings.Contains(string(probe), "audit-secret") && !strings.Contains(string(probe), "media.example")
+		if !audit.RedactionPassed {
+			audit.Blockers = append(audit.Blockers, "CANARY_REDACTION_FAILED")
+		}
+		encoded, err := common.Marshal(audit)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Dir(*auditOutput), 0700); err != nil {
+			return err
+		}
+		if err := os.WriteFile(*auditOutput, encoded, 0600); err != nil {
+			return err
+		}
+		fmt.Printf("AUDIT TTS %s; catalog %s; max %s points / %s USD; balance sufficient %t; recovery writable %t; redaction %t; proposal %s; NO PAID POST\n", selected.Model, plan.CatalogHash, selected.EstimatedMaxPoints, selected.EstimatedMaxUSD, !remaining.LessThan(needed), audit.RecoveryDirectoryWritable, audit.RedactionPassed, *auditOutput)
+		return nil
 	}
 	encoded, err := common.Marshal(plan)
 	if err != nil {

@@ -78,6 +78,8 @@ For commercial licensing, please contact support@quantumnous.com
  * 4. **Billing displays**: Use formatBillingCurrencyFromUSD() to avoid token display
  * 5. **Effective exchange rate**: When quotaDisplayType is 'USD', use rate of 1 regardless of config
  */
+import { t } from 'i18next'
+
 import {
   useSystemConfigStore,
   DEFAULT_CURRENCY_CONFIG,
@@ -196,7 +198,10 @@ function getDisplayMeta(config: CurrencyConfig): DisplayMeta {
     case 'CUSTOM':
       return {
         kind: 'custom',
-        symbol: config.customCurrencySymbol,
+        symbol:
+          config.customCurrencySymbol === '积分'
+            ? t('Points')
+            : config.customCurrencySymbol,
         exchangeRate: config.customCurrencyExchangeRate,
       }
     case 'TOKENS':

@@ -61,6 +61,30 @@ func TestCanaryPlanAndAuthorization(t *testing.T) {
 	assert.ErrorContains(t, CheckCanaryAuthorization(full, plan.Cases[0], plan.Cases[0]), "CANARY_DESIGN_UNVERIFIED")
 }
 
+func TestCanaryBalanceAuditUsesOnlyFreeGET(t *testing.T) {
+	requests := make([]string, 0, 1)
+	responseBody := `{"remaining_usd":1.25,"used_usd":2,"total_usd":3.25}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Method+" "+r.URL.Path)
+		assert.Equal(t, "Bearer fake-secret", r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, responseBody)
+	}))
+	defer server.Close()
+
+	balance, err := (CanaryTransport{HTTP: server.Client(), BaseURL: server.URL, Key: "fake-secret"}).FetchCanaryBalance(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, []string{"GET /v1/key/balance"}, requests)
+	assert.Equal(t, "1.25", balance.RemainingUSD)
+	assert.Equal(t, "2", balance.UsedUSD)
+	assert.Equal(t, "3.25", balance.TotalUSD)
+	assert.False(t, balance.FetchedAt.IsZero())
+	responseBody = `{"remaining_usd":-1,"used_usd":2,"total_usd":3.25}`
+	_, err = (CanaryTransport{HTTP: server.Client(), BaseURL: server.URL, Key: "fake-secret"}).FetchCanaryBalance(context.Background())
+	assert.ErrorContains(t, err, "CANARY_BALANCE_INVALID")
+	assert.Equal(t, []string{"GET /v1/key/balance", "GET /v1/key/balance"}, requests)
+}
+
 func TestCanaryCaptureRedactsAndResumeDoesNotResubmit(t *testing.T) {
 	secret := "secret-key-value"
 	raw := []byte(`{"Authorization":"Bearer secret-key-value","x-api-key":"secret-key-value","nested":{"cookie":"private","url":"https://media.example/private/a?signature=abc","path":"/Users/jake/private.wav"},"usage":{"characters":6},"x-gateway-trace":"trace-123"}`)

@@ -4458,6 +4458,7 @@
     "Plugin-defined interfaces": "Interfaces définies par le plugin",
     "Plugins": "Extensions",
     "Plugins can access channel credentials. Review the source and differences before installing.": "Les plugins peuvent accéder aux identifiants des canaux. Examinez le code et les différences avant l’installation.",
+    "Points": "Points",
     "Policy JSON": "JSON de stratégie",
     "Polling": "Sondage",
     "Polling mode requires Redis and memory cache, otherwise performance will be significantly degraded": "Le mode d'interrogation nécessite Redis et un cache mémoire, sinon les performances seront considérablement dégradées",

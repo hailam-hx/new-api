@@ -4458,6 +4458,7 @@
     "Plugin-defined interfaces": "插件自定义接口",
     "Plugins": "插件",
     "Plugins can access channel credentials. Review the source and differences before installing.": "插件可访问渠道凭据。安装前请审查源码与差异。",
+    "Points": "积分",
     "Policy JSON": "策略 JSON",
     "Polling": "轮询",
     "Polling mode requires Redis and memory cache, otherwise performance will be significantly degraded": "轮询模式需要 Redis 和内存缓存，否则性能将显著下降",

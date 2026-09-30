@@ -28,6 +28,37 @@ type CanaryTransport struct {
 	Key     string
 }
 
+type CanaryBalance struct {
+	RemainingUSD string    `json:"remaining_usd"`
+	UsedUSD      string    `json:"used_usd"`
+	TotalUSD     string    `json:"total_usd"`
+	FetchedAt    time.Time `json:"fetched_at"`
+}
+
+// FetchCanaryBalance reads only the account-wide, non-billed balance endpoint.
+// The result is a preflight check, not evidence of a particular canary charge.
+func (t CanaryTransport) FetchCanaryBalance(ctx context.Context) (CanaryBalance, error) {
+	body, _, err := t.request(ctx, http.MethodGet, "/v1/key/balance", nil, "")
+	if err != nil {
+		return CanaryBalance{}, err
+	}
+	var response struct {
+		RemainingUSD json.Number `json:"remaining_usd"`
+		UsedUSD      json.Number `json:"used_usd"`
+		TotalUSD     json.Number `json:"total_usd"`
+	}
+	if err := common.Unmarshal(body, &response); err != nil {
+		return CanaryBalance{}, errors.New("CANARY_BALANCE_INVALID")
+	}
+	for _, raw := range []json.Number{response.RemainingUSD, response.UsedUSD, response.TotalUSD} {
+		value, err := decimal.NewFromString(raw.String())
+		if err != nil || value.IsNegative() {
+			return CanaryBalance{}, errors.New("CANARY_BALANCE_INVALID")
+		}
+	}
+	return CanaryBalance{RemainingUSD: response.RemainingUSD.String(), UsedUSD: response.UsedUSD.String(), TotalUSD: response.TotalUSD.String(), FetchedAt: time.Now().UTC()}, nil
+}
+
 type CanaryRequest struct {
 	Method      string            `json:"method"`
 	URL         string            `json:"url"`

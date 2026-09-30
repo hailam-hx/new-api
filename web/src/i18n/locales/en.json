@@ -4458,6 +4458,7 @@
     "Plugin-defined interfaces": "Plugin-defined interfaces",
     "Plugins": "Plugins",
     "Plugins can access channel credentials. Review the source and differences before installing.": "Plugins can access channel credentials. Review the source and differences before installing.",
+    "Points": "Points",
     "Policy JSON": "Policy JSON",
     "Polling": "Polling",
     "Polling mode requires Redis and memory cache, otherwise performance will be significantly degraded": "Polling mode requires Redis and memory cache, otherwise performance will be significantly degraded",

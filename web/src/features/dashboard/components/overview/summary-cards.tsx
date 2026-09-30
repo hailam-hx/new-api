@@ -166,12 +166,10 @@ export function SummaryCards() {
     staleTime: 60 * 1000,
   })
 
-  const summaryValues = useMemo(() => {
-    return {
-      usedDisplay: formatQuota(usedQuota),
-      requestCountDisplay: formatNumber(requestCount),
-    }
-  }, [requestCount, usedQuota])
+  const summaryValues = {
+    usedDisplay: formatQuota(usedQuota),
+    requestCountDisplay: formatNumber(requestCount),
+  }
 
   const currencyEnabledFromStore = isCurrencyDisplayEnabled()
   const statusCurrencyFlag =

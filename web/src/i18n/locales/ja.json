@@ -4458,6 +4458,7 @@
     "Plugin-defined interfaces": "プラグイン独自のインターフェース",
     "Plugins": "プラグイン",
     "Plugins can access channel credentials. Review the source and differences before installing.": "プラグインはチャネルの認証情報にアクセスできます。インストール前にソースコードと差分を確認してください。",
+    "Points": "ポイント",
     "Policy JSON": "ポリシーJSON",
     "Polling": "ポーリング",
     "Polling mode requires Redis and memory cache, otherwise performance will be significantly degraded": "ポーリングモードにはRedisとメモリキャッシュが必要です。そうでない場合、パフォーマンスが大幅に低下します",
