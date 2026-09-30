@@ -19,6 +19,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	builtinplugins "github.com/QuantumNous/new-api/plugins"
+	kitdto "github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
@@ -34,6 +35,31 @@ export function parseSubmitResponse() { return {taskId: "one"}; }
 export function buildQueryRequest() { return {url: "https://example.com"}; }
 export function parseTaskResult() { return {status: "SUCCESS"}; }
 `
+
+func TestAudioSpeechBindingFollowsSelectedChannel(t *testing.T) {
+	generation := jsplugin.DefaultRegistry.Generation()
+	plugin, found := generation.Get("dflop-tts")
+	require.True(t, found)
+	for _, tc := range []struct {
+		name    string
+		setting kitdto.ChannelSettings
+		claimed bool
+	}{
+		{"unbound channel falls back", kitdto.ChannelSettings{}, false},
+		{"exact DFLOP plugin binding", kitdto.ChannelSettings{TaskPluginKey: "dflop-tts"}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/audio/speech", nil)
+			c.Set(jsplugin.ContextKeyPinnedEndpoint, jsplugin.PinnedEndpoint{Generation: generation, Plugin: plugin, Protocol: jsplugin.ProtocolOpenAIAudioSpeech})
+			c.Set(jsplugin.ContextKeyPinnedPlugin, jsplugin.PinnedPlugin{Generation: generation, Plugin: plugin})
+			common.SetContextKey(c, constant.ContextKeyChannelSetting, tc.setting)
+			SelectAudioSpeechTaskPlugin()(c)
+			_, claimed := c.Get(jsplugin.ContextKeyPinnedEndpoint)
+			assert.Equal(t, tc.claimed, claimed)
+		})
+	}
+}
 
 func TestPrepareTaskPluginSubmitRejectsMissingModel(t *testing.T) {
 	_, err := jsplugin.DefaultRegistry.Register(genericTaskPluginSource, jsplugin.Options{})

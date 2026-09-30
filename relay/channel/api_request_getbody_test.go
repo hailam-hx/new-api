@@ -591,3 +591,17 @@ func TestUpstreamGetBody_HTTP2CannotRetryWithoutGetBody(t *testing.T) {
 	require.Len(t, srv.attemptBodies, 1)
 	assert.Equal(t, payload, srv.attemptBodies[0])
 }
+
+func TestDFLOPRejectsFinalOneHourCacheRequestBeforeOutbound(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls++; w.WriteHeader(http.StatusNoContent) }))
+	defer server.Close()
+	req, err := http.NewRequest(http.MethodPost, server.URL, strings.NewReader(`{"model":"claude-example","system":[{"cache_control":{"ttl":"1h"}}]}`))
+	require.NoError(t, err)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = req
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://api.dflop.top", UpstreamModelName: "claude-example"}}
+	_, err = DoRequest(ctx, req, info)
+	require.ErrorContains(t, err, "UNSUPPORTED_DFLOP_CACHE_TTL_1H")
+	assert.Zero(t, calls)
+}

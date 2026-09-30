@@ -14,6 +14,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service/pricing/dflop"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/bytedance/gopkg/util/gopool"
@@ -36,6 +37,9 @@ type BillingSession struct {
 	fundingSettled   bool // funding.Settle 已成功，资金来源已提交
 	settled          bool // Settle 全部完成（资金 + 令牌）
 	refunded         bool // Refund 已调用
+	reservationLogID int
+	reservationState string
+	quarantined      bool
 	mu               sync.Mutex
 }
 
@@ -45,17 +49,32 @@ type BillingSession struct {
 func (s *BillingSession) Settle(actualQuota int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.quarantined {
+		return errors.New("billing settlement quarantined")
+	}
+	if s.refunded {
+		return errors.New("billing reservation already refunded")
+	}
 	if s.settled {
 		return nil
+	}
+	if s.reservationState == "SETTLING" {
+		s.quarantined = true
+		return errors.New("billing settlement requires manual resolution")
+	}
+	if err := s.transitionReservation("SETTLING", nil); err != nil {
+		s.quarantined = s.reservationLogID != 0
+		return err
 	}
 	delta := actualQuota - s.preConsumedQuota
 	if delta == 0 {
 		s.settled = true
-		return nil
+		return s.transitionReservation("SETTLED", nil)
 	}
 	// 1) 调整资金来源（仅在尚未提交时执行，防止重复调用）
 	if !s.fundingSettled {
 		if err := s.funding.Settle(delta); err != nil {
+			s.quarantined = s.reservationLogID != 0
 			return err
 		}
 		s.fundingSettled = true
@@ -63,7 +82,9 @@ func (s *BillingSession) Settle(actualQuota int) error {
 	// 2) 调整令牌额度
 	var tokenErr error
 	if !s.relayInfo.IsPlayground {
-		if delta > 0 {
+		if s.reservationLogID != 0 {
+			tokenErr = model.AdjustTokenQuotaDurable(s.relayInfo.TokenId, s.relayInfo.TokenKey, delta)
+		} else if delta > 0 {
 			tokenErr = model.DecreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, delta)
 		} else {
 			tokenErr = model.IncreaseTokenQuota(s.relayInfo.TokenId, s.relayInfo.TokenKey, -delta)
@@ -79,13 +100,21 @@ func (s *BillingSession) Settle(actualQuota int) error {
 		s.relayInfo.SubscriptionPostDelta += int64(delta)
 	}
 	s.settled = true
-	return tokenErr
+	if tokenErr != nil {
+		return tokenErr
+	}
+	return s.transitionReservation("SETTLED", nil)
 }
 
 // Refund 退还所有预扣费，幂等安全，异步执行。
 func (s *BillingSession) Refund(c *gin.Context) {
 	s.mu.Lock()
-	if s.settled || s.refunded || !s.needsRefundLocked() {
+	if s.quarantined || s.settled || s.refunded || !s.needsRefundLocked() {
+		s.mu.Unlock()
+		return
+	}
+	if err := s.transitionReservation("REFUNDING", nil); err != nil {
+		s.quarantined = true
 		s.mu.Unlock()
 		return
 	}
@@ -108,20 +137,37 @@ func (s *BillingSession) Refund(c *gin.Context) {
 	funding := s.funding
 
 	gopool.Go(func() {
+		complete := true
 		// 1) 退还资金来源
 		if err := funding.Refund(); err != nil {
+			complete = false
 			common.SysLog("error refunding billing source: " + err.Error())
 		}
 		if extraReserved > 0 && funding.Source() == BillingSourceSubscription && subscriptionId > 0 {
 			if err := model.PostConsumeUserSubscriptionDelta(subscriptionId, -int64(extraReserved)); err != nil {
+				complete = false
 				common.SysLog("error refunding subscription extra reserved quota: " + err.Error())
 			}
 		}
 		// 2) 退还令牌额度
 		if tokenConsumed > 0 && !isPlayground {
-			if err := model.IncreaseTokenQuota(tokenId, tokenKey, tokenConsumed); err != nil {
+			var err error
+			if s.reservationLogID != 0 {
+				err = model.AdjustTokenQuotaDurable(tokenId, tokenKey, -tokenConsumed)
+			} else {
+				err = model.IncreaseTokenQuota(tokenId, tokenKey, tokenConsumed)
+			}
+			if err != nil {
+				complete = false
 				common.SysLog("error refunding token quota: " + err.Error())
 			}
+		}
+		if complete {
+			s.mu.Lock()
+			if err := s.transitionReservation("REFUNDED", nil); err != nil {
+				common.SysLog("billing refund journal: " + err.Error())
+			}
+			s.mu.Unlock()
 		}
 	})
 }
@@ -134,7 +180,7 @@ func (s *BillingSession) NeedsRefund() bool {
 }
 
 func (s *BillingSession) needsRefundLocked() bool {
-	if s.settled || s.refunded || s.fundingSettled {
+	if s.quarantined || s.settled || s.refunded || s.fundingSettled {
 		// fundingSettled 时资金来源已提交结算，不能再退预扣费
 		return false
 	}
@@ -162,6 +208,9 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 		_, imageRequest = s.relayInfo.Request.(*dto.ImageRequest)
 		imageRequest = imageRequest || s.relayInfo.ImageRequestCount > 0
 	}
+	if s.quarantined {
+		return errors.New("billing reservation quarantined")
+	}
 	if s.settled || s.refunded || s.trusted && !imageRequest || targetQuota <= s.preConsumedQuota {
 		return nil
 	}
@@ -171,7 +220,7 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 		return nil
 	}
 
-	if err := s.reserveFunding(delta, imageRequest); err != nil {
+	if err := s.reserveFunding(delta, imageRequest || s.relayInfo.ChannelMeta != nil && dflop.DFLOPCacheContractApplies(s.relayInfo.ChannelBaseUrl, s.relayInfo.UpstreamModelName)); err != nil {
 		return err
 	}
 	if err := s.reserveToken(delta); err != nil {
@@ -318,7 +367,7 @@ func (s *BillingSession) reserveToken(delta int) error {
 // shouldTrust 统一信任额度检查，适用于钱包和订阅。
 func (s *BillingSession) shouldTrust(c *gin.Context) bool {
 	// 异步任务（ForcePreConsume=true）必须预扣全额，不允许信任旁路
-	if s.relayInfo.ForcePreConsume {
+	if s.relayInfo.ForcePreConsume || s.relayInfo.ChannelMeta != nil && dflop.DFLOPCacheContractApplies(s.relayInfo.ChannelBaseUrl, s.relayInfo.UpstreamModelName) {
 		return false
 	}
 

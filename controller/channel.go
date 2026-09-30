@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -577,6 +578,18 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 	}
 
 	setting := channel.GetSetting()
+	if channel.Type == constant.ChannelTypeOpenAI && setting.TaskPluginKey == "dflop-tts" {
+		if _, loaded := jsplugin.DefaultRegistry.Get("dflop-tts"); !loaded {
+			return fmt.Errorf("DFLOP speech task plugin is not registered")
+		}
+		if channel.BaseURL == nil {
+			return fmt.Errorf("DFLOP speech requires the exact DFLOP base URL")
+		}
+		parsed, err := url.Parse(*channel.BaseURL)
+		if err != nil || parsed.Scheme != "https" || parsed.Host != "api.dflop.top" || (parsed.Path != "" && parsed.Path != "/") || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.User != nil {
+			return fmt.Errorf("DFLOP speech requires the exact DFLOP base URL")
+		}
+	}
 	if channel.Type != constant.ChannelTypeNewAPI && len(setting.TaskExtendPluginKeys) > 0 {
 		return fmt.Errorf("task_extend_plugin_keys is only supported on New API channels")
 	}

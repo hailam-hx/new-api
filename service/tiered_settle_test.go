@@ -1131,3 +1131,31 @@ func TestSamePriceCacheReadsRemainInInput(t *testing.T) {
 		})
 	}
 }
+
+func TestDFLOPOrdinaryCachePricingAndOneHourRequestGuard(t *testing.T) {
+	expr := `tier("dflop", p * 1 + c * 2 + cr * 0.1 + cc * 3)`
+	for _, tc := range []struct {
+		name  string
+		usage *dto.Usage
+		want  int
+	}{
+		{"no cache", &dto.Usage{UsageSemantic: "anthropic", PromptTokens: 100, CompletionTokens: 5}, 55},
+		{"5m cache write", &dto.Usage{UsageSemantic: "anthropic", PromptTokens: 100, CompletionTokens: 5, ClaudeCacheCreation5mTokens: 10}, 70},
+		{"cache read", &dto.Usage{UsageSemantic: "anthropic", PromptTokens: 100, CompletionTokens: 5, PromptTokensDetails: dto.InputTokenDetails{CachedTokens: 20}}, 56},
+		{"explicit zero cache", &dto.Usage{UsageSemantic: "anthropic", PromptTokens: 100, CompletionTokens: 5, ClaudeCacheCreation5mTokens: 0}, 55},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			params := BuildTieredTokenParams(tc.usage, true, billingexpr.UsedVars(expr))
+			snap := &billingexpr.BillingSnapshot{ExprString: expr, ExprHash: billingexpr.ExprHashString(expr), GroupRatio: 1, QuotaPerUnit: 500000, ExprVersion: 1}
+			actual, err := billingexpr.ComputeTieredQuota(snap, params)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, actual.ActualQuotaAfterGroup)
+		})
+	}
+	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://api.dflop.top", UpstreamModelName: "claude-example"}, BillingRequestInput: &billingexpr.RequestInput{Body: []byte(`{"system":[{"cache_control":{"ttl":"1h"}}]}`)}}
+	rejected := PrepareTieredBillingForSelectedGroup(nil, info)
+	require.NotNil(t, rejected)
+	assert.Contains(t, rejected.Error(), "UNSUPPORTED_DFLOP_CACHE_TTL_1H")
+	info.ChannelBaseUrl = "https://api.anthropic.com"
+	require.Nil(t, PrepareTieredBillingForSelectedGroup(nil, info))
+}

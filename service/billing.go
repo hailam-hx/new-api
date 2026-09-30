@@ -1,12 +1,16 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service/pricing/dflop"
 	"github.com/gin-gonic/gin"
 )
 
@@ -33,6 +37,24 @@ func PreConsumeBilling(c *gin.Context, preConsumedQuota int, relayInfo *relaycom
 			http.StatusBadRequest,
 			types.ErrOptionWithSkipRetry(),
 		)
+	}
+	if relayInfo != nil && relayInfo.ChannelMeta != nil && dflop.DFLOPCacheContractApplies(relayInfo.ChannelBaseUrl, relayInfo.UpstreamModelName) {
+		if common.BatchUpdateEnabled {
+			return types.NewError(errors.New("BILLING_JOURNAL_BATCH_UNSUPPORTED"), types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+		}
+		if relayInfo.Billing != nil {
+			return nil
+		}
+		if relayInfo.RequestId == "" {
+			relayInfo.RequestId = c.GetString(common.RequestIdKey)
+		}
+		record, err := model.FindBillingReservationLog(relayInfo.RequestId, relayInfo.UserId)
+		if err != nil {
+			return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+		}
+		if record != nil {
+			return types.NewError(errors.New("BILLING_RESERVATION_REPLAY_REQUIRES_MANUAL_RESOLUTION"), types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
+		}
 	}
 	session, apiErr := NewBillingSession(c, relayInfo, preConsumedQuota)
 	if apiErr != nil {

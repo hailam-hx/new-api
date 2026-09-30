@@ -31,37 +31,38 @@ const (
 // Model retains the source's distinct billing units. Empty values mean absent,
 // while the string "0" remains an explicit free price.
 type Model struct {
-	ID                      string            `json:"id"`
-	OfficialModelID         string            `json:"official_model_id"`
-	VendorSlug              string            `json:"vendor_slug"`
-	Category                string            `json:"category"`
-	EndpointType            string            `json:"endpoint_type"`
-	Callable                bool              `json:"callable"`
-	SupportedProtocols      []string          `json:"supported_protocols"`
-	BillingFeatures         []string          `json:"billing_features"`
-	Discount                *string           `json:"discount"`
-	InputPer1M              *string           `json:"input_per_1m"`
-	OutputPer1M             *string           `json:"output_per_1m"`
-	CachedInputPer1M        *string           `json:"cached_input_per_1m"`
-	CacheCreationPer1M      *string           `json:"cache_creation_per_1m"`
-	PricePerImage           *string           `json:"price_per_image"`
-	PricePerImageLarge      *string           `json:"price_per_image_large"`
-	PricePerInputImage      *string           `json:"price_per_input_image"`
-	PricePerVideoSecond     *string           `json:"price_per_video_second"`
-	PricePerVideoTask       *string           `json:"price_per_video_task"`
-	PricePerTTSChar         *string           `json:"price_per_tts_char"`
-	PricePerMusicGeneration *string           `json:"price_per_music_generation"`
-	PricePerAvatar          *string           `json:"price_per_avatar"`
-	PricePerVoiceClone      *string           `json:"price_per_voice_clone"`
-	PricePerServerToolCall  *string           `json:"price_per_server_tool_call"`
-	VideoPriceTiers         map[string]string `json:"video_price_tiers"`
-	VideoTokenPricePer1M    map[string]string `json:"video_token_price_per_1m"`
-	InputPer1MLong          *string           `json:"input_per_1m_long"`
-	OutputPer1MLong         *string           `json:"output_per_1m_long"`
-	CachedInputPer1MLong    *string           `json:"cached_input_per_1m_long"`
-	FastModeMultiplier      *string           `json:"fast_mode_multiplier"`
-	LargePixelThreshold     *int              `json:"large_pixel_threshold"`
-	VideoBillsInputSeconds  *bool             `json:"video_bills_input_seconds"`
+	ID                        string            `json:"id"`
+	OfficialModelID           string            `json:"official_model_id"`
+	VendorSlug                string            `json:"vendor_slug"`
+	Category                  string            `json:"category"`
+	EndpointType              string            `json:"endpoint_type"`
+	Callable                  bool              `json:"callable"`
+	SupportedProtocols        []string          `json:"supported_protocols"`
+	BillingFeatures           []string          `json:"billing_features"`
+	Discount                  *string           `json:"discount"`
+	InputPer1M                *string           `json:"input_per_1m"`
+	OutputPer1M               *string           `json:"output_per_1m"`
+	CachedInputPer1M          *string           `json:"cached_input_per_1m"`
+	CacheCreationPer1M        *string           `json:"cache_creation_per_1m"`
+	PricePerImage             *string           `json:"price_per_image"`
+	PricePerImageLarge        *string           `json:"price_per_image_large"`
+	PricePerInputImage        *string           `json:"price_per_input_image"`
+	PricePerVideoSecond       *string           `json:"price_per_video_second"`
+	PricePerVideoTask         *string           `json:"price_per_video_task"`
+	PricePerTTSChar           *string           `json:"price_per_tts_char"`
+	PricePerMusicGeneration   *string           `json:"price_per_music_generation"`
+	PricePerAvatar            *string           `json:"price_per_avatar"`
+	PricePerVoiceClone        *string           `json:"price_per_voice_clone"`
+	PricePerServerToolCall    *string           `json:"price_per_server_tool_call"`
+	VideoPriceTiers           map[string]string `json:"video_price_tiers"`
+	VideoSecondStagePerSecond map[string]string `json:"video_second_stage_per_second"`
+	VideoTokenPricePer1M      map[string]string `json:"video_token_price_per_1m"`
+	InputPer1MLong            *string           `json:"input_per_1m_long"`
+	OutputPer1MLong           *string           `json:"output_per_1m_long"`
+	CachedInputPer1MLong      *string           `json:"cached_input_per_1m_long"`
+	FastModeMultiplier        *string           `json:"fast_mode_multiplier"`
+	LargePixelThreshold       *int              `json:"large_pixel_threshold"`
+	VideoBillsInputSeconds    *bool             `json:"video_bills_input_seconds"`
 }
 
 type Currency struct {
@@ -414,7 +415,7 @@ func BuildEffective(catalogJSON, currencyJSON []byte, cnyToUSD, markup string) (
 		pricing["fast_mode_multiplier"] = entry.FastModeMultiplier
 		pricing["billing_features"] = entry.Billing.Features
 		pricing["caps"] = entry.Caps
-		for _, name := range []string{"cache_read_per_1m", "thoughts_per_1m", "image_price_tiers", "video_second_stage_per_second"} {
+		for _, name := range []string{"cache_read_per_1m", "thoughts_per_1m", "image_price_tiers"} {
 			if pricing[name] != nil {
 				features := pricing["billing_features"].([]string)
 				pricing["billing_features"] = append(features, "unmapped_price_field:"+name)
@@ -549,6 +550,11 @@ func build(catalogJSON, currencyJSON []byte, cnyToUSD, markup string, authentica
 				return nil, "", err
 			}
 		}
+		for tier, value := range source.VideoSecondStagePerSecond {
+			if err := add("video_second_stage:"+tier, "second", &value); err != nil {
+				return nil, "", err
+			}
+		}
 		for tier, value := range source.VideoTokenPricePer1M {
 			if err := add("video_token_tier:"+tier, "token_per_1m", &value); err != nil {
 				return nil, "", err
@@ -559,7 +565,7 @@ func build(catalogJSON, currencyJSON []byte, cnyToUSD, markup string, authentica
 		item.PricingShape = pricingShape(source)
 		switch source.Category {
 		case "text":
-			if source.CacheCreationPer1M != nil && strings.Contains(strings.ToLower(source.ID), "claude") {
+			if !authenticated && source.CacheCreationPer1M != nil && strings.Contains(strings.ToLower(source.ID), "claude") {
 				item.Reason = "Claude one-hour cache write price is absent"
 			} else if len(source.BillingFeatures) == 1 && source.BillingFeatures[0] == "token" {
 				input, hasInput := item.Prices["input_per_1m"]
@@ -603,17 +609,24 @@ func build(catalogJSON, currencyJSON []byte, cnyToUSD, markup string, authentica
 			item.Status, item.Reason = SupportedAuto, ""
 			item.ReasonCode = ""
 		}
+		if authenticated && source.CacheCreationPer1M != nil && strings.Contains(strings.ToLower(source.ID), "claude") && item.Expression != "" && item.Status == SupportedAuto {
+			// The ordinary 5m path uses the host's durable reservation journal.
+			// Unsupported 1h requests are rejected and anomalous usage cannot
+			// settle or refund the hold. Runtime captures never promote pricing.
+			item.Status, item.ReasonCode, item.Reason = SupportedAuto, "", ""
+			item.RequiredFacts = []string{"cache_creation_5m_tokens", "unsupported_1h_guard"}
+		}
 		if item.Status == UnsupportedMapping && source.Discount == nil {
 			classifyTaskPricing(&item, source)
-			if item.TaskExpression == "" {
+			if item.TaskExpression == "" && item.Expression == "" {
 				classifyUnsupportedReason(&item, source)
 			}
 		}
 		if authenticated && item.Status == UnsupportedMapping && item.ReasonCode == "UNSUPPORTED_PRICE_SHAPE" && source.Category == "text" {
 			switch {
 			case source.CacheCreationPer1M != nil && strings.Contains(strings.ToLower(source.ID), "claude"):
-				item.ReasonCode = "MISSING_CACHE_WRITE_MAPPING"
-				item.RequiredFacts = []string{"cache_creation_5m_tokens", "cache_creation_1h_tokens"}
+				item.ReasonCode = "DFLOP_CACHE_CONTRACT_RUNTIME_UNVERIFIED"
+				item.RequiredFacts = []string{"cache_creation_5m_tokens", "unsupported_1h_guard"}
 			case slices.Contains(source.BillingFeatures, "fast_mode"):
 				item.ReasonCode = "MISSING_FAST_MODE_MAPPING"
 				item.RequiredFacts = []string{"fast_mode_selection", "image_output_count"}
@@ -624,6 +637,12 @@ func build(catalogJSON, currencyJSON []byte, cnyToUSD, markup string, authentica
 				item.ReasonCode = "MISSING_IMAGE_TOKEN_MAPPING"
 				item.RequiredFacts = []string{"image_output_count"}
 			}
+		}
+		if authenticated && strings.Contains(source.ID, "midjourney") && item.ReasonCode == "UNVERIFIED_OUTPUT_COUNT" {
+			item.ReasonCode = "PROVIDER_CONTRACT_FIXED_4_RUNTIME_UNSEEN"
+		}
+		if authenticated && (strings.HasPrefix(source.ID, "dh-") || source.ID == "clip-compose") && item.Status == UnsupportedMapping {
+			item.ReasonCode = "NO_EXACT_RUNTIME_BINDING"
 		}
 		if authenticated && item.ReasonCode == "UNKNOWN_CHARACTER_COUNT_SEMANTICS" {
 			item.ReasonCode = "NO_ASYNC_TTS_BINDING"

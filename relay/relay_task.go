@@ -257,6 +257,9 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		pluginKey = pinnedPlugin.Plugin.Meta.Key
 	}
 	exprStr, exists := billing_setting.ResolveTaskBillingExpr(pluginKey, modelName, info.UpstreamModelName)
+	if pluginKey == "dflop-tts" && !exists {
+		return nil, service.TaskErrorWrapperLocal(errors.New("DFLOP speech requires a validated character billing expression"), "model_price_error", http.StatusBadRequest)
+	}
 	useTiered := exists || billing_setting.GetBillingMode(modelName) == billing_setting.BillingModeTieredExpr
 	if useTiered {
 		provider, supported := adaptor.(channel.TaskUsageFactsProvider)
@@ -559,6 +562,7 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	}
 
 	snap := task.Snapshot()
+	model.CaptureTaskRuntime(task, resp.Header, body)
 
 	// 将上游最新状态更新到 task
 	if ti.Status != "" {

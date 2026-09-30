@@ -297,6 +297,18 @@ func TestDispatchPlatformUpdateUsesFetchMode(t *testing.T) {
 	GetTaskAdaptorFunc = previousFactory
 }
 
+func TestDFLOPSpeechMissingFinalCharactersRetainsReservation(t *testing.T) {
+	task := &model.Task{TaskID: "task_speech_missing", Platform: "dflop-tts", Status: model.TaskStatusSuccess, Quota: 6000}
+	task.PrivateData.BillingContext = &model.TaskBillingContext{TieredSnapshot: &billingexpr.BillingSnapshot{
+		ExprString: `u("characters") * 0.001`,
+		UsageFacts: map[string]any{"characters": float64(6)},
+	}}
+	result := &relaycommon.TaskInfo{Status: string(model.TaskStatusSuccess)}
+	assert.True(t, settleTaskBillingOnComplete(t.Context(), nil, task, result))
+	assert.Equal(t, 6000, task.Quota)
+	assert.Equal(t, float64(6), task.PrivateData.BillingContext.TieredSnapshot.UsageFacts["characters"])
+}
+
 func TestUpdateBatchTasksSettlesTieredUsageForTerminalStates(t *testing.T) {
 	testCases := []struct {
 		name        string

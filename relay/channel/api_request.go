@@ -1,9 +1,11 @@
 package channel
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/QuantumNous/new-api/service/pricing/dflop"
 	"io"
 	"net/http"
 	"regexp"
@@ -13,6 +15,7 @@ import (
 
 	common2 "github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -518,6 +521,31 @@ func keepUpstreamRedirectResponse(_ *http.Request, _ []*http.Request) error {
 }
 
 func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http.Response, error) {
+	info.PassiveEndpoint = req.URL.Path
+	info.PassiveRequestFacts = nil
+	if req.GetBody != nil && strings.Contains(req.Header.Get("Content-Type"), "application/json") {
+		if reader, err := req.GetBody(); err == nil {
+			body, err := io.ReadAll(io.LimitReader(reader, (1<<20)+1))
+			reader.Close()
+			if err == nil && len(body) <= 1<<20 {
+				info.PassiveRequestFacts = model.RuntimeBillingFacts(body)
+			}
+		}
+	}
+	if info.ChannelMeta != nil && dflop.DFLOPCacheContractApplies(info.ChannelBaseUrl, info.UpstreamModelName) && req.Body != nil {
+		body, err := io.ReadAll(req.Body)
+		_ = req.Body.Close()
+		req.Body = io.NopCloser(bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		if err := dflop.DFLOPCacheContract(info.ChannelBaseUrl, info.UpstreamModelName, body, nil); err != nil {
+			return nil, err
+		}
+	}
+	if err := service.EnsureDFLOPCacheReservation(c, info); err != nil {
+		return nil, err
+	}
 	client, err := service.GetHttpClientWithProxySettings(info.ChannelSetting.Proxy, info.ChannelSetting)
 	if err != nil {
 		return nil, fmt.Errorf("new proxy http client failed: %w", err)
@@ -579,6 +607,8 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 		))
 	}
 
+	info.PassiveRequestID = resp.Header.Get("x-request-id")
+	info.PassiveTraceID = resp.Header.Get("x-gateway-trace")
 	if upID := resp.Header.Get(common2.RequestIdKey); upID != "" {
 		c.Set(common2.UpstreamRequestIdKey, upID)
 	}

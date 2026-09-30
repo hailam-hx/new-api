@@ -1,11 +1,16 @@
 package dflop
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
+	_ "github.com/QuantumNous/new-api/plugins"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/shopspring/decimal"
 )
@@ -41,6 +46,12 @@ func CompareCanaryProviderPoints(c CanaryCase, verification *CanaryVerification,
 			return errors.New("CANARY_INCOMPLETE")
 		}
 		quantity = fact
+		expression := fmt.Sprintf("u(\"characters\") * %s", unitPrice.String())
+		computed, _, runErr := billingexpr.RunExprWithRequest(expression, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: map[string]any{"characters": fact}})
+		if runErr != nil || computed < 0 {
+			return errors.New("CANARY_BILLING_EXPR_INVALID")
+		}
+		verification.ProductionReplay = map[string]any{"usage_extractor": "dflop-tts.extractUsageOnComplete", "expression": expression, "computed_provider_points": computed}
 	case strings.HasPrefix(c.ID, "output-count-"):
 		fact, ok := verification.ObservedFacts["usable_image_outputs"].(int)
 		if !ok || fact <= 0 {
@@ -128,24 +139,47 @@ func VerifyCanaryFixture(caseID string, raw []byte) (CanaryVerification, error) 
 		return result, nil
 	}
 	if caseID == "tts-async" {
-		var taskID, model, audioURL string
-		var characters, duration json.Number
-		read("id", &taskID)
-		read("model", &model)
-		read("audio_url", &audioURL)
 		if status == "failed" {
 			result.Status = "EXECUTED_FAILURE"
 			return result, nil
 		}
-		if taskID != "" && model == "voice-tts-pro" && audioURL != "" && status == "succeeded" && read("characters", &characters) {
-			if count, err := characters.Int64(); err == nil && count >= 0 && count <= 6 {
+		var taskID string
+		var duration json.Number
+		read("id", &taskID)
+		plugin, loaded := jsplugin.DefaultRegistry.Get("dflop-tts")
+		if !loaded || taskID == "" {
+			return result, nil
+		}
+		var taskBody map[string]any
+		if err := common.Unmarshal(raw, &taskBody); err != nil {
+			return result, err
+		}
+		queryContext := map[string]any{"taskId": taskID, "model": "voice-tts-pro", "upstreamModel": "voice-tts-pro"}
+		parsedValue, err := plugin.Engine.Call(context.Background(), "parseTaskResult", queryContext, taskBody)
+		if err != nil {
+			return result, nil
+		}
+		parsed, ok := parsedValue.(map[string]any)
+		if !ok {
+			return result, nil
+		}
+		if parsed["status"] == "FAILURE" {
+			result.Status = "EXECUTED_FAILURE"
+			return result, nil
+		}
+		url, hasURL := parsed["url"].(string)
+		if parsed["status"] == "SUCCESS" && hasURL && url != "" {
+			factsValue, usageErr := plugin.Engine.Call(context.Background(), "extractUsageOnComplete", queryContext, parsed, taskBody)
+			facts, valid := factsValue.(map[string]any)
+			count, present := facts["characters"].(int64)
+			if usageErr == nil && valid && present && count >= 0 && count <= 6 {
 				result.ObservedFacts["task_id"] = taskID
 				result.ObservedFacts["characters"] = count
 				if read("duration_sec", &duration) {
 					result.ObservedFacts["duration_sec"] = duration.String()
 				}
 				result.Status = "RUNTIME_FACT_VERIFIED"
-			} else if err == nil && count > 6 {
+			} else if usageErr == nil && valid && present && count > 6 {
 				result.Status = "CANARY_COST_MODEL_INVALID"
 			}
 		}

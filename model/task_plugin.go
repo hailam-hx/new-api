@@ -24,6 +24,9 @@ type TaskPluginChannelRef struct {
 func GetTaskPluginUsage(key string) ([]TaskPluginChannelRef, int64, error) {
 	var channels []Channel
 	boundTypes := []int{constant.ChannelTypeTaskPlugin, constant.ChannelTypeNewAPI}
+	if key == "dflop-tts" {
+		boundTypes = append(boundTypes, constant.ChannelTypeOpenAI)
+	}
 	if err := DB.Where("type IN ? AND status = ?", boundTypes, common.ChannelStatusEnabled).Find(&channels).Error; err != nil {
 		return nil, 0, err
 	}

@@ -3,6 +3,8 @@ package middleware
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -23,6 +25,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	kitdto "github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
@@ -32,6 +35,28 @@ import (
 const contextKeyTaskPluginEndpointModel = "task_plugin_endpoint_model_request"
 
 var errTaskPluginUnsupportedMediaType = errors.New("unsupported task plugin media type")
+
+// SelectAudioSpeechTaskPlugin runs after normal channel selection. A speech
+// model only enters the task bridge when the chosen channel explicitly binds
+// the DFLOP plugin; every other selected channel keeps the audio relay.
+func SelectAudioSpeechTaskPlugin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		value, found := c.Get(pluginruntime.ContextKeyPinnedEndpoint)
+		pinned, ok := value.(pluginruntime.PinnedEndpoint)
+		if !found || !ok || pinned.Protocol != pluginruntime.ProtocolOpenAIAudioSpeech {
+			c.Next()
+			return
+		}
+		setting, valid := common.GetContextKeyType[kitdto.ChannelSettings](c, constant.ContextKeyChannelSetting)
+		if valid && setting.BindsTaskPlugin(pinned.Plugin.Meta.Key) {
+			c.Next()
+			return
+		}
+		delete(c.Keys, pluginruntime.ContextKeyPinnedEndpoint)
+		delete(c.Keys, pluginruntime.ContextKeyPinnedPlugin)
+		c.Next()
+	}
+}
 
 const taskPluginInvalidRouteResult = "plugin returned an invalid route result"
 
@@ -577,6 +602,22 @@ func PrepareTaskPluginEndpoint() gin.HandlerFunc {
 			}
 			abortWithOpenAiMessage(c, http.StatusUnsupportedMediaType, detail)
 			return
+		}
+		if pinned.Protocol == pluginruntime.ProtocolOpenAIAudioSpeech {
+			key := c.GetHeader("Idempotency-Key")
+			if len(key) == 0 || len(key) > 200 {
+				abortWithOpenAiMessage(c, http.StatusBadRequest, "Idempotency-Key is required for asynchronous speech and must be at most 200 characters")
+				return
+			}
+			for _, char := range key {
+				if char < 0x21 || char > 0x7e {
+					abortWithOpenAiMessage(c, http.StatusBadRequest, "Idempotency-Key must contain printable ASCII without spaces")
+					return
+				}
+			}
+			userID := common.GetContextKeyInt(c, constant.ContextKeyUserId)
+			digest := sha256.Sum256([]byte(fmt.Sprintf("audio-speech:%d:%s", userID, key)))
+			c.Set("task_audio_idempotency_key", hex.EncodeToString(digest[:]))
 		}
 		stream := false
 		if body, bodyOK := requestContext.Body.(map[string]any); bodyOK && body["kind"] == string(pluginruntime.BodyJSON) {

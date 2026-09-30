@@ -696,7 +696,11 @@ func SumUsedToken(logType int, startTimestamp int64, endTimestamp int64, modelNa
 
 func CountOldLog(ctx context.Context, targetTimestamp int64) (int64, error) {
 	var total int64
-	if err := LOG_DB.WithContext(ctx).Model(&Log{}).Where("created_at < ?", targetTimestamp).Count(&total).Error; err != nil {
+	query := LOG_DB.WithContext(ctx).Model(&Log{}).Where("created_at < ?", targetTimestamp)
+	if !common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
+		query = query.Where("content NOT LIKE ? AND content <> ?", "BILLING_RESERVATION_%", "UNSUPPORTED_DFLOP_CACHE_TTL_1H")
+	}
+	if err := query.Count(&total).Error; err != nil {
 		return 0, err
 	}
 	return total, nil
@@ -731,7 +735,7 @@ func DeleteOldLogBatch(ctx context.Context, targetTimestamp int64, limit int) (i
 		return total, nil
 	}
 
-	result := LOG_DB.WithContext(ctx).Where("created_at < ?", targetTimestamp).Limit(limit).Delete(&Log{})
+	result := LOG_DB.WithContext(ctx).Where("created_at < ?", targetTimestamp).Where("content NOT LIKE ? AND content <> ?", "BILLING_RESERVATION_%", "UNSUPPORTED_DFLOP_CACHE_TTL_1H").Limit(limit).Delete(&Log{})
 	if nil != result.Error {
 		return 0, result.Error
 	}

@@ -11,12 +11,16 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	taskdto "github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relay"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
+	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
@@ -32,6 +36,205 @@ type nativeRouteBilling struct {
 	settled     bool
 }
 
+func TestDFLOPAudioSpeechProductionTaskSubmissionAndPolling(t *testing.T) {
+	cases := []struct {
+		name           string
+		terminal       string
+		status         model.TaskStatus
+		wantCharacters float64
+		clientGone     bool
+		lostResponse   bool
+	}{
+		{"success", `{"id":"fake-task-1","model":"voice-tts-pro","status":"succeeded","characters":6,"duration_sec":"1.20","audio_url":"https://example.invalid/audio.mp3"}`, model.TaskStatusSuccess, 6, false, false},
+		{"failure", `{"id":"fake-task-1","model":"voice-tts-pro","status":"failed","error":{"message":"render failed"}}`, model.TaskStatusFailure, 6, false, false},
+		{"missing characters", `{"id":"fake-task-1","model":"voice-tts-pro","status":"succeeded","audio_url":"https://example.invalid/audio.mp3"}`, model.TaskStatusSuccess, 6, false, false},
+		{"explicit zero", `{"id":"fake-task-1","model":"voice-tts-pro","status":"succeeded","characters":0,"audio_url":"https://example.invalid/audio.mp3"}`, model.TaskStatusSuccess, 0, false, false},
+		{"client disconnect", `{"id":"fake-task-1","model":"voice-tts-pro","status":"succeeded","characters":6,"audio_url":"https://example.invalid/audio.mp3"}`, model.TaskStatusSuccess, 6, true, false},
+		{"lost submit response", `{"id":"fake-task-1","model":"voice-tts-pro","status":"succeeded","characters":6,"audio_url":"https://example.invalid/audio.mp3"}`, model.TaskStatusSuccess, 6, false, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			service.InitHttpClient()
+			previousDB, previousLogDB := model.DB, model.LOG_DB
+			previousMemoryCache, previousBatchUpdate := common.MemoryCacheEnabled, common.BatchUpdateEnabled
+			previousLogConsume, previousRedis := common.LogConsumeEnabled, common.RedisEnabled
+			database, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+			require.NoError(t, err)
+			require.NoError(t, database.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Task{}, &model.Log{}))
+			model.DB, model.LOG_DB = database, database
+			common.MemoryCacheEnabled, common.BatchUpdateEnabled = false, false
+			common.LogConsumeEnabled, common.RedisEnabled = true, false
+			previousBilling := config.GlobalConfig.Get("billing_setting")
+			previousBillingMap, err := config.ConfigToMap(previousBilling)
+			require.NoError(t, err)
+			previousRatios := ratio_setting.ModelRatio2JSONString()
+			require.NoError(t, ratio_setting.UpdateModelRatioByJSONString(`{"voice-tts-pro":1}`))
+			require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{
+				billing_setting.PluginBillingExprOption: `{"dflop-tts::voice-tts-pro":"u(\"characters\") * 0.001"}`,
+			}))
+			t.Cleanup(func() {
+				model.DB, model.LOG_DB = previousDB, previousLogDB
+				common.MemoryCacheEnabled, common.BatchUpdateEnabled = previousMemoryCache, previousBatchUpdate
+				common.LogConsumeEnabled, common.RedisEnabled = previousLogConsume, previousRedis
+				_ = ratio_setting.UpdateModelRatioByJSONString(previousRatios)
+				_ = config.UpdateConfigFromMap(previousBilling, previousBillingMap)
+			})
+			require.NoError(t, database.Create(&model.User{Id: 17, Username: "speech-user", Group: "default", Quota: 1_000_000}).Error)
+			require.NoError(t, database.Create(&model.Token{Id: 27, UserId: 17, Key: "speech-test-token", Status: 1, RemainQuota: 1_000_000}).Error)
+
+			var submitCalls atomic.Int32
+			var queryCalls atomic.Int32
+			var firstIdempotencyKey string
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch {
+				case r.Method == http.MethodPost && r.URL.Path == "/v1/audio/speech":
+					attempt := submitCalls.Add(1)
+					key := r.Header.Get("Idempotency-Key")
+					assert.NotEmpty(t, key)
+					if attempt == 1 {
+						firstIdempotencyKey = key
+					} else {
+						assert.Equal(t, firstIdempotencyKey, key)
+					}
+					body, readErr := io.ReadAll(r.Body)
+					assert.NoError(t, readErr)
+					assert.JSONEq(t, `{"model":"voice-tts-pro","input":"Hello.","async":true}`, string(body))
+					if tc.lostResponse && attempt == 1 {
+						connection, _, hijackErr := w.(http.Hijacker).Hijack()
+						assert.NoError(t, hijackErr)
+						_ = connection.Close()
+						return
+					}
+					_, _ = io.WriteString(w, `{"id":"fake-task-1","model":"voice-tts-pro","status":"pending","characters":6}`)
+				case r.Method == http.MethodGet && r.URL.Path == "/v1/audio/speech/fake-task-1":
+					if queryCalls.Add(1) == 1 {
+						_, _ = io.WriteString(w, `{"id":"fake-task-1","model":"voice-tts-pro","status":"pending"}`)
+					} else {
+						_, _ = io.WriteString(w, tc.terminal)
+					}
+				default:
+					http.NotFound(w, r)
+				}
+			}))
+			defer upstream.Close()
+			channel := model.Channel{Type: constant.ChannelTypeOpenAI, Name: "fake-dflop", Key: "sk-fake", BaseURL: &upstream.URL, Status: common.ChannelStatusEnabled, Models: "voice-tts-pro", Group: "default"}
+			channel.SetSetting(dto.ChannelSettings{TaskPluginKey: "dflop-tts"})
+			require.NoError(t, database.Create(&channel).Error)
+
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/audio/speech", bytes.NewBufferString(`{"model":"voice-tts-pro","input":"Hello.","async":true}`))
+			c.Request.Header.Set("Content-Type", "application/json")
+			c.Request.Header.Set("Idempotency-Key", "client-intent-1")
+			common.SetContextKey(c, constant.ContextKeyUserId, 17)
+			common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
+			common.SetContextKey(c, constant.ContextKeyUsingGroup, "default")
+			common.SetContextKey(c, constant.ContextKeyTokenGroup, "default")
+			common.SetContextKey(c, constant.ContextKeyUserQuota, 1_000_000)
+			common.SetContextKey(c, constant.ContextKeyTokenId, 27)
+			common.SetContextKey(c, constant.ContextKeyTokenKey, "speech-test-token")
+			common.SetContextKey(c, constant.ContextKeyUserSetting, dto.UserSetting{BillingPreference: "wallet_only"})
+			middleware.PinTaskPluginEndpoint()(c)
+			require.False(t, c.IsAborted(), recorder.Body.String())
+			middleware.PrepareTaskPluginEndpoint()(c)
+			require.False(t, c.IsAborted(), recorder.Body.String())
+			require.Nil(t, middleware.SetupContextForSelectedChannel(c, &channel, "voice-tts-pro"))
+
+			var outcome *taskSubmissionOutcome
+			var taskErr *taskdto.TaskError
+			deps := defaultPluginProtocolBridgeDeps()
+			deps.submit = func(c *gin.Context, info *relaycommon.RelayInfo) (*taskSubmissionOutcome, *taskdto.TaskError) {
+				require.NotNil(t, info.TaskRelayInfo)
+				assert.Equal(t, channel.Id, info.LockedChannel.(*model.Channel).Id)
+				info.PublicTaskID = "task_speech_public"
+				outcome, taskErr = executeTaskSubmissionWith(c, info, relay.RelayTaskSubmit)
+				return outcome, taskErr
+			}
+			pinnedValue, found := c.Get(pluginruntime.ContextKeyPinnedEndpoint)
+			require.True(t, found)
+			pinned, ok := pinnedValue.(pluginruntime.PinnedEndpoint)
+			require.True(t, ok)
+			clientContext, cancelClient := context.WithCancel(c.Request.Context())
+			c.Request = c.Request.WithContext(clientContext)
+			defer cancelClient()
+			if tc.clientGone {
+				cancelClient()
+			}
+			serveTaskPluginAudioSpeech(c, pinned, deps)
+			require.Nil(t, taskErr, "%+v", taskErr)
+			require.NotNil(t, outcome)
+			require.NotNil(t, outcome.RelayInfo.Billing)
+			assert.Equal(t, service.BillingSourceWallet, outcome.RelayInfo.BillingSource)
+			expectedSubmitCalls := int32(1)
+			if tc.lostResponse {
+				expectedSubmitCalls = 2
+			}
+			assert.Equal(t, expectedSubmitCalls, submitCalls.Load())
+			if tc.clientGone {
+				assert.Empty(t, recorder.Body.String())
+			} else {
+				assert.Contains(t, recorder.Body.String(), "task_speech_public")
+			}
+			assert.NotContains(t, recorder.Body.String(), "fake-task-1")
+
+			var persisted model.Task
+			require.NoError(t, database.Where("task_id = ?", "task_speech_public").First(&persisted).Error)
+			assert.Equal(t, "fake-task-1", persisted.PrivateData.UpstreamTaskID)
+			assert.Equal(t, "dflop-tts", string(persisted.Platform))
+			previousAdaptorFactory := service.GetTaskAdaptorFunc
+			service.GetTaskAdaptorFunc = func(platform constant.TaskPlatform) service.TaskPollingAdaptor { return relay.GetTaskAdaptor(platform) }
+			defer func() { service.GetTaskAdaptorFunc = previousAdaptorFactory }()
+			var completionCharacters any
+			for range 2 {
+				service.DispatchPlatformUpdate(t.Context(), persisted.Platform, map[int][]string{channel.Id: {"fake-task-1"}}, map[string]*model.Task{"fake-task-1": &persisted})
+				completionCharacters = persisted.PrivateData.BillingContext.TieredSnapshot.UsageFacts["characters"]
+				require.NoError(t, database.Where("task_id = ?", "task_speech_public").First(&persisted).Error)
+			}
+			assert.Equal(t, tc.status, persisted.Status)
+			if tc.status == model.TaskStatusFailure || tc.wantCharacters == 0 {
+				assert.Zero(t, persisted.Quota)
+			} else {
+				assert.Equal(t, outcome.Task.Quota, persisted.Quota)
+			}
+			assert.Equal(t, int32(2), queryCalls.Load())
+			assert.Equal(t, tc.wantCharacters, completionCharacters)
+			assert.Equal(t, float64(6), persisted.PrivateData.BillingContext.TieredSnapshot.UsageFacts["characters"], "the persisted snapshot retains the submission estimate")
+			assert.Equal(t, expectedSubmitCalls, submitCalls.Load())
+			var chargedUser model.User
+			require.NoError(t, database.First(&chargedUser, 17).Error)
+			assert.Equal(t, 1_000_000-persisted.Quota, chargedUser.Quota)
+			var chargedToken model.Token
+			require.NoError(t, database.First(&chargedToken, 27).Error)
+			assert.Equal(t, 1_000_000-persisted.Quota, chargedToken.RemainQuota)
+			var consumeLogs []model.Log
+			require.NoError(t, database.Where("user_id = ? AND type = ?", 17, model.LogTypeConsume).Find(&consumeLogs).Error)
+			require.NotEmpty(t, consumeLogs)
+			assert.Equal(t, "voice-tts-pro", consumeLogs[0].ModelName)
+			assert.Equal(t, channel.Id, consumeLogs[0].ChannelId)
+			assert.Contains(t, consumeLogs[0].Other, "task_speech_public")
+			if tc.name == "success" {
+				for _, ownership := range []struct {
+					userID int
+					status int
+				}{
+					{17, http.StatusOK},
+					{18, http.StatusNotFound},
+				} {
+					queryRecorder := httptest.NewRecorder()
+					queryContext, _ := gin.CreateTestContext(queryRecorder)
+					queryContext.Request = httptest.NewRequest(http.MethodGet, "/v1/audio/speech/task_speech_public", nil)
+					queryContext.Params = gin.Params{{Key: "task_id", Value: "task_speech_public"}}
+					common.SetContextKey(queryContext, constant.ContextKeyUserId, ownership.userID)
+					RetrieveTaskPluginAudioSpeech(queryContext)
+					assert.Equal(t, ownership.status, queryRecorder.Code)
+					assert.NotContains(t, queryRecorder.Body.String(), "fake-task-1")
+				}
+			}
+		})
+	}
+}
 func (b *nativeRouteBilling) Settle(int) error {
 	b.events = append(b.events, "settle")
 	b.settled = true

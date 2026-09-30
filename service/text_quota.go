@@ -16,6 +16,7 @@ import (
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service/pricing/dflop"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
@@ -393,6 +394,29 @@ func usageSemanticFromUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) 
 func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent []string) {
 	originUsage := usage
 	billingUsage := effectiveBillingUsage(usage)
+	if relayInfo.ChannelMeta != nil {
+		if err := dflop.DFLOPCacheContract(relayInfo.ChannelBaseUrl, relayInfo.UpstreamModelName, nil, billingUsage); err != nil {
+			// Unknown upstream tariff must not be settled using the 5m expression or
+			// refunded as a failed generation. Retain the reservation for operator
+			// reconciliation and persist an explicit anomaly, never a consume result.
+			if err := EnsureDFLOPCacheReservation(ctx, relayInfo); err != nil {
+				logger.LogError(ctx, "billing quarantine reservation: "+err.Error())
+			}
+			if session, ok := relayInfo.Billing.(*BillingSession); ok {
+				encoded, _ := common.Marshal(billingUsage)
+				if err := session.Quarantine(model.RuntimeBillingFacts(encoded)); err != nil {
+					logger.LogError(ctx, "billing quarantine persistence: "+err.Error())
+				}
+			}
+			logger.LogError(ctx, err.Error()+": settlement quarantined")
+			return
+		}
+	}
+	if relayInfo.ChannelMeta != nil && dflop.DFLOPCacheContractApplies(relayInfo.ChannelBaseUrl, relayInfo.UpstreamModelName) {
+		if session, ok := relayInfo.Billing.(*BillingSession); ok && session.Closed() {
+			return
+		}
+	}
 	if usage == nil {
 		extraContent = append(extraContent, "上游无计费信息")
 	}
@@ -459,6 +483,9 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 
 	if err := SettleBilling(ctx, relayInfo, summary.Quota); err != nil {
 		logger.LogError(ctx, "error settling billing: "+err.Error())
+		if relayInfo.ChannelMeta != nil && dflop.DFLOPCacheContractApplies(relayInfo.ChannelBaseUrl, relayInfo.UpstreamModelName) {
+			return
+		}
 	}
 
 	logModel := summary.ModelName
@@ -534,6 +561,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 
 	attachQuotaSaturation(ctx, relayInfo, other)
 
+	AppendPassiveTextEvidence(ctx, relayInfo, originUsage, other)
 	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,
 		PromptTokens:     summary.PromptTokens,

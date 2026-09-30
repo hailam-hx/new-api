@@ -1,14 +1,62 @@
 package model
 
 import (
+	"fmt"
+	"os"
 	"testing"
+	"time"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/schema"
 	"gorm.io/gorm/utils/tests"
 )
+
+func TestTaskPluginUsageIncludesExplicitDFLOPOpenAIChannel(t *testing.T) {
+	cases := []struct {
+		name string
+		env  string
+		open func(string) gorm.Dialector
+	}{
+		{"sqlite", "", func(string) gorm.Dialector { return sqlite.Open(":memory:") }},
+		{"mysql", "TEST_MYSQL_DSN", func(dsn string) gorm.Dialector { return mysql.Open(dsn) }},
+		{"postgres", "TEST_POSTGRES_DSN", func(dsn string) gorm.Dialector { return postgres.Open(dsn) }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dsn := os.Getenv(tc.env)
+			if tc.env != "" && dsn == "" {
+				t.Skipf("%s is not configured", tc.env)
+			}
+			prefix := fmt.Sprintf("dflop_usage_%d_", time.Now().UnixNano())
+			database, err := gorm.Open(tc.open(dsn), &gorm.Config{NamingStrategy: schema.NamingStrategy{TablePrefix: prefix}})
+			require.NoError(t, err)
+			require.NoError(t, database.AutoMigrate(&Channel{}, &Task{}))
+			t.Cleanup(func() { require.NoError(t, database.Migrator().DropTable(&Task{}, &Channel{})) })
+			originalDB := DB
+			DB = database
+			t.Cleanup(func() { DB = originalDB })
+
+			bound := Channel{Type: constant.ChannelTypeOpenAI, Name: "dflop", Status: common.ChannelStatusEnabled}
+			bound.SetSetting(dto.ChannelSettings{TaskPluginKey: "dflop-tts"})
+			require.NoError(t, database.Create(&bound).Error)
+			require.NoError(t, database.Create(&Channel{Type: constant.ChannelTypeOpenAI, Name: "ordinary", Status: common.ChannelStatusEnabled}).Error)
+			require.NoError(t, database.Create(&Task{TaskID: "task_inflight", Platform: "dflop-tts", Status: TaskStatusSubmitted}).Error)
+
+			channels, inFlight, err := GetTaskPluginUsage("dflop-tts")
+			require.NoError(t, err)
+			assert.Equal(t, int64(1), inFlight)
+			assert.Equal(t, []TaskPluginChannelRef{{Id: bound.Id, Name: "dflop", Type: constant.ChannelTypeOpenAI}}, channels)
+		})
+	}
+}
 
 func setupTaskPluginModelTest(t *testing.T) {
 	t.Helper()

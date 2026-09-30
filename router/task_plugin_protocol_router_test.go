@@ -14,6 +14,8 @@ func TestHostProtocolRegistryDrivesProtocolRoutesOnce(t *testing.T) {
 	SetTaskPluginProtocolRouter(engine)
 
 	expected := []string{
+		"POST /v1/audio/speech",
+		"GET /v1/audio/speech/:task_id",
 		"POST /v1/responses",
 		"GET /v1/responses/:response_id",
 		"POST /v1/videos",

@@ -166,6 +166,12 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			newAPIError = channelErr
 			break
 		}
+		if relayFormat == types.RelayFormatOpenAIAudio && c.Request.URL.Path == "/v1/audio/speech" &&
+			relayInfo.OriginModelName == "voice-tts-pro" &&
+			(channel.GetSetting().BindsTaskPlugin("dflop-tts") || strings.TrimSuffix(channel.GetBaseURL(), "/") == "https://api.dflop.top") {
+			newAPIError = types.NewError(errors.New("voice-tts-pro on the DFLOP channel requires async=true and the task billing path"), types.ErrorCodeInvalidRequest, types.ErrOptionWithStatusCode(http.StatusBadRequest), types.ErrOptionWithSkipRetry())
+			break
+		}
 		service.AppendUsedChannel(c, channel.Id)
 		if billingErr := service.PrepareTieredBillingForSelectedGroup(c, relayInfo); billingErr != nil {
 			newAPIError = billingErr
@@ -401,6 +407,8 @@ func RelayTaskPluginEndpoint(c *gin.Context, fallback gin.HandlerFunc) {
 		serveTaskPluginProtocol(c, pinned, defaultPluginProtocolBridgeDeps())
 	case pluginruntime.ProtocolOpenAIImage:
 		serveTaskPluginImageProtocol(c, pinned, defaultPluginProtocolBridgeDeps())
+	case pluginruntime.ProtocolOpenAIAudioSpeech:
+		serveTaskPluginAudioSpeech(c, pinned, defaultPluginProtocolBridgeDeps())
 	default:
 		fallback(c)
 	}
@@ -500,8 +508,14 @@ func executeTaskSubmissionWith(
 		RequestPath: c.Request.URL.Path,
 		Retry:       common.GetPointer(0),
 	}
+	retryLimit := common.RetryTimes
+	if pinnedValue, exists := c.Get(pluginruntime.ContextKeyPinnedEndpoint); exists {
+		if pinned, ok := pinnedValue.(pluginruntime.PinnedEndpoint); ok && pinned.Protocol == pluginruntime.ProtocolOpenAIAudioSpeech {
+			retryLimit = max(retryLimit, 1)
+		}
+	}
 
-	for ; retryParam.GetRetry() <= common.RetryTimes; retryParam.IncreaseRetry() {
+	for ; retryParam.GetRetry() <= retryLimit; retryParam.IncreaseRetry() {
 		stage = "select_channel"
 		if requestErr := c.Request.Context().Err(); requestErr != nil {
 			diagnostics.cancelled("before_attempt", retryParam.GetRetry()+1)
@@ -557,7 +571,7 @@ func executeTaskSubmissionWith(
 
 		taskAPIError := taskSubmissionAPIError(taskErr)
 		relayInfo.LastError = taskAPIError
-		decision := decideTaskRetry(c, taskErr, common.RetryTimes-retryParam.GetRetry())
+		decision := decideTaskRetry(c, taskErr, retryLimit-retryParam.GetRetry())
 		service.RecordPolicyFailure(c, channel.Id, taskAPIError, decision)
 		if !taskErr.LocalError {
 			processChannelError(c,
@@ -632,6 +646,7 @@ func executeTaskSubmissionWith(
 	}
 	task.Quota = result.Quota
 	task.Data = result.TaskData
+	service.CaptureTaskSubmission(c, relayInfo, task)
 	if len(result.PluginState) > 0 {
 		task.PrivateData.PluginState = result.PluginState
 	}
@@ -660,6 +675,12 @@ func executeTaskSubmissionWith(
 	// immediate results follow the same rule; an asynchronous image task is
 	// expected there and is polled inside the request.
 	var insertOmits []string
+	if task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure {
+		model.CaptureTaskRuntime(task, nil, task.Data)
+		if result.Immediate != nil {
+			model.CaptureTaskCompletionFacts(task, string(task.Status), result.Immediate.UsageFacts)
+		}
+	}
 	immediateTerminal := result.Immediate != nil && (result.Immediate.Status == model.TaskStatusSuccess || result.Immediate.Status == model.TaskStatusFailure)
 	if pinnedValue, exists := c.Get(pluginruntime.ContextKeyPinnedRoute); exists {
 		pinned, ok := pinnedValue.(pluginruntime.PinnedRoute)

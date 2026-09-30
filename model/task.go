@@ -139,6 +139,7 @@ type TaskPrivateData struct {
 }
 
 type TaskExecutionSnapshot struct {
+	Passive     *RuntimeEvidence    `json:"passive_runtime_binding,omitempty"`
 	RequestID   string              `json:"request_id,omitempty"`
 	RequestPath string              `json:"request_path,omitempty"`
 	TaskPlugin  *TaskPluginSnapshot `json:"task_plugin,omitempty"`

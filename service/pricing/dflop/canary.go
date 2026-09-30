@@ -426,9 +426,20 @@ func RedactCanaryJSON(raw []byte, credential string) ([]byte, error) {
 		switch value := v.(type) {
 		case map[string]any:
 			clean := make(map[string]any, len(value))
+			// DFLOP technical logs encode fields as {k, v}. Redact the value
+			// according to its semantic key, rather than treating "v" as safe.
+			if field, ok := value["k"].(string); ok {
+				clean["k"] = redact(field)
+				if slices.Contains([]string{"model", "upstream_model", "client_protocol", "endpoint", "resolution", "size", "width", "height", "service_tier", "fast_mode", "async", "status", "duration", "duration_sec", "input_video_duration_sec", "characters", "unit_count", "unit_type", "cost", "completion_tokens", "billable_tokens", "input_tokens", "output_tokens", "cached_tokens", "num_server_side_tools_used", "framespersecond", "request_bytes", "image_count", "generated_image_count", "usage", "usage.completion_tokens", "usage.total_tokens", "usage.num_server_side_tools_used", "usage.input_tokens", "usage.output_tokens", "usage.cached_tokens", "usage.prompt_tokens", "usage.prompt_tokens_details.cached_tokens"}, strings.ToLower(field)) {
+					clean["v"] = redact(value["v"])
+				} else {
+					clean["v"] = "[REDACTED]"
+				}
+				return clean
+			}
 			for key, child := range value {
 				lower := strings.ToLower(key)
-				if slices.Contains([]string{"authorization", "api_key", "apikey", "cookie", "set-cookie", "password", "token", "secret", "email", "phone", "name", "reference_audio_url", "prompt", "text", "content", "transcript", "b64_json", "audio", "image", "video", "user"}, lower) || strings.Contains(lower, "api-key") || strings.Contains(lower, "credential") || strings.Contains(lower, "auth") || strings.Contains(lower, "cookie") || strings.Contains(lower, "secret") || strings.Contains(lower, "password") || strings.Contains(lower, "signed") || strings.Contains(lower, "private") || strings.HasSuffix(lower, "_key") {
+				if slices.Contains([]string{"authorization", "api_key", "apikey", "cookie", "set-cookie", "password", "token", "secret", "email", "phone", "name", "key_name", "key_prefix", "key_id", "user_id", "owner_id", "account_id", "organization_id", "client_ip", "ip", "ip_address", "request_note", "message", "voice_name", "reference_audio_url", "prompt", "input", "lyrics", "title", "text", "content", "transcript", "b64_json", "audio", "image", "video", "user"}, lower) || strings.Contains(lower, "api-key") || strings.Contains(lower, "credential") || strings.Contains(lower, "auth") || strings.Contains(lower, "cookie") || strings.Contains(lower, "secret") || strings.Contains(lower, "password") || strings.Contains(lower, "signed") || strings.Contains(lower, "private") || strings.HasSuffix(lower, "_key") {
 					clean[key] = "[REDACTED]"
 					continue
 				}

@@ -52,6 +52,12 @@ func classifyTaskPricing(item *Item, source Model) {
 	shape := strings.Join(features, "+")
 	price := func(name string) string { return item.Prices[name].SellingUSD }
 	switch {
+	case source.ID == "voice-tts-pro" && source.Category == "audio" && source.EndpointType == "tts_synthesize" &&
+		shape == "tts_char" && source.PricePerTTSChar != nil && mediaPricesMatch(*item, "price_per_tts_char"):
+		item.TaskPlugin = "dflop-tts"
+		item.RequiredFacts = []string{"characters"}
+		item.TaskExpression = fmt.Sprintf("u(\"characters\") * %s", price("price_per_tts_char"))
+		item.ReasonCode = "NO_ASYNC_TTS_BINDING"
 	case source.Category == "video" && source.EndpointType == "videos_generations" &&
 		(shape == "video_second+video_tiers" || shape == "video_input_seconds+video_second+video_tiers") &&
 		((shape == "video_input_seconds+video_second+video_tiers" && source.VideoBillsInputSeconds != nil && *source.VideoBillsInputSeconds) ||

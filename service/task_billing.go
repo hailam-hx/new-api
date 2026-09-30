@@ -233,6 +233,9 @@ func appendTaskLogInfo(task *model.Task, other *model.LogOther) {
 	}
 	if task.PrivateData.Execution != nil {
 		AppendTaskPluginAuditInfo(other, task.PrivateData.Execution.TaskPlugin)
+		if task.PrivateData.Execution.Passive != nil {
+			other.SetRoot("passive_runtime_binding", task.PrivateData.Execution.Passive)
+		}
 	}
 	if task.PrivateData.UpstreamTaskID == "" && task.PrivateData.NodeName == "" {
 		return

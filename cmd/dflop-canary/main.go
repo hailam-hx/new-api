@@ -73,6 +73,12 @@ func run(args []string) error {
 	dryRun := flags.Bool("dry-run", false, "render a redacted request without submitting")
 	input := flags.String("input", "", "offline redacted response JSON")
 	planPath := flags.String("plan", "", "authenticated canary plan ledger for offline cost comparison")
+	scope := flags.String("scope", "key", "historical log visibility; account requires existing provider permission")
+	period := flags.String("period", "30d", "historical log time window")
+	from := flags.String("from", "", "custom history start date or RFC3339")
+	to := flags.String("to", "", "custom history end date or RFC3339")
+	historyModel := flags.String("model", "", "exact historical model filter")
+	evidenceOutput := flags.String("evidence-output", filepath.Join(os.TempDir(), "new-api-dflop-canary", "dflop-historical-evidence-2026-09-30.json"), "private historical evidence report")
 	invocation := flags.String("invocation-id", "", "single invocation ID")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -163,8 +169,8 @@ func run(args []string) error {
 		fmt.Println(path)
 		return nil
 	}
-	if mode != "plan" && mode != "audit" && mode != "execute" {
-		return errors.New("mode must be plan, audit, execute, capture, or verify")
+	if mode != "plan" && mode != "audit" && mode != "execute" && mode != "evidence-recover" {
+		return errors.New("mode must be plan, audit, execute, capture, verify, or evidence-recover")
 	}
 	if *channelID <= 0 {
 		return errors.New("select an existing channel with --channel-id; implicit selection is disabled")
@@ -187,6 +193,12 @@ func run(args []string) error {
 	}
 	if *manualRate != "" {
 		config.CNYToUSD = *manualRate
+	}
+	if mode == "evidence-recover" {
+		if *execute || *confirm != "" {
+			return errors.New("EVIDENCE_GET_ONLY")
+		}
+		return runHistoricalRecovery(*channelID, config, dflop.HistoricalOptions{ChannelID: *channelID, Scope: *scope, Period: *period, From: *from, To: *to, Model: *historyModel}, *evidenceOutput)
 	}
 	if err := config.ValidateForPreview(); err != nil {
 		return err
@@ -370,7 +382,10 @@ func run(args []string) error {
 
 func openCanaryDB(dbPath string) (*gorm.DB, error) {
 	// Read existing rows without InitDB, migrations, or scheduler startup.
-	dsn := os.Getenv("SQL_DSN")
+	return openCanaryDBWithDSN(dbPath, os.Getenv("SQL_DSN"))
+}
+
+func openCanaryDBWithDSN(dbPath, dsn string) (*gorm.DB, error) {
 	switch {
 	case strings.HasPrefix(dsn, "postgres://") || strings.HasPrefix(dsn, "postgresql://"):
 		return gorm.Open(postgres.New(postgres.Config{DSN: dsn, PreferSimpleProtocol: true}), &gorm.Config{})

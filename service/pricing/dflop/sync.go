@@ -81,6 +81,10 @@ func Plan(items []Item, config model.DFLOPConfig, entries []model.ModelPricingEn
 					}
 					variants[pluginKey] = item.TaskExpression
 					proposed[billing_setting.PluginBillingExprOption] = variants
+					if item.ModelID == "voice-tts-pro" && pluginKey == "dflop-tts" {
+						status, reasonCode = UnsupportedMapping, "NO_ASYNC_TTS_BINDING"
+						reason = "durable submit intent and complete production replay are not verified"
+					}
 				} else {
 					reason = "task plugin usage facts do not match DFLOP pricing requirements"
 				}
@@ -142,7 +146,7 @@ func Plan(items []Item, config model.DFLOPConfig, entries []model.ModelPricingEn
 		row.Action = "UPDATE"
 		owner, owned := managed[item.ModelID]
 		if !owned {
-			row.Status, row.Reason = "MANUAL_OVERRIDE", "existing pricing requires explicit adoption"
+			row.Status, row.Reason, row.ReasonCode = "MANUAL_OVERRIDE", "existing pricing requires explicit adoption", "MANUAL_ADOPTION_REQUIRED"
 			result = append(result, row)
 			continue
 		}

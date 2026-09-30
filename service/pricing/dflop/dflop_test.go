@@ -224,7 +224,7 @@ func TestEffectiveMediaPricesRemainSourceDrivenWhileBindingsAreUnverified(t *tes
 		{"voice-clone-pro", "audio", "voice_clone", "voice_clone", "price_per_voice_clone", "1800", "4.5", "NO_EXACT_VOICE_CLONE_BINDING"},
 		{"voice-clone-pro", "audio", "voice_clone", "voice_clone", "price_per_voice_clone", "2400", "6", "NO_EXACT_VOICE_CLONE_BINDING"},
 		{"suno-v5", "audio", "music_generations", "music", "price_per_music_generation", "20.4", "0.051", "NO_EXACT_MUSIC_PLUGIN_BINDING"},
-		{"clip-compose", "video", "videos_generations", "video_task", "price_per_video_task", "48", "0.12", "NO_EXACT_FIXED_TASK_BINDING"},
+		{"clip-compose", "video", "videos_generations", "video_task", "price_per_video_task", "48", "0.12", "NO_EXACT_RUNTIME_BINDING"},
 	} {
 		t.Run(tc.name+"/"+tc.points, func(t *testing.T) {
 			catalog := fmt.Sprintf(`{"schema_version":"1.0","currency":"points","aliases":{},"models":[{"id":%q,"pricing":{"category":%q,"endpoint_type":%q,"callable":true,%q:%q},"billing":{"features":[%q]},"caps":{"surfaces":["task"]}}]}`, tc.name, tc.category, tc.endpoint, tc.priceField, tc.points, tc.feature)
@@ -266,6 +266,17 @@ func TestBuildDoesNotGuessClaudeOneHourCachePrice(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, UnsupportedMapping, items[0].Status)
 	assert.Empty(t, items[0].Expression)
+}
+
+func TestBuildEffectiveMapsDFLOPFiveMinuteCacheContract(t *testing.T) {
+	catalog := []byte(`{"schema_version":"1.0","currency":"points","aliases":{},"models":[{"id":"claude-example","pricing":{"category":"text","callable":true,"input_per_1m":"1","output_per_1m":"2","cache_creation_per_1m":"3"},"billing":{"features":["token"]},"caps":{}}]}`)
+	items, _, _, err := BuildEffective(catalog, []byte(`{"points_per_cny":60}`), "0.15", "1")
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Equal(t, SupportedAuto, items[0].Status)
+	assert.Equal(t, "", items[0].ReasonCode)
+	assert.Contains(t, items[0].Expression, "cc * ")
+	assert.NotContains(t, items[0].Expression, "cc1h")
 }
 
 func TestSourceHashDoesNotChangeWithSellingPolicy(t *testing.T) {

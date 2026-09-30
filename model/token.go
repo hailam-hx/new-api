@@ -513,3 +513,26 @@ func invalidateTokensCache(tokens []Token) error {
 	}
 	return firstErr
 }
+
+// AdjustTokenQuotaDurable is used by sessions with a persisted settlement
+// journal. It commits the token delta before marking settlement complete.
+func AdjustTokenQuotaDurable(id int, key string, delta int) error {
+	if err := invalidateTokenCacheForMutation(key); err != nil {
+		return err
+	}
+	var err error
+	if delta > 0 {
+		err = decreaseTokenQuota(id, delta)
+	} else if delta < 0 {
+		err = increaseTokenQuota(id, -delta)
+	}
+	if err != nil {
+		return err
+	}
+	if common.RedisEnabled {
+		if err := invalidateTokenCacheForMutation(key); err != nil {
+			common.SysLog("failed to invalidate token quota cache: " + err.Error())
+		}
+	}
+	return nil
+}

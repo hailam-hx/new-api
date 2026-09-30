@@ -82,6 +82,7 @@ func TestSupportsRegisteredHostProtocols(t *testing.T) {
 	assert.True(t, SupportsHostProtocol("openai_responses"))
 	assert.True(t, SupportsHostProtocol("openai_video"))
 	assert.True(t, SupportsHostProtocol(ProtocolOpenAIImage))
+	assert.True(t, SupportsHostProtocol(ProtocolOpenAIAudioSpeech))
 	assert.False(t, SupportsHostProtocol("plugin_owned_wire"))
 }
 

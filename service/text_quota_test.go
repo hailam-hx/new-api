@@ -1,8 +1,10 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"math"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
@@ -90,6 +92,7 @@ func TestFixedPriceBillingDatabaseMatrix(t *testing.T) {
 			require.NoError(t, db.Raw(versionQuery).Scan(&version).Error)
 			t.Logf("database: %s", version)
 			runFixedPriceAccountingCases(t, db, logDB)
+			runDFLOPCacheQuarantineCase(t, db, logDB)
 		})
 	}
 }
@@ -1499,4 +1502,147 @@ func TestAppendToolSurchargeLogInfoWritesOnlyStructuredFields(t *testing.T) {
 	assert.NotContains(t, fields, "file_search")
 	assert.NotContains(t, fields, "image_generation_call")
 	assert.NotContains(t, fields, "image_generation_call_price")
+}
+
+func runDFLOPCacheQuarantineCase(t *testing.T, db, logDB *gorm.DB) {
+	t.Helper()
+	user := model.User{Username: "dflop_cache_quarantine", Quota: 100000, Status: common.UserStatusEnabled}
+	require.NoError(t, db.Create(&user).Error)
+	token := model.Token{UserId: user.Id, Key: "dflop-quarantine-test", RemainQuota: 100000, Status: common.TokenStatusEnabled}
+	require.NoError(t, db.Create(&token).Error)
+	t.Cleanup(func() {
+		require.NoError(t, logDB.Where("user_id = ?", user.Id).Delete(&model.Log{}).Error)
+		require.NoError(t, db.Unscoped().Delete(&token).Error)
+		require.NoError(t, db.Unscoped().Delete(&user).Error)
+	})
+	info := &relaycommon.RelayInfo{UserId: user.Id, TokenId: token.Id, TokenKey: token.Key,
+		ChannelMeta:     &relaycommon.ChannelMeta{ChannelBaseUrl: "https://api.dflop.top", UpstreamModelName: "claude-example"},
+		OriginModelName: "claude-example", UsingGroup: "default", UserGroup: "default",
+		UserSetting: dto.UserSetting{BillingPreference: "wallet_only"}, ForcePreConsume: false, StartTime: time.Now()}
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest("POST", "/v1/messages", nil)
+	ctx.Set("token_quota", 100000)
+	priorBatch := common.BatchUpdateEnabled
+	common.BatchUpdateEnabled = true
+	t.Cleanup(func() { common.BatchUpdateEnabled = priorBatch })
+	blocked := *info
+	batchErr := PreConsumeBilling(ctx, 5000, &blocked)
+	assert.NotNil(t, batchErr, "batch reservations cannot back a durable journal")
+	if batchErr != nil {
+		assert.Contains(t, batchErr.Error(), "BILLING_JOURNAL_BATCH_UNSUPPORTED")
+	}
+	assert.Nil(t, blocked.Billing)
+	blocked = *info
+	assert.ErrorContains(t, EnsureDFLOPCacheReservation(ctx, &blocked), "BILLING_JOURNAL_BATCH_UNSUPPORTED")
+	var untouched model.User
+	require.NoError(t, db.First(&untouched, user.Id).Error)
+	assert.Equal(t, 100000, untouched.Quota, "configuration rejection precedes all quota mutations")
+	common.BatchUpdateEnabled = false
+	priorTrust := operation_setting.GetQuotaSetting().TrustQuotaUSD
+	operation_setting.GetQuotaSetting().TrustQuotaUSD = 0.01
+	t.Cleanup(func() { operation_setting.GetQuotaSetting().TrustQuotaUSD = priorTrust })
+	require.Nil(t, PreConsumeBilling(ctx, 5000, info))
+	require.NoError(t, EnsureDFLOPCacheReservation(ctx, info))
+	PostTextConsumeQuota(ctx, info, &dto.Usage{PromptTokens: 100, ClaudeCacheCreation1hTokens: 100}, nil)
+	PostTextConsumeQuota(ctx, info, &dto.Usage{PromptTokens: 100, ClaudeCacheCreation1hTokens: 100}, nil)
+	assert.Error(t, info.Billing.Settle(1))
+	info.Billing.Refund(ctx)
+	assert.False(t, info.Billing.NeedsRefund())
+	replayed := *info
+	replayed.Billing = nil
+	require.NotNil(t, PreConsumeBilling(ctx, 5000, &replayed))
+	quota, err := model.GetUserQuota(user.Id, true)
+	require.NoError(t, err)
+	assert.Equal(t, 95000, quota, "unknown tariff retains reservation without settling or refunding")
+	var logs []model.Log
+	require.NoError(t, logDB.Where("user_id = ?", user.Id).Find(&logs).Error)
+	require.Len(t, logs, 1)
+	assert.Equal(t, model.LogTypeConsume, logs[0].Type)
+	assert.Equal(t, "UNSUPPORTED_DFLOP_CACHE_TTL_1H", logs[0].Content)
+	assert.Contains(t, logs[0].Other, "QUARANTINED")
+	assert.Contains(t, logs[0].Other, `"claude_cache_creation_1_h_tokens":100`)
+	assert.Equal(t, 0, logs[0].Quota)
+	currentMain, currentLog := common.MainDatabaseType(), common.LogDatabaseType()
+	common.SetDatabaseTypes(currentMain, common.DatabaseTypeClickHouse)
+	unsupported := *info
+	unsupported.Billing = nil
+	unsupported.RequestId = common.NewRequestId()
+	apiErr := PreConsumeBilling(ctx, 5000, &unsupported)
+	require.NotNil(t, apiErr)
+	assert.Contains(t, apiErr.Error(), "BILLING_JOURNAL_STORE_UNSUPPORTED")
+	common.SetDatabaseTypes(currentMain, currentLog)
+	for _, tc := range []struct {
+		name  string
+		usage *dto.Usage
+		want  int
+	}{
+		{"ordinary", &dto.Usage{UsageSemantic: "anthropic", PromptTokens: 100, CompletionTokens: 5}, 55},
+		{"5m", &dto.Usage{UsageSemantic: "anthropic", PromptTokens: 100, CompletionTokens: 5, ClaudeCacheCreation5mTokens: 10}, 70},
+		{"read", &dto.Usage{UsageSemantic: "anthropic", PromptTokens: 100, CompletionTokens: 5, PromptTokensDetails: dto.InputTokenDetails{CachedTokens: 20}}, 56},
+		{"zero", &dto.Usage{UsageSemantic: "anthropic", PromptTokens: 100, CompletionTokens: 5, ClaudeCacheCreation5mTokens: 0}, 55},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before, err := model.GetUserQuota(user.Id, true)
+			require.NoError(t, err)
+			normal := *info
+			normal.Billing = nil
+			normal.RequestId = common.NewRequestId()
+			ctx.Set(common.RequestIdKey, normal.RequestId)
+			expr := `tier("dflop",p + c * 2 + cr * 0.1 + cc * 3)`
+			normal.TieredBillingSnapshot = &billingexpr.BillingSnapshot{BillingMode: "tiered_expr", ExprString: expr, ExprHash: billingexpr.ExprHashString(expr), ExprVersion: 1, QuotaPerUnit: 500000, GroupRatio: 1, EstimatedQuotaAfterGroup: 5000}
+			require.Nil(t, PreConsumeBilling(ctx, 5000, &normal))
+			require.NoError(t, EnsureDFLOPCacheReservation(ctx, &normal))
+			PostTextConsumeQuota(ctx, &normal, tc.usage, nil)
+			PostTextConsumeQuota(ctx, &normal, tc.usage, nil)
+			require.NoError(t, normal.Billing.Settle(tc.want))
+			normal.Billing.Refund(ctx)
+			after, err := model.GetUserQuota(user.Id, true)
+			require.NoError(t, err)
+			assert.Equal(t, before-tc.want, after)
+			var journal model.Log
+			require.NoError(t, logDB.Where("request_id = ? AND content = ?", normal.RequestId, "BILLING_RESERVATION_SETTLED").First(&journal).Error)
+			assert.Contains(t, journal.Other, `"settlement_verified":true`)
+			again := normal
+			again.Billing = nil
+			require.NotNil(t, PreConsumeBilling(ctx, 5000, &again))
+		})
+	}
+	_, err = model.DeleteOldLogBatch(context.Background(), time.Now().Unix()+1, 1000)
+	require.NoError(t, err)
+	var retained int64
+	require.NoError(t, logDB.Model(&model.Log{}).Where("user_id = ? AND content = ?", user.Id, "UNSUPPORTED_DFLOP_CACHE_TTL_1H").Count(&retained).Error)
+	assert.Equal(t, int64(1), retained, "pending charge cannot disappear during log retention")
+	require.NoError(t, logDB.Model(&model.Log{}).Where("user_id = ? AND content = ?", user.Id, "BILLING_RESERVATION_SETTLED").Count(&retained).Error)
+	assert.Equal(t, int64(4), retained, "settlement tombstones preserve replay safety")
+	remaining, err := model.CountOldLog(context.Background(), time.Now().Unix()+1)
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), remaining, "retention progress excludes retained journals")
+
+}
+
+func TestPassiveBindingCaptureExcludesSecretsAndPreservesMissingFacts(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest("POST", "/v1/videos?secret=hidden", nil)
+	ctx.Set(common.RequestIdKey, "local-request")
+	info := &relaycommon.RelayInfo{OriginModelName: "client", ChannelMeta: &relaycommon.ChannelMeta{ChannelId: 1, ChannelType: 60, ChannelBaseUrl: "https://api.dflop.top", UpstreamModelName: "seedance-example"}, PassiveRequestID: "provider-request", PassiveTraceID: "trace-1"}
+	task := model.InitTask("video", info)
+	task.PrivateData.UpstreamTaskID = "provider-task"
+	task.Data = []byte(`{"model":"seedance-example","status":"succeeded","usage":{"completion_tokens":0,"api_key":"secret"},"resolution":"720p","authorization":"secret","url":"https://private.invalid/video","prompt":"secret"}`)
+	CaptureTaskSubmission(ctx, info, task)
+	model.CaptureTaskRuntime(task, http.Header{"X-Request-Id": {"poll-request"}, "X-Gateway-Trace": {"poll-trace"}}, task.Data)
+	require.NotNil(t, task.PrivateData.Execution.Passive)
+	capture := task.PrivateData.Execution.Passive
+	assert.Equal(t, "provider-task", capture.TaskID)
+	assert.Equal(t, "provider-request", capture.RequestID)
+	assert.Equal(t, "trace-1", capture.TraceID)
+	assert.Equal(t, "poll-request", capture.TerminalRequestID)
+	assert.Equal(t, "poll-trace", capture.TerminalTraceID)
+	assert.Equal(t, "/v1/videos", capture.Endpoint)
+	assert.NotContains(t, capture.Terminal, "duration_sec")
+	assert.NotContains(t, capture.Terminal, "input_video_duration_sec")
+	encoded, err := common.Marshal(capture)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), "secret")
+	assert.NotContains(t, string(encoded), "private.invalid")
+	assert.Contains(t, string(encoded), `"completion_tokens":0`)
 }

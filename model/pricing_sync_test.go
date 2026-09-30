@@ -36,7 +36,10 @@ func verifyPricingSyncLifecycle(t *testing.T) {
 	require.NoError(t, SaveDFLOPConfig(config))
 	unique := time.Now().UnixNano()
 	name := fmt.Sprintf("dflop-sync-test-model-%d", unique)
+	previousKeyCol := commonKeyCol
+	commonKeyCol = "" // Standalone read-only tools do not call InitDB.
 	previous, err := GetModelPricingSnapshot([]string{name})
+	commonKeyCol = previousKeyCol
 	require.NoError(t, err)
 	version := previous.Entries[0].Version
 	batchVersion := ModelPricingVersion(PricingValues{"versions": map[string]string{name: version}})
@@ -139,6 +142,13 @@ func TestPricingSyncDatabaseMatrix(t *testing.T) {
 			db, err := gorm.Open(tc.dialect, &gorm.Config{})
 			require.NoError(t, err)
 			DB = db
+			var databaseVersion string
+			versionQuery := "SELECT version()"
+			if tc.name == "sqlite" {
+				versionQuery = "SELECT sqlite_version()"
+			}
+			require.NoError(t, db.Raw(versionQuery).Scan(&databaseVersion).Error)
+			t.Logf("database version: %s", databaseVersion)
 			common.SetDatabaseTypes(tc.databaseType, tc.databaseType)
 			initCol()
 			require.NoError(t, migrateDB())

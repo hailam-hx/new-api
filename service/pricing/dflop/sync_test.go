@@ -305,6 +305,7 @@ func TestPlanBlocksManualDriftAndLargeIncrease(t *testing.T) {
 	planned, err := Plan(items, config, entries, managed)
 	require.NoError(t, err)
 	assert.Equal(t, "MANUAL_OVERRIDE", planned[0].Status)
+	assert.Equal(t, "MANUAL_ADOPTION_REQUIRED", planned[0].ReasonCode)
 	assert.Equal(t, "MANUAL_DRIFT", planned[1].Status)
 	assert.Equal(t, "SUPPORTED_MANUAL", planned[2].Status)
 	assert.Equal(t, "100", planned[2].DeltaPercent)

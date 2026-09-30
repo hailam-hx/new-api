@@ -108,6 +108,9 @@ func channelMatchesFilter(ch *Channel, modelName string, filter dto.ChannelFilte
 			setting := ch.GetSetting()
 			return setting.BindsTaskPlugin(filter.TaskPluginKey) || slices.ContainsFunc(filter.TaskPluginKeys, setting.BindsTaskPlugin)
 		}
+		if ch.Type == constant.ChannelTypeOpenAI && filter.TaskPluginKey == "dflop-tts" {
+			return ch.GetSetting().BindsTaskPlugin("dflop-tts")
+		}
 		return slices.Contains(filter.TaskPluginChannelTypes, ch.Type)
 	case dto.FilterResponsesWebSocket:
 		if !ch.GetSetting().ResponsesWebSocketEnabled {

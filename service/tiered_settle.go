@@ -1,6 +1,7 @@
 package service
 
 import (
+	"github.com/QuantumNous/new-api/service/pricing/dflop"
 	"net/http"
 
 	"github.com/QuantumNous/new-api/common"
@@ -166,6 +167,24 @@ func refreshTieredBillingGroup(relayInfo *relaycommon.RelayInfo) (*billingexpr.B
 // estimate before sending. If the initial group was free and skipped
 // pre-consume, switching to a paid group creates the session at that point.
 func PrepareTieredBillingForSelectedGroup(c *gin.Context, relayInfo *relaycommon.RelayInfo) *types.NewAPIError {
+	if relayInfo != nil && relayInfo.ChannelMeta != nil && dflop.DFLOPCacheContractApplies(relayInfo.ChannelBaseUrl, relayInfo.UpstreamModelName) {
+		var body []byte
+		if relayInfo.BillingRequestInput != nil {
+			body = relayInfo.BillingRequestInput.Body
+		} else if c != nil && c.Request != nil {
+			storage, err := common.GetBodyStorage(c)
+			if err != nil {
+				return types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest), types.ErrOptionWithSkipRetry())
+			}
+			body, err = storage.Bytes()
+			if err != nil {
+				return types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest), types.ErrOptionWithSkipRetry())
+			}
+		}
+		if err := dflop.DFLOPCacheContract(relayInfo.ChannelBaseUrl, relayInfo.UpstreamModelName, body, nil); err != nil {
+			return types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest), types.ErrOptionWithSkipRetry())
+		}
+	}
 	snap, err := refreshTieredBillingGroup(relayInfo)
 	if err != nil {
 		return types.NewErrorWithStatusCode(

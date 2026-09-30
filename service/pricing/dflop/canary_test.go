@@ -5,16 +5,80 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestHistoricalEvidenceRecoveryIsGETOnlyAndFollowsEveryCursor(t *testing.T) {
+	var requests []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Method+" "+r.URL.Path)
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Equal(t, "Bearer historical-secret", r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v1/logs":
+			assert.Equal(t, "key", r.URL.Query().Get("scope"))
+			if r.URL.Query().Get("cursor") == "" {
+				_, _ = io.WriteString(w, `{"currency":"points","scope":"key","data":[{"id":1,"model":"tvod-midjourney-v7","status":"success","unit_type":"image","unit_count":4,"cost":"8.4","task_id":"image-1"}],"has_more":true,"next_cursor":"opaque/+="}`)
+			} else {
+				assert.Equal(t, "opaque/+=", r.URL.Query().Get("cursor"))
+				_, _ = io.WriteString(w, `{"currency":"points","scope":"key","data":[],"has_more":false}`)
+			}
+		case "/v1/logs/1":
+			_, _ = io.WriteString(w, `{"id":1,"kind":"image","request":[{"k":"prompt","v":"private customer prompt"},{"k":"resolution","v":"1024x1024"}],"upstream":[{"k":"api_key","v":"historical-secret"}]}`)
+		case "/v1/images/generations":
+			_, _ = io.WriteString(w, `{"data":[{"id":"image-1","model":"tvod-midjourney-v7","status":"succeeded","unit_count":4,"cost":"8.4"}],"next_cursor":null}`)
+		case "/v1/images/generations/image-1":
+			_, _ = io.WriteString(w, `{"data":[{"url":"https://private.example/image?secret=123"}]}`)
+		default:
+			_, _ = io.WriteString(w, `{"data":[]}`)
+		}
+	}))
+	defer server.Close()
+	transport := HistoricalTransport{HTTP: server.Client(), BaseURL: server.URL, Key: "historical-secret"}
+	_, _, err := transport.Read(context.Background(), http.MethodPost, "/v1/audio/speech", nil)
+	require.ErrorContains(t, err, "GET_ONLY")
+	assert.Empty(t, requests)
+	_, _, err = transport.Read(context.Background(), http.MethodGet, "/v1/logs/../chat/completions", url.Values{})
+	require.Error(t, err)
+	assert.Empty(t, requests)
+	report, err := RecoverHistoricalEvidence(context.Background(), transport, HistoricalOptions{ChannelID: 1, Scope: "key", Period: "30d", CatalogHash: "catalog-hash"}, []Item{{ModelID: "tvod-midjourney-v7", Callable: true, ReasonCode: "UNVERIFIED_OUTPUT_COUNT", BillingFeatures: []string{"per_image"}, Prices: map[string]Price{"price_per_image": {Credits: "2.1"}}}})
+	require.NoError(t, err)
+	require.Len(t, report.Models, 1)
+	assert.Equal(t, 1, report.Models[0].SuccessfulCallsFound)
+	assert.Equal(t, "MATCH", report.Models[0].ReconciliationResult)
+	assert.True(t, report.Models[0].QuantityVerified)
+	assert.False(t, report.Models[0].CanUnlock, "a matching ledger does not establish a New API production binding")
+	encoded, err := common.Marshal(report)
+	require.NoError(t, err)
+	assert.NotContains(t, string(encoded), "historical-secret")
+	assert.NotContains(t, string(encoded), "private customer prompt")
+	assert.NotContains(t, string(encoded), "private.example")
+	assert.Contains(t, string(encoded), "CAPTURED_REAL_DFLOP_LEDGER")
+	assert.Contains(t, string(encoded), "CAPTURED_REAL_DFLOP_TASK")
+	assert.Equal(t, 2, report.Requests[0].Pages)
+}
+
+func TestHistoricalEvidenceReconciliationDoesNotUsePercentageTolerance(t *testing.T) {
+	for _, tc := range []struct{ expected, settled, want string }{
+		{"0.792396", "0.792396", "MATCH"},
+		{"0.792396", "0.7924", "ROUNDING_MATCH"},
+		{"0.792396", "0.80", "MISMATCH"},
+		{"0.792396", "", "INSUFFICIENT_EVIDENCE"},
+	} {
+		assert.Equal(t, tc.want, ReconcileHistoricalPoints(tc.expected, tc.settled, 4))
+	}
+}
 
 type canaryCatalogTransport struct{ requests []string }
 
@@ -337,4 +401,76 @@ func TestCanaryLostSubmitResponseReusesKeyAndBody(t *testing.T) {
 	assert.Equal(t, "task-1", record.TaskID)
 	assert.Equal(t, 2, posts)
 	assert.NotEmpty(t, firstKey)
+}
+
+func TestHistoricalEvidenceDoesNotAddAlternativeVideoTariffs(t *testing.T) {
+	report := HistoricalModelReport{RuntimeFields: map[string]any{}, ReconciliationResult: "INSUFFICIENT_EVIDENCE"}
+	item := Item{BillingFeatures: []string{"video_second", "video_token", "video_token_formula_seedance_2_0"}, Prices: map[string]Price{"video_token_tier:default@480p": {Credits: "552"}, "video_tier:480p": {Credits: "5.544288"}}}
+	ObserveHistoricalBilling(&report, item, map[string]any{"status": "succeeded", "resolution": "480p", "service_tier": "default", "duration_sec": 4, "usage": map[string]any{"completion_tokens": 40594}, "cost": "22.17715200"}, nil)
+	assert.True(t, report.QuantityVerified)
+	assert.Equal(t, "INSUFFICIENT_EVIDENCE", report.ReconciliationResult)
+	assert.Empty(t, report.Reconciliations, "presence of two prices does not establish additive billing")
+	assert.True(t, report.SemanticsVerified)
+}
+
+func TestDFLOPContractAlignmentGuardsAndExactCorrelation(t *testing.T) {
+	base := "https://api.dflop.top"
+	for _, body := range []string{`{}`, `{"system":[{"cache_control":{"type":"ephemeral"}}]}`, `{"system":[{"cache_control":{"type":"ephemeral","ttl":"5m"}}]}`} {
+		require.NoError(t, DFLOPCacheContract(base, "claude-example", []byte(body), nil))
+	}
+	require.ErrorContains(t, DFLOPCacheContract(base, "claude-example", []byte(`{"messages":[{"content":[{"cache_control":{"ttl":"1h"}}]}]}`), nil), "UNSUPPORTED_DFLOP_CACHE_TTL_1H")
+	require.ErrorContains(t, DFLOPCacheContract(base, "claude-example", nil, &dto.Usage{ClaudeCacheCreation1hTokens: 1}), "UNSUPPORTED_DFLOP_CACHE_TTL_1H")
+	require.NoError(t, DFLOPCacheContract("https://api.anthropic.com", "claude-example", nil, &dto.Usage{ClaudeCacheCreation1hTokens: 1}))
+	for _, usage := range []*dto.Usage{nil, {}, {ClaudeCacheCreation5mTokens: 26}, {PromptTokensDetails: dto.InputTokenDetails{CachedTokens: 26}}} {
+		require.NoError(t, DFLOPCacheContract(base, "claude-example", nil, usage))
+	}
+	records := []LocalExecution{{TaskRecordID: 1, UpstreamTaskID: "real-task", RequestID: "real-request", PluginKey: "dflop-tts", ClientModel: "client", UpstreamModel: "voice-tts-pro", ChannelID: 1}}
+	exact := CorrelateRuntimeBinding("real-task", "", "voice-tts-pro", 1, records)
+	assert.Equal(t, "EXACT_TASK_ID", exact.Confidence)
+	assert.True(t, exact.BindingVerified)
+	assert.False(t, exact.SettledCostReconciled, "missing key-scope cost cannot remove exact binding")
+	assert.Equal(t, "EXACT_REQUEST_ID", CorrelateRuntimeBinding("", "real-request", "voice-tts-pro", 1, records).Confidence)
+	records[0].TraceID = "real-trace"
+	assert.Equal(t, "EXACT_TRACE_ID", CorrelateRuntimeBinding("", "", "voice-tts-pro", 1, records, "real-trace").Confidence)
+	records[0].UpstreamTaskID = ""
+	records[0].TaskID = "real-task"
+	assert.Equal(t, "EXACT_TASK_ID", CorrelateRuntimeBinding("real-task", "", "voice-tts-pro", 1, records).Confidence)
+	assert.Equal(t, "UNVERIFIED", CorrelateRuntimeBinding("similar-task", "", "voice-tts-pro", 1, records).Confidence)
+	assert.Equal(t, "UNVERIFIED", CorrelateRuntimeBinding("real-task", "", "voice-tts-pro", 2, records).Confidence)
+}
+
+func TestHistoricalSeedanceTokenAndLiteSecondLeg(t *testing.T) {
+	for _, tc := range []struct {
+		lite     bool
+		expected string
+	}{{false, "0.1"}, {true, "10.1"}} {
+		report := HistoricalModelReport{ReconciliationResult: "INSUFFICIENT_EVIDENCE"}
+		features := []string{"video_token", "video_second", "video_token_formula_seedance_2_0"}
+		if tc.lite {
+			features = append(features, "video_two_stage")
+		}
+		item := Item{BillingFeatures: features, Prices: map[string]Price{"video_token_tier:default@720p": {Credits: "1000"}, "video_second_stage:720p": {Credits: "2.5"}, "video_tier:720p": {Credits: "999"}}}
+		ObserveHistoricalBilling(&report, item, map[string]any{"status": "succeeded", "resolution": "720p", "input_video_duration_sec": 0, "duration_sec": 4, "usage": map[string]any{"completion_tokens": 100}, "cost": tc.expected}, nil)
+		require.Len(t, report.Reconciliations, 1)
+		assert.Equal(t, tc.expected, report.Reconciliations[0].ExpectedPoints)
+		assert.Equal(t, "MATCH", report.ReconciliationResult)
+	}
+}
+
+func TestGPTEndpointSpecificBillingClassification(t *testing.T) {
+	matrix := EndpointBillingMatrix([]Item{
+		{ModelID: "gpt-5-example", Category: "text", BillingFeatures: []string{"token", "per_image", "fast_mode"}},
+		{ModelID: "gpt-image-example", Category: "image", BillingFeatures: []string{"image_token"}},
+	})
+	require.Len(t, matrix, 3)
+	for _, entry := range matrix[:2] {
+		assert.Equal(t, []string{"token"}, entry["applicable_features"])
+		assert.Equal(t, []string{"fast_mode", "per_image"}, entry["unverified_selectors"])
+		assert.Equal(t, "UNVERIFIED", entry["runtime_selector"])
+		assert.Equal(t, false, entry["global_additive_billing_verified"])
+	}
+	assert.Equal(t, "/v1/chat/completions", matrix[0]["endpoint"])
+	assert.Equal(t, "/v1/responses", matrix[1]["endpoint"])
+	assert.Equal(t, "/v1/images/generations", matrix[2]["endpoint"])
+	assert.Equal(t, []string{"image_token"}, matrix[2]["applicable_features"])
 }

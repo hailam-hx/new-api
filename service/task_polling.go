@@ -362,6 +362,8 @@ func updateBatchTasks(ctx context.Context, adaptor BatchTaskPollingAdaptor, chan
 			task.PrivateData.ResultURL = responseItem.TaskInfo.Url
 		}
 
+		model.CaptureTaskRuntime(task, resp.Header, task.Data)
+		model.CaptureTaskCompletionFacts(task, string(task.Status), responseItem.TaskInfo.UsageFacts)
 		isDone := task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure
 		terminalTransition := isDone && snap.Status != task.Status
 		won, updateErr := task.UpdateWithStatus(snap.Status)
@@ -543,6 +545,8 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	}
 
 	task.Data = redactVideoResponseBody(responseBody)
+	model.CaptureTaskRuntime(task, resp.Header, responseBody)
+	model.CaptureTaskCompletionFacts(task, taskResult.Status, taskResult.UsageFacts)
 	if len(taskResult.PluginState) > 0 {
 		task.PrivateData.PluginState = taskResult.PluginState
 	}
@@ -675,6 +679,12 @@ func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor
 		// 用量表达式结算只适用于成功任务；失败任务由调用方全额退款。
 		if task.Status == model.TaskStatusFailure {
 			return false
+		}
+		if task.Platform == "dflop-tts" {
+			if _, present := taskResult.UsageFacts["characters"]; !present {
+				logger.LogWarn(ctx, fmt.Sprintf("DFLOP speech task %s succeeded without authoritative characters; retaining reservation", task.TaskID))
+				return true
+			}
 		}
 		result, usageFacts, err := EvaluateTaskCompletionUsage(bc.TieredSnapshot, taskResult.UsageFacts)
 		if err != nil {

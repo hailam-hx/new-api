@@ -169,6 +169,9 @@ func channelMatchesExpectedTaskPlugin(c *gin.Context, channel *model.Channel, ex
 	if channel.Type == constant.ChannelTypeTaskPlugin || channel.Type == constant.ChannelTypeNewAPI {
 		return channel.GetSetting().BindsTaskPlugin(expected)
 	}
+	if channel.Type == constant.ChannelTypeOpenAI && expected == "dflop-tts" {
+		return channel.GetSetting().BindsTaskPlugin(expected)
+	}
 
 	if c == nil {
 		return false
@@ -205,7 +208,8 @@ func pinnedEndpointCandidateForChannel(c *gin.Context, channel *model.Channel, e
 		if candidate.Plugin.Meta.Key == expected {
 			expectedOwned = true
 		}
-		if channel.Type == constant.ChannelTypeTaskPlugin || channel.Type == constant.ChannelTypeNewAPI {
+		if channel.Type == constant.ChannelTypeTaskPlugin || channel.Type == constant.ChannelTypeNewAPI ||
+			(channel.Type == constant.ChannelTypeOpenAI && candidate.Plugin.Meta.Key == "dflop-tts" && setting.BindsTaskPlugin("dflop-tts")) {
 			// A New API channel may bind several candidates. The first bound
 			// candidate in generation order executes, so the billing provider
 			// depends only on the channel and the request, never on which

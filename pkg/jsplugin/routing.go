@@ -94,6 +94,10 @@ var hostProtocols = []HostProtocolDefinition{
 		{Name: "retrieve", Methods: []string{http.MethodGet}, Path: "/v1/videos/:task_id", BodyKinds: []BodyKind{BodyNone}, RequiredProtocolMembers: []string{"render"}},
 		{Name: "content", Methods: []string{http.MethodGet, http.MethodHead}, Path: "/v1/videos/:task_id/content", BodyKinds: []BodyKind{BodyNone}, RequiredDriverHooks: []string{"listArtifacts", "buildContentRequest"}},
 	}},
+	{Name: ProtocolOpenAIAudioSpeech, Operations: []HostProtocolOperation{
+		{Name: "create", Methods: []string{http.MethodPost}, Path: "/v1/audio/speech", BodyKinds: []BodyKind{BodyJSON}, ModelField: "model", RequiredProtocolMembers: []string{"decodeRequest"}},
+		{Name: "retrieve", Methods: []string{http.MethodGet}, Path: "/v1/audio/speech/:task_id", BodyKinds: []BodyKind{BodyNone}},
+	}},
 	// The OpenAI Images API is synchronous: both operations create a task and
 	// the host answers with the rendered image response once the task is
 	// terminal, so there is no retrieve operation and no request modes.
@@ -106,6 +110,10 @@ var hostProtocols = []HostProtocolDefinition{
 // ProtocolOpenAIImage is the host protocol that serves the OpenAI Images API
 // (`POST /v1/images/generations` and `POST /v1/images/edits`) from a plugin.
 const ProtocolOpenAIImage = "openai_image"
+
+// ProtocolOpenAIAudioSpeech serves asynchronous speech tasks on the standard
+// audio speech path. Unclaimed requests retain the ordinary audio relay.
+const ProtocolOpenAIAudioSpeech = "openai_audio_speech"
 
 func HostProtocol(name string) (HostProtocolDefinition, bool) {
 	for _, definition := range hostProtocols {
