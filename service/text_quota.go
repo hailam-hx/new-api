@@ -486,6 +486,10 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		other = GenerateTextOtherInfo(ctx, relayInfo, summary.ModelRatio, summary.GroupRatio, summary.CompletionRatio, summary.CacheTokens, summary.CacheRatio, summary.ModelPrice, relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio)
 	}
 	appendUsageBillingPathForLog(other, common.GetContextKeyBool(ctx, constant.ContextKeyLocalCountTokens), originUsage)
+	if originUsage != nil && originUsage.NumServerSideToolsUsed != nil && *originUsage.NumServerSideToolsUsed >= 0 {
+		other.SetPublic("server_tool_calls", *originUsage.NumServerSideToolsUsed)
+		other.SetPublic("server_tool_calls_source", "upstream_final_usage")
+	}
 	if adminRejectReason != "" {
 		other.SetAdmin("reject_reason", adminRejectReason)
 	}

@@ -312,9 +312,10 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 			}
 		}
 		fallbackUsage := &dto.Usage{
-			PromptTokens:     info.GetEstimatePromptTokens(),
-			CompletionTokens: completionTokens,
-			TotalTokens:      info.GetEstimatePromptTokens() + completionTokens,
+			PromptTokens:           info.GetEstimatePromptTokens(),
+			CompletionTokens:       completionTokens,
+			TotalTokens:            info.GetEstimatePromptTokens() + completionTokens,
+			NumServerSideToolsUsed: simpleResponse.Usage.NumServerSideToolsUsed,
 		}
 		simpleResponse.Usage = *fallbackUsage
 		usageModified = true

@@ -204,6 +204,7 @@ func smokeTestExpr(exprStr string) error {
 		return fmt.Errorf("expression references usage keys %v but the model has no task plugin usage schema", sortedKeys)
 	}
 
+	zeroServerToolCalls := 0
 	vectors := []billingexpr.TokenParams{
 		{P: 0, C: 0, Len: 0},
 		{P: 1000, C: 1000, Len: 1000},
@@ -212,6 +213,9 @@ func smokeTestExpr(exprStr string) error {
 		{P: 300, C: 100, Len: 1000, CR: 100, Img: 400, ImgCR: 200},
 		{P: 800, C: 50, Len: 1000, AI: 200, AO: 50},
 		{Len: math.MaxInt32, ImgCR: math.MaxInt32},
+	}
+	for i := range vectors {
+		vectors[i].ServerToolCalls = &zeroServerToolCalls
 	}
 
 	for _, v := range vectors {

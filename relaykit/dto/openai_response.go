@@ -226,13 +226,16 @@ type CompletionsStreamResponse struct {
 }
 
 type Usage struct {
-	PromptTokens         int           `json:"prompt_tokens"`
-	CompletionTokens     int           `json:"completion_tokens"`
-	TotalTokens          int           `json:"total_tokens"`
-	PromptCacheHitTokens int           `json:"prompt_cache_hit_tokens,omitempty"`
-	UsageSemantic        string        `json:"usage_semantic,omitempty"`
-	UsageSource          string        `json:"usage_source,omitempty"`
-	BillingUsage         *BillingUsage `json:"billing_usage,omitempty"`
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `json:"total_tokens"`
+	// NumServerSideToolsUsed is reported by some upstreams in final usage.
+	// A pointer preserves the distinction between an absent count and zero.
+	NumServerSideToolsUsed *int          `json:"num_server_side_tools_used,omitempty"`
+	PromptCacheHitTokens   int           `json:"prompt_cache_hit_tokens,omitempty"`
+	UsageSemantic          string        `json:"usage_semantic,omitempty"`
+	UsageSource            string        `json:"usage_source,omitempty"`
+	BillingUsage           *BillingUsage `json:"billing_usage,omitempty"`
 
 	PromptTokensDetails    InputTokenDetails   `json:"prompt_tokens_details"`
 	CompletionTokenDetails OutputTokenDetails  `json:"completion_tokens_details"`

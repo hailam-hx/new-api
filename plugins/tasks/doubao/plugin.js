@@ -134,6 +134,12 @@ const IMAGE_UNIT_LABEL = { en: "image", zh: "张", "zh-TW": "張", fr: "image", 
 // layers individually). Estimated at submit from the requested size and count;
 // settled from data[].size per successful image.
 const IMAGE_USAGE_SCHEMA = {
+  image_count: {
+    type: "number",
+    unit: "count",
+    unitLabel: IMAGE_UNIT_LABEL,
+    description: { en: "Image generation unit price", zh: "图片生成单价" },
+  },
   // Successful output images at or below IMAGE_TIER_MAX_PIXELS.
   images_up_to_1_5k: {
     type: "number",
@@ -259,10 +265,10 @@ export const meta = {
       models: Object.keys(IMAGE_MODELS),
       schema: IMAGE_USAGE_SCHEMA,
       examples: [
-        { label: "2K · 1 张", facts: { images_up_to_1_5k: 0, images_above_1_5k: 1, input_images: 0, layer_decomposition: false } },
-        { label: "1K · 1 张 · 2 张参考图", facts: { images_up_to_1_5k: 1, images_above_1_5k: 0, input_images: 2, layer_decomposition: false } },
-        { label: "2K · 4 张组图", facts: { images_up_to_1_5k: 0, images_above_1_5k: 4, input_images: 0, layer_decomposition: false } },
-        { label: "图层拆分 · 2K 底图 + 4 层 1.5K", facts: { images_up_to_1_5k: 4, images_above_1_5k: 1, input_images: 1, layer_decomposition: true } },
+        { label: "2K · 1 张", facts: { image_count: 1, images_up_to_1_5k: 0, images_above_1_5k: 1, input_images: 0, layer_decomposition: false } },
+        { label: "1K · 1 张 · 2 张参考图", facts: { image_count: 1, images_up_to_1_5k: 1, images_above_1_5k: 0, input_images: 2, layer_decomposition: false } },
+        { label: "2K · 4 张组图", facts: { image_count: 4, images_up_to_1_5k: 0, images_above_1_5k: 4, input_images: 0, layer_decomposition: false } },
+        { label: "图层拆分 · 2K 底图 + 4 层 1.5K", facts: { image_count: 5, images_up_to_1_5k: 4, images_above_1_5k: 1, input_images: 1, layer_decomposition: true } },
       ],
     },
   ]),
@@ -549,6 +555,7 @@ function convertImage(ctx) {
     body: body,
     action: images.length ? "image_to_image" : "text_to_image",
     facts: {
+      image_count: imageCount,
       images_up_to_1_5k: higherTier ? 0 : imageCount,
       images_above_1_5k: higherTier ? imageCount : 0,
       input_images: images.length,
@@ -592,6 +599,9 @@ function imageUsage(body) {
   const usage = body.usage || {};
   const payloads = imagePayloads(body);
   const facts = {};
+  // A plain per-image price can settle from successful payloads even when a
+  // payload has no size and tiered prices must retain the reservation.
+  facts.image_count = payloads.length;
   let lower = 0,
     higher = 0,
     sized = true;

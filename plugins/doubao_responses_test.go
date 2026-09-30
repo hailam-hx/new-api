@@ -112,11 +112,12 @@ func submitDoubaoImage(t *testing.T, plugin *jsplugin.LoadedPlugin, action strin
 func TestDoubaoImageSubmission(t *testing.T) {
 	registry, plugin := newDoubaoPlugin(t)
 	reference := "https://cdn.example/reference.png"
-	noImages := map[string]any{"images_up_to_1_5k": float64(0), "images_above_1_5k": float64(0), "input_images": float64(0), "layer_decomposition": false}
+	noImages := map[string]any{"image_count": float64(0), "images_up_to_1_5k": float64(0), "images_above_1_5k": float64(0), "input_images": float64(0), "layer_decomposition": false}
 	facts := func(overrides map[string]any) map[string]any {
 		merged := map[string]any{}
 		maps.Copy(merged, noImages)
 		maps.Copy(merged, overrides)
+		merged["image_count"] = merged["images_up_to_1_5k"].(float64) + merged["images_above_1_5k"].(float64)
 		return merged
 	}
 	for _, tc := range []struct {
@@ -222,7 +223,7 @@ func TestDoubaoImageSubmission(t *testing.T) {
 			value, err = plugin.Engine.Call(t.Context(), "extractUsage", ctx)
 			require.NoError(t, err, tc.name)
 			facts := alibabaObject(t, value)
-			assert.NotContains(t, facts, "image_count", tc.name)
+			assert.Equal(t, tc.want, facts["image_count"], tc.name)
 			assert.Equal(t, tc.want, facts["images_up_to_1_5k"].(float64)+facts["images_above_1_5k"].(float64), tc.name)
 		}
 	})
@@ -234,7 +235,7 @@ func TestDoubaoImageSubmission(t *testing.T) {
 			_, found = registry.Generation().LookupEndpoint(http.MethodPost, "/v1/videos", name)
 			assert.False(t, found, name)
 			schema, _ := plugin.Meta.UsageForModel(name)
-			assert.ElementsMatch(t, []string{"images_up_to_1_5k", "images_above_1_5k", "input_images", "layer_decomposition"}, keysOf(schema), name)
+			assert.ElementsMatch(t, []string{"image_count", "images_up_to_1_5k", "images_above_1_5k", "input_images", "layer_decomposition"}, keysOf(schema), name)
 		}
 		_, found := registry.Generation().LookupEndpoint(http.MethodPost, "/v1/videos", "doubao-seedance-2-0-260128")
 		assert.True(t, found)
@@ -508,7 +509,7 @@ func TestDoubaoImageResults(t *testing.T) {
 		assert.Equal(t, "SUCCESS", immediate.Status)
 		assert.Equal(t, "100%", immediate.Progress)
 		assert.Equal(t, first, immediate.Url)
-		assert.Equal(t, map[string]any{"images_up_to_1_5k": float64(0), "images_above_1_5k": float64(2)}, immediate.UsageFacts)
+		assert.Equal(t, map[string]any{"image_count": float64(2), "images_up_to_1_5k": float64(0), "images_above_1_5k": float64(2)}, immediate.UsageFacts)
 
 		value, err := plugin.Engine.CallPath(t.Context(), "native", []string{"imageCreated"}, map[string]any{}, map[string]any{"task_id": "task_public", "status": "SUCCESS", "data": groupBody})
 		require.NoError(t, err)
@@ -537,7 +538,7 @@ func TestDoubaoImageResults(t *testing.T) {
 		}
 		value, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", queryContext, map[string]any{"status": "SUCCESS"}, tieredBody)
 		require.NoError(t, err)
-		assert.Equal(t, map[string]any{"images_up_to_1_5k": float64(4), "images_above_1_5k": float64(1), "input_images": float64(1)}, alibabaObject(t, value), "task expressions keep the tiered facts")
+		assert.Equal(t, map[string]any{"image_count": float64(5), "images_up_to_1_5k": float64(4), "images_above_1_5k": float64(1), "input_images": float64(1)}, alibabaObject(t, value), "task expressions keep the tiered facts")
 		for _, tc := range []struct {
 			name string
 			body map[string]any
@@ -560,13 +561,13 @@ func TestDoubaoImageResults(t *testing.T) {
 		request := map[string]any{"model": pro, "image": "https://cdn.example/photo.png", "layer_decomposition": true, "size": "auto"}
 		immediate := parseResponse(t, pro, request, layerBody)
 		assert.Equal(t, "SUCCESS", immediate.Status)
-		assert.Equal(t, map[string]any{"images_up_to_1_5k": float64(1), "images_above_1_5k": float64(2), "input_images": float64(1)}, immediate.UsageFacts)
+		assert.Equal(t, map[string]any{"image_count": float64(3), "images_up_to_1_5k": float64(1), "images_above_1_5k": float64(2), "input_images": float64(1)}, immediate.UsageFacts)
 	})
 
 	t.Run("reference images settle from usage.input_images", func(t *testing.T) {
 		request := map[string]any{"model": pro, "prompt": "a cat", "image": []any{"https://cdn.example/a.png", "https://cdn.example/b.png", "https://cdn.example/c.png"}, "size": "1K"}
 		immediate := parseResponse(t, pro, request, referenceBody)
-		assert.Equal(t, map[string]any{"images_up_to_1_5k": float64(1), "images_above_1_5k": float64(0), "input_images": float64(2)}, immediate.UsageFacts)
+		assert.Equal(t, map[string]any{"image_count": float64(1), "images_up_to_1_5k": float64(1), "images_above_1_5k": float64(0), "input_images": float64(2)}, immediate.UsageFacts)
 	})
 
 	t.Run("invalid completion counts retain the reservation", func(t *testing.T) {
@@ -583,7 +584,7 @@ func TestDoubaoImageResults(t *testing.T) {
 			payload := map[string]any{"data": []any{map[string]any{"url": first, "size": "1424x800"}}, "usage": map[string]any{"generated_images": 1, "input_images": count}}
 			value, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", queryContext, map[string]any{"status": "SUCCESS"}, payload)
 			require.NoError(t, err)
-			assert.Equal(t, map[string]any{"images_up_to_1_5k": float64(1), "images_above_1_5k": float64(0)}, alibabaObject(t, value), "input_images %v", count)
+			assert.Equal(t, map[string]any{"image_count": float64(1), "images_up_to_1_5k": float64(1), "images_above_1_5k": float64(0)}, alibabaObject(t, value), "input_images %v", count)
 		}
 	})
 
@@ -591,14 +592,14 @@ func TestDoubaoImageResults(t *testing.T) {
 		payload := map[string]any{"data": []any{map[string]any{"url": first, "size": "2048x2048"}, map[string]any{"url": second}}, "usage": map[string]any{"generated_images": 2, "input_images": 1}}
 		value, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", queryContext, map[string]any{"status": "SUCCESS"}, payload)
 		require.NoError(t, err)
-		assert.Equal(t, map[string]any{"input_images": float64(1)}, alibabaObject(t, value))
+		assert.Equal(t, map[string]any{"image_count": float64(2), "input_images": float64(1)}, alibabaObject(t, value))
 	})
 
 	t.Run("missing usage settles from image payload sizes", func(t *testing.T) {
 		payload := map[string]any{"data": []any{map[string]any{"url": first, "size": "4096x4096"}, map[string]any{"url": second, "size": "1024x1024"}, map[string]any{"error": map[string]any{"code": "x"}}}}
 		value, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", queryContext, map[string]any{"status": "SUCCESS"}, payload)
 		require.NoError(t, err)
-		assert.Equal(t, map[string]any{"images_up_to_1_5k": float64(1), "images_above_1_5k": float64(1)}, alibabaObject(t, value))
+		assert.Equal(t, map[string]any{"image_count": float64(2), "images_up_to_1_5k": float64(1), "images_above_1_5k": float64(1)}, alibabaObject(t, value))
 	})
 
 	t.Run("failed and empty results do not complete a task", func(t *testing.T) {
@@ -699,7 +700,7 @@ func TestDoubaoImageResponsesDecode(t *testing.T) {
 	assert.Equal(t, doubaoBaseURL+"/api/v3/images/generations", url)
 	assert.Equal(t, []any{"https://cdn.example/ref.png"}, body["image"])
 	assert.NotContains(t, body, "background")
-	assert.Equal(t, map[string]any{"images_up_to_1_5k": float64(0), "images_above_1_5k": float64(3), "input_images": float64(1), "layer_decomposition": false}, facts)
+	assert.Equal(t, map[string]any{"image_count": float64(3), "images_up_to_1_5k": float64(0), "images_above_1_5k": float64(3), "input_images": float64(1), "layer_decomposition": false}, facts)
 
 	t.Run("function-only tools and background never reach a model without tool support", func(t *testing.T) {
 		resolved, err := decode(t, map[string]any{"model": "doubao-seedream-4-0-250828", "input": "a cat", "background": true, "tools": []any{map[string]any{"type": "function", "name": "lookup"}}})
@@ -754,7 +755,7 @@ func TestDoubaoImageEndpointMappingKeepsDeclaredModel(t *testing.T) {
 			assert.Equal(t, endpoint, body["model"])
 			facts, err := adaptor.ExtractUsageFactsValidated(c, info)
 			require.NoError(t, err)
-			assert.Equal(t, map[string]any{"images_up_to_1_5k": float64(0), "images_above_1_5k": float64(1), "input_images": float64(0), "layer_decomposition": false}, alibabaObject(t, facts))
+			assert.Equal(t, map[string]any{"image_count": float64(1), "images_up_to_1_5k": float64(0), "images_above_1_5k": float64(1), "input_images": float64(0), "layer_decomposition": false}, alibabaObject(t, facts))
 		})
 	}
 }

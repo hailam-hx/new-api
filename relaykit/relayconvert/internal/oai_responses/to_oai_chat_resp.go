@@ -199,6 +199,10 @@ func usageFromResponsesUsage(src *dto.Usage, createBillingSnapshot bool) *dto.Us
 	}
 	usage.UsageSemantic = src.UsageSemantic
 	usage.UsageSource = src.UsageSource
+	if src.NumServerSideToolsUsed != nil {
+		count := *src.NumServerSideToolsUsed
+		usage.NumServerSideToolsUsed = &count
+	}
 	usage.BillingUsage = dto.CloneBillingUsage(src.BillingUsage)
 	if usage.BillingUsage == nil && createBillingSnapshot {
 		usage.BillingUsage = dto.NewOpenAIResponsesBillingUsage(src)

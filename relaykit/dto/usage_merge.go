@@ -26,6 +26,10 @@ func MergeUsageNonZero(current *Usage, incoming *Usage) *Usage {
 	if incoming.TotalTokens > 0 {
 		current.TotalTokens = incoming.TotalTokens
 	}
+	if incoming.NumServerSideToolsUsed != nil {
+		count := *incoming.NumServerSideToolsUsed
+		current.NumServerSideToolsUsed = &count
+	}
 	if incoming.PromptCacheHitTokens > 0 {
 		current.PromptCacheHitTokens = incoming.PromptCacheHitTokens
 	}

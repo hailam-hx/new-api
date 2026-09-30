@@ -31,6 +31,48 @@ const probeExpr = `param("service_tier") == "fast" ? tier("fast", p * 4 + c * 20
 
 const testQuotaPerUnit = 500_000.0
 
+func TestAuthoritativeServerToolsAndLongContextBilling(t *testing.T) {
+	const grok = `len >= 200000 ? tier("long", p * 2 + cr * 0.2 + c * 6 + st * 1000000 * 0.03) : tier("base", p + cr * 0.1 + c * 3 + st * 1000000 * 0.03)`
+	const gpt = `len >= 272000 ? tier("long", p * 2 + cr * 0.2 + c * 4.5) : tier("base", p + cr * 0.1 + c * 3)`
+	for _, tc := range []struct {
+		name       string
+		expression string
+		prompt     int
+		cache      int
+		tools      *int
+		wantUSD    float64
+	}{
+		{"grok before threshold", grok, 199999, 0, new(int), 0.200002},
+		{"grok at threshold", grok, 200000, 0, new(int), 0.400006},
+		{"grok after threshold with cache and tools", grok, 200001, 50000, new(int), 0.310008},
+		{"gpt before threshold", gpt, 271999, 0, nil, 0.272002},
+		{"gpt at threshold", gpt, 272000, 0, nil, 0.5440045},
+		{"gpt after threshold with cache", gpt, 272001, 50000, nil, 0.4540065},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			usage := &dto.Usage{PromptTokens: tc.prompt, CompletionTokens: 1, NumServerSideToolsUsed: tc.tools,
+				PromptTokensDetails: dto.InputTokenDetails{CachedTokens: tc.cache}}
+			params := BuildTieredTokenParams(usage, false, billingexpr.UsedVars(tc.expression))
+			if tc.name == "grok after threshold with cache and tools" {
+				count := 8 // Exceeds any declared tool count; final usage is authoritative.
+				usage.NumServerSideToolsUsed = &count
+				params.ServerToolCalls = usage.NumServerSideToolsUsed
+				tc.wantUSD += 8 * 0.03
+			}
+			cost, _, err := billingexpr.RunExpr(tc.expression, params)
+			require.NoError(t, err)
+			assert.InDelta(t, tc.wantUSD, cost/1_000_000, 1e-9)
+		})
+	}
+	usage := &dto.Usage{PromptTokens: 10, CompletionTokens: 1}
+	_, _, err := billingexpr.RunExpr(grok, BuildTieredTokenParams(usage, false, billingexpr.UsedVars(grok)))
+	require.ErrorContains(t, err, "absent")
+	invalid := -1
+	usage.NumServerSideToolsUsed = &invalid
+	_, _, err = billingexpr.RunExpr(grok, BuildTieredTokenParams(usage, false, billingexpr.UsedVars(grok)))
+	require.ErrorContains(t, err, "non-negative")
+}
+
 func makeSnapshot(expr string, groupRatio float64, estPrompt, estCompletion int) *billingexpr.BillingSnapshot {
 	return &billingexpr.BillingSnapshot{
 		BillingMode:               "tiered_expr",

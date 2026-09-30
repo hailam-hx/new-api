@@ -365,10 +365,14 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, billing
 		}
 	}
 
+	// No server-side invocation has happened during reservation. The final
+	// count must come from upstream usage at settlement.
+	zeroServerToolCalls := 0
 	rawCost, trace, err := billingexpr.RunExprByHashWithRequest(exprStr, exprHash, billingexpr.TokenParams{
-		P:   float64(promptTokens),
-		C:   0,
-		Len: float64(promptTokens),
+		P:               float64(promptTokens),
+		C:               0,
+		Len:             float64(promptTokens),
+		ServerToolCalls: &zeroServerToolCalls,
 	}, requestInput)
 	if err != nil {
 		return hosttypes.PriceData{}, fmt.Errorf("model %s tiered expr run failed: %w", billingModelName, err)

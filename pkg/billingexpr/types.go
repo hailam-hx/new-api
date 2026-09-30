@@ -31,6 +31,9 @@ type TokenParams struct {
 	ImgO  float64 // image output tokens
 	AI    float64 // audio input tokens
 	AO    float64 // audio output tokens
+	// ServerToolCalls is the upstream's final invocation count. Nil means the
+	// upstream did not report it; a reported zero remains a valid fact.
+	ServerToolCalls *int
 }
 
 // RequestRuleTrace describes one request-dependent multiplier detected at compile time.

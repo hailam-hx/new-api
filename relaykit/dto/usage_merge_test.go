@@ -3,6 +3,7 @@ package dto
 import (
 	"testing"
 
+	kitutil "github.com/QuantumNous/new-api/relaykit/relayconvert/kitutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -172,8 +173,8 @@ func TestMergeClaudeUsageNonZeroPreservesBillingUsage(t *testing.T) {
 	t.Parallel()
 
 	currentSidecar := NewGeminiChatBillingUsage(&GeminiUsageMetadata{
-		PromptTokenCount:    3868,
-		TotalTokenCount:     3868,
+		PromptTokenCount:        3868,
+		TotalTokenCount:         3868,
 		CachedContentTokenCount: 20,
 	})
 	incomingSidecar := NewGeminiChatBillingUsage(&GeminiUsageMetadata{
@@ -231,4 +232,32 @@ func TestMergeUsageNonZeroKeepsPositiveValuesAndTakesMaxTotal(t *testing.T) {
 	assert.Equal(t, 10, merged.PromptTokens)
 	assert.Equal(t, 5, merged.CompletionTokens)
 	assert.Equal(t, 20, merged.TotalTokens)
+}
+
+func TestMergeUsageNonZeroPreservesServerToolPresence(t *testing.T) {
+	var first, zero Usage
+	require.NoError(t, kitutil.Unmarshal([]byte(`{"prompt_tokens":10,"num_server_side_tools_used":3}`), &first))
+	require.NoError(t, kitutil.Unmarshal([]byte(`{"num_server_side_tools_used":0}`), &zero))
+
+	merged := MergeUsageNonZero(&first, &Usage{})
+	require.NotNil(t, merged.NumServerSideToolsUsed)
+	assert.Equal(t, 3, *merged.NumServerSideToolsUsed)
+	merged = MergeUsageNonZero(merged, &zero)
+	require.NotNil(t, merged.NumServerSideToolsUsed)
+	assert.Zero(t, *merged.NumServerSideToolsUsed)
+	*zero.NumServerSideToolsUsed = 9
+	assert.Zero(t, *merged.NumServerSideToolsUsed)
+
+	encoded, err := kitutil.Marshal(merged)
+	require.NoError(t, err)
+	assert.Contains(t, string(encoded), `"num_server_side_tools_used":0`)
+
+	billing := NewOpenAIChatBillingUsage(merged)
+	require.NotNil(t, billing)
+	canonical, ok := billing.CanonicalUsage()
+	require.True(t, ok)
+	require.NotNil(t, canonical.NumServerSideToolsUsed)
+	assert.Zero(t, *canonical.NumServerSideToolsUsed)
+	*merged.NumServerSideToolsUsed = 5
+	assert.Zero(t, *canonical.NumServerSideToolsUsed)
 }

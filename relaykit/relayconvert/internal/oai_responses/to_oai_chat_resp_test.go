@@ -52,6 +52,16 @@ func TestNormalizeResponsesUsagePreservesImageCacheDetails(t *testing.T) {
 	}
 }
 
+func TestNormalizeResponsesUsagePreservesServerToolPresence(t *testing.T) {
+	count := 0
+	usage := NormalizeResponsesUsage(&dto.Usage{InputTokens: 10, OutputTokens: 2, NumServerSideToolsUsed: &count})
+	require.NotNil(t, usage.NumServerSideToolsUsed)
+	assert.Zero(t, *usage.NumServerSideToolsUsed)
+	count = 4
+	assert.Zero(t, *usage.NumServerSideToolsUsed)
+	assert.Nil(t, NormalizeResponsesUsage(&dto.Usage{InputTokens: 10}).NumServerSideToolsUsed)
+}
+
 func TestResponsesResponseToChatCompletionsPreservesTextAndToolCalls(t *testing.T) {
 	resp := &dto.OpenAIResponsesResponse{
 		ID:        "resp_1",

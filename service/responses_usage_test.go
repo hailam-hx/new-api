@@ -199,6 +199,30 @@ func TestApplyResponsesUsageCopiesTokenDetails(t *testing.T) {
 	assert.Equal(t, "upstream", dst.UsageSource)
 }
 
+func TestResponsesUsageServerToolCountFromTerminalOnly(t *testing.T) {
+	info := &relaycommon.RelayInfo{StreamStatus: relaycommon.NewStreamStatus()}
+	accumulator := NewResponsesUsageAccumulator(info)
+	var partial, terminal dto.ResponsesStreamResponse
+	require.NoError(t, common.UnmarshalJsonStr(`{"type":"response.in_progress","response":{"usage":{"input_tokens":10,"num_server_side_tools_used":7}}}`, &partial))
+	require.NoError(t, common.UnmarshalJsonStr(`{"type":"response.completed","response":{"usage":{"input_tokens":10,"output_tokens":2,"num_server_side_tools_used":0}}}`, &terminal))
+	accumulator.Observe(&partial)
+	assert.Nil(t, accumulator.usage.NumServerSideToolsUsed)
+	accumulator.Observe(&terminal)
+	usage := accumulator.Finish()
+	require.NotNil(t, usage.NumServerSideToolsUsed)
+	assert.Zero(t, *usage.NumServerSideToolsUsed)
+
+	missing := &dto.Usage{}
+	ApplyResponsesUsage(missing, &dto.Usage{InputTokens: 10, OutputTokens: 2})
+	assert.Nil(t, missing.NumServerSideToolsUsed)
+	actual := 8
+	ApplyResponsesUsage(missing, &dto.Usage{NumServerSideToolsUsed: &actual})
+	require.NotNil(t, missing.NumServerSideToolsUsed)
+	assert.Equal(t, 8, *missing.NumServerSideToolsUsed)
+	actual = 99
+	assert.Equal(t, 8, *missing.NumServerSideToolsUsed)
+}
+
 func TestApplyResponsesUsageFallsBackToCompletionTokenDetails(t *testing.T) {
 	dst := &dto.Usage{}
 	src := &dto.Usage{

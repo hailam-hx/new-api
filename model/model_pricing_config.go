@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
@@ -533,10 +534,14 @@ func UpdateModelPricingOptions(updates map[string]string) error {
 }
 
 func mutateModelPricingOptions(mutate func(*gorm.DB, map[string]map[string]any) error) error {
+	return mutateModelPricingOptionsWithContext(context.Background(), mutate)
+}
+
+func mutateModelPricingOptionsWithContext(ctx context.Context, mutate func(*gorm.DB, map[string]map[string]any) error) error {
 	modelPricingMutationMu.Lock()
 	defer modelPricingMutationMu.Unlock()
 	var committed map[string]map[string]any
-	err := DB.Transaction(func(tx *gorm.DB) error {
+	err := DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		values, existing, duplicated, err := readModelPricingMaps(lockForUpdate(tx))
 		if err != nil {
 			return err

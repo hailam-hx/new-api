@@ -368,6 +368,9 @@ func migrateDB() error {
 		&SystemInstance{},
 		&SystemTask{},
 		&SystemTaskLock{},
+		&PricingSyncRun{},
+		&PricingSyncItem{},
+		&PricingSyncManaged{},
 		&CasbinRule{},
 		&AuthzRole{},
 	)

@@ -228,6 +228,13 @@ func SyncOptions(frequency int) {
 }
 
 func validateOptionValue(key string, value string) error {
+	if key == DFLOPConfigOption {
+		var config DFLOPConfig
+		if err := common.UnmarshalJsonStr(value, &config); err != nil {
+			return err
+		}
+		return config.Validate()
+	}
 	if err := operation_setting.ValidateQuotaOption(key, value); err != nil {
 		return err
 	}
@@ -244,6 +251,13 @@ func validateOptionValue(key string, value string) error {
 }
 
 func UpdateOption(key string, value string) error {
+	if key == DFLOPConfigOption {
+		var config DFLOPConfig
+		if err := common.UnmarshalJsonStr(value, &config); err != nil {
+			return err
+		}
+		return SaveDFLOPConfig(config)
+	}
 	if IsRequestPolicyOption(key) {
 		return UpdateRequestPolicyOptions(map[string]string{key: value})
 	}

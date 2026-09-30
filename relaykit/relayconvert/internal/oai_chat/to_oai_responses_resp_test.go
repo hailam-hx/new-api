@@ -10,6 +10,7 @@ import (
 )
 
 func TestChatCompletionsResponseToResponsesPreservesTextToolCallsAndUsage(t *testing.T) {
+	toolCalls := 0
 	chat := &dto.OpenAITextResponse{
 		Id:      "chatcmpl_1",
 		Model:   "gpt-test",
@@ -20,7 +21,7 @@ func TestChatCompletionsResponseToResponsesPreservesTextToolCallsAndUsage(t *tes
 				FinishReason: "tool_calls",
 			},
 		},
-		Usage: dto.Usage{PromptTokens: 3, CompletionTokens: 5, TotalTokens: 8},
+		Usage: dto.Usage{PromptTokens: 3, CompletionTokens: 5, TotalTokens: 8, NumServerSideToolsUsed: &toolCalls},
 	}
 
 	resp, usage, err := ChatCompletionsResponseToResponsesResponse(chat, "resp_1")
@@ -32,6 +33,10 @@ func TestChatCompletionsResponseToResponsesPreservesTextToolCallsAndUsage(t *tes
 	assert.Equal(t, `"completed"`, string(resp.Status))
 	assert.Equal(t, 3, resp.Usage.InputTokens)
 	assert.Equal(t, 5, resp.Usage.OutputTokens)
+	require.NotNil(t, resp.Usage.NumServerSideToolsUsed)
+	assert.Zero(t, *resp.Usage.NumServerSideToolsUsed)
+	toolCalls = 3
+	assert.Zero(t, *resp.Usage.NumServerSideToolsUsed)
 	require.Len(t, resp.Output, 2)
 	assert.Equal(t, responsesOutputTypeMessage, resp.Output[0].Type)
 	assert.Equal(t, "I will call.", resp.Output[0].Content[0].Text)

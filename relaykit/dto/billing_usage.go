@@ -387,6 +387,10 @@ func cloneOpenAIUsage(usage *Usage) *Usage {
 	}
 	clone := *usage
 	clone.BillingUsage = nil
+	if usage.NumServerSideToolsUsed != nil {
+		count := *usage.NumServerSideToolsUsed
+		clone.NumServerSideToolsUsed = &count
+	}
 	clone.PromptTokensDetails = usage.PromptTokensDetails.Clone()
 	if usage.InputTokensDetails != nil {
 		inputTokensDetails := usage.InputTokensDetails.Clone()

@@ -55,6 +55,19 @@ func runProgram(prog *vm.Program, requestRules []RequestRuleTrace, usedVars map[
 		BillingUnit:  BillingUnitToken,
 		RequestRules: append([]RequestRuleTrace(nil), requestRules...),
 	}
+	serverToolCalls := 0
+	if usedVars["st"] {
+		if params.ServerToolCalls == nil {
+			return 0, trace, fmt.Errorf("server tool calls are absent from usage")
+		}
+		serverToolCalls = *params.ServerToolCalls
+		if serverToolCalls < 0 {
+			return 0, trace, fmt.Errorf("server tool calls must be non-negative")
+		}
+		if int64(serverToolCalls) > 1<<53 {
+			return 0, trace, fmt.Errorf("server tool calls exceed the exact expression range")
+		}
+	}
 	headers := normalizeHeaders(request.Headers)
 	imageCount := 1
 	if usedVars["image_count"] {
@@ -80,6 +93,7 @@ func runProgram(prog *vm.Program, requestRules []RequestRuleTrace, usedVars map[
 		"img_o":       params.ImgO,
 		"ai":          params.AI,
 		"ao":          params.AO,
+		"st":          float64(serverToolCalls),
 		"tier": func(name string, value float64) float64 {
 			trace.MatchedTier = name
 			trace.Cost = value

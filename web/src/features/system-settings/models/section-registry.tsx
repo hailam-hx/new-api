@@ -20,6 +20,7 @@ import { IoNetDeploymentSettingsSection } from '../integrations/ionet-deployment
 import type { ModelSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { ClaudeSettingsCard } from './claude-settings-card'
+import { DflopPricingSync } from './dflop-pricing-sync'
 import { GeminiSettingsCard } from './gemini-settings-card'
 import { GlobalSettingsCard } from './global-settings-card'
 import { GrokSettingsCard } from './grok-settings-card'
@@ -35,6 +36,11 @@ function formatJsonForEditor(value: string, fallback: string) {
 }
 
 const MODELS_SECTIONS = [
+  {
+    id: 'dflop-pricing-sync',
+    titleKey: 'DFLOP Pricing Sync',
+    build: () => <DflopPricingSync />,
+  },
   {
     id: 'global',
     titleKey: 'Global Model Configuration',
