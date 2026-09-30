@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,6 +40,11 @@ type CanaryCase struct {
 	CostPerUnlockPoints   string            `json:"cost_per_potential_unlock_points,omitempty"`
 	Status                string            `json:"status"`
 	Risk                  string            `json:"risk"`
+	CostReadiness         string            `json:"cost_readiness"`
+	RequestReadiness      string            `json:"request_readiness"`
+	FixtureReadiness      string            `json:"fixture_readiness"`
+	ExecutorReadiness     string            `json:"executor_readiness"`
+	RuntimeEvidence       string            `json:"runtime_evidence"`
 }
 
 type CanaryPlan struct {
@@ -89,7 +96,7 @@ func BuildCanaryPlan(channelID int, catalog, currency []byte, etag, cnyToUSD str
 		}
 	}
 	add := func(id string, priority int, item Item, purpose string, facts, fixtures []string, unlocks int, fixedPrice string, risk string) {
-		c := CanaryCase{ID: id, Priority: priority, Model: item.ModelID, Endpoint: item.EndpointType, Purpose: purpose, BlockedReason: item.ReasonCode, BillingFeatures: slices.Clone(item.BillingFeatures), PriceComponentsPoints: map[string]string{}, RequiredFacts: facts, ExternalFixtures: fixtures, PotentialUnlocks: unlocks, Status: "CANARY_COST_UNBOUNDED", Risk: risk}
+		c := CanaryCase{ID: id, Priority: priority, Model: item.ModelID, Endpoint: item.EndpointType, Purpose: purpose, BlockedReason: item.ReasonCode, BillingFeatures: slices.Clone(item.BillingFeatures), PriceComponentsPoints: map[string]string{}, RequiredFacts: facts, ExternalFixtures: fixtures, PotentialUnlocks: unlocks, Status: "BLOCKED", Risk: risk, CostReadiness: "UNKNOWN", RequestReadiness: "UNKNOWN", FixtureReadiness: "AVAILABLE", ExecutorReadiness: "DISABLED", RuntimeEvidence: "NONE"}
 		for name, price := range item.Prices {
 			c.PriceComponentsPoints[name] = price.Credits
 		}
@@ -102,6 +109,7 @@ func BuildCanaryPlan(channelID int, catalog, currency []byte, etag, cnyToUSD str
 				c.EstimatedMaxPoints = price.Credits
 				amount, _ := decimal.NewFromString(price.Credits)
 				c.EstimatedMaxUSD = amount.DivRound(pointsPerCNY, 24).Mul(rate).Round(12).String()
+				c.CostReadiness = "BOUNDED"
 			}
 			if unlocks > 0 && c.EstimatedMaxPoints != "" {
 				amount, _ := decimal.NewFromString(price.Credits)
@@ -109,6 +117,7 @@ func BuildCanaryPlan(channelID int, catalog, currency []byte, etag, cnyToUSD str
 			}
 		}
 		if len(fixtures) > 0 {
+			c.FixtureReadiness = "MISSING"
 			c.Status = "BLOCKED_MISSING_FIXTURE"
 		}
 		if c.EstimatedMaxPoints != "" && len(fixtures) == 0 {
@@ -117,8 +126,18 @@ func BuildCanaryPlan(channelID int, catalog, currency []byte, etag, cnyToUSD str
 		plan.Cases = append(plan.Cases, c)
 	}
 	if item, ok := byID["voice-tts-pro"]; ok {
-		add("tts-async", 1, item, "submit, poll, final character and duration facts", []string{"task_id", "terminal_status", "characters", "duration_sec", "poll_cost_zero"}, nil, 1, "price_per_tts_char", "Async route and character upper bound unverified; Hello. is only a proposed input")
-		plan.Cases[len(plan.Cases)-1].Endpoint = "async speech route unverified"
+		add("tts-async", 1, item, "submit, poll, final character and duration facts", []string{"id", "model", "terminal_status", "characters", "audio_url"}, nil, 1, "price_per_tts_char", "ASCII input Hello. bounds billable characters to six")
+		c := &plan.Cases[len(plan.Cases)-1]
+		c.Endpoint = "/v1/audio/speech"
+		c.FixtureInputs = []string{"Hello."}
+		if item.Callable && slices.Equal(item.BillingFeatures, []string{"tts_char"}) && onlyBillableCanaryPrice(item.Prices, "price_per_tts_char") && c.UnitPricePoints != "" {
+			price, _ := decimal.NewFromString(c.UnitPricePoints)
+			bound := price.Mul(decimal.NewFromInt(6))
+			c.EstimatedPoints, c.EstimatedMaxPoints = bound.String(), bound.String()
+			c.EstimatedMaxUSD = bound.DivRound(pointsPerCNY, 24).Mul(rate).Round(12).String()
+			c.CostReadiness, c.RequestReadiness, c.ExecutorReadiness = "BOUNDED", "VALIDATED", "READY"
+			c.Status = "READY_FOR_PAID_AUTHORIZATION"
+		}
 	}
 	var grok []Item
 	for _, item := range items {
@@ -164,14 +183,45 @@ func BuildCanaryPlan(channelID int, catalog, currency []byte, etag, cnyToUSD str
 			return strings.Compare(a.ModelID, b.ModelID)
 		})
 		add("suno-generation", 3, suno[0], "reconcile generation versus track billing", []string{"task_id", "terminal_status", "tracks", "generation_billing_unit"}, nil, len(suno), "price_per_music_generation", "SEMANTICS_CONFLICT_REQUIRES_RUNTIME_EVIDENCE")
-		plan.Cases[len(plan.Cases)-1].Status = "SEMANTICS_CONFLICT_REQUIRES_RUNTIME_EVIDENCE"
+		c := &plan.Cases[len(plan.Cases)-1]
+		c.Endpoint = "/v1/music/generations"
+		c.FixtureInputs = []string{"Short calm instrumental melody"}
+		if suno[0].Callable && slices.Equal(suno[0].BillingFeatures, []string{"music"}) && onlyBillableCanaryPrice(suno[0].Prices, "price_per_music_generation") && c.UnitPricePoints != "" {
+			c.EstimatedPoints, c.EstimatedMaxPoints = c.UnitPricePoints, c.UnitPricePoints
+			price, _ := decimal.NewFromString(c.UnitPricePoints)
+			c.EstimatedMaxUSD = price.DivRound(pointsPerCNY, 24).Mul(rate).Round(12).String()
+			c.CostReadiness, c.RequestReadiness, c.ExecutorReadiness = "BOUNDED", "VALIDATED", "READY"
+			c.Status = "READY_FOR_PAID_AUTHORIZATION"
+		} else {
+			c.BlockedReason = "SEMANTICS_CONFLICT_REQUIRES_RUNTIME_EVIDENCE"
+		}
 	}
 	if item, ok := byID["voice-clone-pro"]; ok {
 		add("voice-clone", 4, item, "clone submit, voice id, ready or failed", []string{"voice_id", "terminal_status"}, []string{"authorized_reference_audio_url"}, 1, "price_per_voice_clone", "Expensive; authorized synthetic or user-owned voice required")
+		plan.Cases[len(plan.Cases)-1].FixtureInputs = []string{"synthetic, user-owned, or explicitly permitted voice; public audio URL; 5-180 seconds clear speech; no download during PLAN"}
 	}
 	for _, id := range []string{"tvod-midjourney-v7", "tvod-midjourney-v8.1"} {
 		if item, ok := byID[id]; ok {
 			add("output-count-"+id, 5, item, "count usable returned image payloads", []string{"terminal_status", "usable_image_outputs"}, nil, 1, "price_per_image", "Exact task route and output ceiling unverified")
+			c := &plan.Cases[len(plan.Cases)-1]
+			var source struct {
+				ImagesPerRequest int `json:"images_per_request"`
+				Caps             struct {
+					Image struct {
+						MaxOutputs   int `json:"max_outputs"`
+						FixedOutputs int `json:"fixed_outputs"`
+					} `json:"image"`
+				} `json:"caps"`
+			}
+			if common.Unmarshal(item.Raw, &source) == nil && source.Caps.Image.FixedOutputs > 0 && source.Caps.Image.FixedOutputs == source.Caps.Image.MaxOutputs && source.ImagesPerRequest == source.Caps.Image.FixedOutputs && c.UnitPricePoints != "" {
+				price, _ := decimal.NewFromString(c.UnitPricePoints)
+				bound := price.Mul(decimal.NewFromInt(int64(source.ImagesPerRequest)))
+				c.EstimatedMaxPoints = bound.String()
+				c.EstimatedMaxUSD = bound.DivRound(pointsPerCNY, 24).Mul(rate).Round(12).String()
+				c.CostReadiness = "BOUNDED"
+				c.BlockedReason = "FIXED_FOUR_OUTPUTS_REQUEST_BINDING_UNVERIFIED"
+				c.FixtureInputs = []string{"catalog fixes four outputs; n=1 does not limit count"}
+			}
 		}
 	}
 	seedanceShapes := map[string]bool{}
@@ -189,7 +239,34 @@ func BuildCanaryPlan(channelID int, catalog, currency []byte, etag, cnyToUSD str
 			facts = append(facts, "duration_sec", "second_stage_component")
 		}
 		add("seedance-"+item.ModelID, 6, item, "verify all catalog billing components", facts, []string{"user_owned_image_or_video_url_if_required"}, 1, "", "Composite video-token ceiling and exact route unverified")
-		plan.Cases[len(plan.Cases)-1].FixtureInputs = []string{"text-only", "image-reference:user-owned-url", "video-reference:user-owned-url"}
+		var source struct {
+			Caps struct {
+				Video struct {
+					Modes       map[string]bool `json:"modes"`
+					Resolutions []string        `json:"resolutions"`
+					Duration    struct {
+						Min int `json:"min"`
+					} `json:"duration"`
+					Audio string `json:"audio"`
+				} `json:"video"`
+			} `json:"caps"`
+		}
+		if common.Unmarshal(item.Raw, &source) == nil && source.Caps.Video.Duration.Min > 0 && len(source.Caps.Video.Resolutions) > 0 {
+			resolution := source.Caps.Video.Resolutions[0]
+			minimum, _ := strconv.Atoi(strings.TrimSuffix(resolution, "p"))
+			for _, candidate := range source.Caps.Video.Resolutions {
+				pixels, err := strconv.Atoi(strings.TrimSuffix(candidate, "p"))
+				if err == nil && (minimum == 0 || pixels < minimum) {
+					resolution = candidate
+					minimum = pixels
+				}
+			}
+			audio := "provider_required"
+			if source.Caps.Video.Audio == "toggle" {
+				audio = "off"
+			}
+			plan.Cases[len(plan.Cases)-1].FixtureInputs = []string{fmt.Sprintf("duration=%ds resolution=%s audio=%s t2v=%t i2v=%t r2v=%t", source.Caps.Video.Duration.Min, resolution, audio, source.Caps.Video.Modes["t2v"], source.Caps.Video.Modes["i2v"], source.Caps.Video.Modes["r2v"])}
+		}
 	}
 	for _, item := range items {
 		if item.ReasonCode == "NO_EXACT_VIDEO_PLUGIN_BINDING" || item.ReasonCode == "NO_EXACT_FIXED_TASK_BINDING" || item.ReasonCode == "NO_EXACT_AVATAR_PLUGIN_BINDING" {
@@ -235,18 +312,50 @@ func BuildCanaryPlan(channelID int, catalog, currency []byte, etag, cnyToUSD str
 	return plan, nil
 }
 
+func onlyBillableCanaryPrice(prices map[string]Price, required string) bool {
+	if _, ok := prices[required]; !ok {
+		return false
+	}
+	for name, price := range prices {
+		if name == required {
+			continue
+		}
+		amount, err := decimal.NewFromString(price.Credits)
+		if err != nil || !amount.IsZero() {
+			return false
+		}
+	}
+	return true
+}
+
 type CanaryAuthorization struct {
-	Execute     bool
-	CaseID      string
-	MaxCostUSD  string
-	ConfirmPaid bool
+	Execute       bool
+	InvocationID  string
+	CaseID        string
+	ChannelID     int
+	CatalogHash   string
+	MaxCostPoints string
+	MaxCostUSD    string
+	Confirmation  string
+}
+
+func CanaryConfirmation(invocationID, caseID string, channelID int, catalogHash, maxPoints string) string {
+	return fmt.Sprintf("%s:%s:%d:%s:%s", invocationID, caseID, channelID, catalogHash, maxPoints)
 }
 
 // CheckCanaryAuthorization is deliberately a final, same-invocation gate. A
 // caller must re-fetch and re-plan immediately before any future paid transport.
 func CheckCanaryAuthorization(auth CanaryAuthorization, oldCase, freshCase CanaryCase) error {
-	if !auth.Execute || !auth.ConfirmPaid || auth.CaseID == "" || auth.MaxCostUSD == "" || auth.CaseID != oldCase.ID || auth.CaseID != freshCase.ID {
+	if !auth.Execute || auth.InvocationID == "" || strings.ContainsAny(auth.InvocationID, `/\.`) || auth.CaseID == "" || auth.ChannelID <= 0 || auth.CatalogHash == "" || auth.MaxCostPoints == "" || auth.MaxCostUSD == "" || auth.CaseID != oldCase.ID || auth.CaseID != freshCase.ID || auth.Confirmation != CanaryConfirmation(auth.InvocationID, auth.CaseID, auth.ChannelID, auth.CatalogHash, auth.MaxCostPoints) {
 		return errors.New("CANARY_AUTHORIZATION_REQUIRED")
+	}
+	pointLimit, err := decimal.NewFromString(auth.MaxCostPoints)
+	if err != nil || !pointLimit.IsPositive() || freshCase.EstimatedMaxPoints == "" || oldCase.EstimatedMaxPoints == "" {
+		return errors.New("CANARY_COST_UNBOUNDED")
+	}
+	pointCost, err := decimal.NewFromString(freshCase.EstimatedMaxPoints)
+	if err != nil {
+		return errors.New("CANARY_COST_UNBOUNDED")
 	}
 	limit, err := decimal.NewFromString(auth.MaxCostUSD)
 	if err != nil || !limit.IsPositive() || oldCase.EstimatedMaxUSD == "" || freshCase.EstimatedMaxUSD == "" {
@@ -260,13 +369,16 @@ func CheckCanaryAuthorization(auth CanaryAuthorization, oldCase, freshCase Canar
 	if err != nil {
 		return errors.New("CANARY_COST_UNBOUNDED")
 	}
-	if freshCase.Model != oldCase.Model || freshCase.Endpoint != oldCase.Endpoint || freshMax.GreaterThan(oldMax) || freshCase.EstimatedMaxPoints != oldCase.EstimatedMaxPoints {
-		return errors.New("CANARY_PRICE_CHANGED")
+	if freshCase.Model != oldCase.Model || freshCase.Endpoint != oldCase.Endpoint || freshMax.GreaterThan(oldMax) || freshCase.EstimatedMaxPoints != oldCase.EstimatedMaxPoints || !slices.Equal(freshCase.BillingFeatures, oldCase.BillingFeatures) || !maps.Equal(freshCase.PriceComponentsPoints, oldCase.PriceComponentsPoints) {
+		return errors.New("CANARY_CATALOG_CHANGED")
+	}
+	if pointCost.GreaterThan(pointLimit) {
+		return errors.New("BLOCKED_BY_BUDGET")
 	}
 	if freshMax.GreaterThan(limit) {
 		return errors.New("BLOCKED_BY_BUDGET")
 	}
-	if freshCase.Status != "READY_FOR_AUTHORIZATION" {
+	if freshCase.Status != "READY_FOR_PAID_AUTHORIZATION" || freshCase.CostReadiness != "BOUNDED" || freshCase.RequestReadiness != "VALIDATED" || freshCase.FixtureReadiness != "AVAILABLE" || freshCase.ExecutorReadiness != "READY" {
 		return errors.New("CANARY_DESIGN_UNVERIFIED")
 	}
 	return nil
@@ -275,6 +387,13 @@ func CheckCanaryAuthorization(auth CanaryAuthorization, oldCase, freshCase Canar
 // CanaryCapture is a non-secret envelope for manually supplied response evidence.
 type CanaryCapture struct {
 	EvidenceClass      string          `json:"evidence_class"`
+	Origin             string          `json:"origin,omitempty"`
+	InvocationID       string          `json:"invocation_id,omitempty"`
+	CaptureHash        string          `json:"capture_hash,omitempty"`
+	RedactionVersion   string          `json:"redaction_version,omitempty"`
+	SubmitTrace        string          `json:"submit_trace,omitempty"`
+	TerminalTrace      string          `json:"terminal_trace,omitempty"`
+	ErrorTrace         string          `json:"error_trace,omitempty"`
 	CaseID             string          `json:"case_id"`
 	StartedAt          time.Time       `json:"started_at"`
 	FinishedAt         time.Time       `json:"finished_at"`
@@ -342,6 +461,10 @@ func RedactCanaryJSON(raw []byte, credential string) ([]byte, error) {
 }
 
 func WriteCanaryCapture(dir, invocationID string, capture CanaryCapture, credential string) (string, error) {
+	return writeCanaryCapture(dir, invocationID, capture, credential, false)
+}
+
+func writeCanaryCapture(dir, invocationID string, capture CanaryCapture, credential string, live bool) (string, error) {
 	if invocationID == "" || strings.ContainsAny(invocationID, `/\\.`) {
 		return "", errors.New("invalid invocation ID")
 	}
@@ -361,6 +484,14 @@ func WriteCanaryCapture(dir, invocationID string, capture CanaryCapture, credent
 	}
 	capture.Response = response
 	capture.EvidenceClass = "UNKNOWN_ORIGIN"
+	capture.Origin = "UNKNOWN_ORIGIN"
+	if live {
+		capture.EvidenceClass = "CAPTURED_REAL_RESPONSE"
+		capture.Origin = "LIVE_DFLOP_CANARY"
+	}
+	capture.InvocationID = invocationID
+	capture.RedactionVersion = "1"
+	capture.CaptureHash = fmt.Sprintf("%x", sha256.Sum256(response))
 	encoded, err := common.Marshal(capture)
 	if err != nil {
 		return "", err

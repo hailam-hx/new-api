@@ -1,5 +1,5 @@
-// dflop-canary is a local, read-only evidence planner. Paid transport is not
-// installed in this phase; even fully specified execute flags cannot send it.
+// dflop-canary is a local evidence planner. Its paid transport is deliberately
+// disconnected from the CLI during Phase 8.
 package main
 
 import (
@@ -15,6 +15,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/pricing/dflop"
 	"github.com/glebarez/sqlite"
 	"gorm.io/driver/mysql"
@@ -34,8 +35,10 @@ func run(args []string) error {
 	output := flags.String("output", filepath.Join(os.TempDir(), "new-api-dflop-canary", "dflop-canary-plan.json"), "plan output path")
 	caseID := flags.String("case", "", "single canary case")
 	maxUSD := flags.String("max-cost-usd", "", "single invocation USD ceiling")
+	maxPoints := flags.String("max-cost-points", "", "single invocation provider points ceiling")
 	execute := flags.Bool("execute", false, "explicit paid execution gate")
-	confirm := flags.Bool("confirm-paid-canary", false, "explicit paid canary confirmation")
+	confirm := flags.String("confirm-paid-canary", "", "invocation-bound paid canary confirmation")
+	dryRun := flags.Bool("dry-run", false, "render a redacted request without submitting")
 	input := flags.String("input", "", "offline redacted response JSON")
 	planPath := flags.String("plan", "", "authenticated canary plan ledger for offline cost comparison")
 	invocation := flags.String("invocation-id", "", "single invocation ID")
@@ -70,7 +73,7 @@ func run(args []string) error {
 				Points json.Number `json:"points"`
 			}
 			var envelope dflop.CanaryCapture
-			if common.Unmarshal(body, &envelope) == nil && len(envelope.Response) > 0 {
+			if common.Unmarshal(body, &envelope) == nil && envelope.CaseID != "" && len(envelope.Response) > 0 {
 				body = envelope.Response
 			}
 			_ = common.Unmarshal(body, &reported)
@@ -78,6 +81,12 @@ func run(args []string) error {
 				if plannedCase.ID == *caseID {
 					if err := dflop.CompareCanaryProviderPoints(plannedCase, &result, reported.Points.String()); err != nil {
 						result.CostStatus = err.Error()
+					}
+					replay, err := service.ReplayCanaryFixture(plannedCase, body, plan.PointsPerCNY, plan.CNYToUSD)
+					if err == nil {
+						result.ProductionReplay = replay
+					} else {
+						result.Note += "; replay: " + err.Error()
 					}
 					break
 				}
@@ -100,7 +109,7 @@ func run(args []string) error {
 		}
 		capture := dflop.CanaryCapture{CaseID: *caseID, ChannelID: *channelID, Response: body}
 		var envelope dflop.CanaryCapture
-		if common.Unmarshal(body, &envelope) == nil && len(envelope.Response) > 0 {
+		if common.Unmarshal(body, &envelope) == nil && envelope.CaseID != "" && len(envelope.Response) > 0 {
 			if envelope.CaseID != *caseID || (envelope.ChannelID != 0 && envelope.ChannelID != *channelID) {
 				return errors.New("capture metadata does not match selected case/channel")
 			}
@@ -180,6 +189,36 @@ func run(args []string) error {
 		return err
 	}
 	fmt.Printf("PLAN %d/%d directly supported before exact task bindings; %d cases; catalog %s; ledger %s\n", plan.DirectSupported, plan.CallableModels, len(plan.Cases), plan.CatalogHash, *output)
+	for _, c := range plan.Cases {
+		if c.Priority <= 6 {
+			fmt.Printf("%s | %s | %s | %s points | %s USD | request=%s fixture=%s executor=%s | %s\n", c.ID, c.Model, c.PriceUnit, c.EstimatedMaxPoints, c.EstimatedMaxUSD, c.RequestReadiness, c.FixtureReadiness, c.ExecutorReadiness, c.Status)
+		}
+	}
+	if *dryRun {
+		if *invocation == "" {
+			generated, err := dflop.NewCanaryInvocationID()
+			if err != nil {
+				return err
+			}
+			*invocation = generated
+		}
+		for _, c := range plan.Cases {
+			if c.ID == *caseID {
+				request, err := dflop.BuildCanaryRequest(c)
+				if err != nil {
+					return err
+				}
+				encoded, err := common.Marshal(request)
+				if err != nil {
+					return err
+				}
+				fmt.Println(string(encoded))
+				fmt.Printf("invocation_id=%s\n", *invocation)
+				return nil
+			}
+		}
+		return errors.New("CANARY_REQUEST_UNVERIFIED")
+	}
 	if mode == "execute" {
 		var selected *dflop.CanaryCase
 		for i := range plan.Cases {
@@ -191,9 +230,7 @@ func run(args []string) error {
 		if selected == nil {
 			return errors.New("CANARY_AUTHORIZATION_REQUIRED: select a valid --case")
 		}
-		// No billable transport exists. A future phase must re-fetch and pass a
-		// separately reviewed executor through CheckCanaryAuthorization.
-		if err := dflop.CheckCanaryAuthorization(dflop.CanaryAuthorization{Execute: *execute, CaseID: *caseID, MaxCostUSD: *maxUSD, ConfirmPaid: *confirm}, *selected, *selected); err != nil {
+		if err := dflop.CheckCanaryAuthorization(dflop.CanaryAuthorization{Execute: *execute, InvocationID: *invocation, CaseID: *caseID, ChannelID: *channelID, CatalogHash: plan.CatalogHash, MaxCostPoints: *maxPoints, MaxCostUSD: *maxUSD, Confirmation: *confirm}, *selected, *selected); err != nil {
 			return err
 		}
 		return errors.New("CANARY_EXECUTION_NOT_ENABLED")

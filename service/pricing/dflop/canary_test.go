@@ -4,9 +4,13 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/QuantumNous/new-api/common"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,12 +40,14 @@ func TestCanaryPlanAndAuthorization(t *testing.T) {
 	assert.Equal(t, "BLOCKED_MISSING_FIXTURE", plan.Cases[0].Status)
 
 	ready := plan.Cases[0]
-	ready.Status = "READY_FOR_AUTHORIZATION"
-	full := CanaryAuthorization{Execute: true, ConfirmPaid: true, CaseID: ready.ID, MaxCostUSD: "5"}
+	ready.Status = "READY_FOR_PAID_AUTHORIZATION"
+	ready.RequestReadiness, ready.FixtureReadiness, ready.ExecutorReadiness = "VALIDATED", "AVAILABLE", "READY"
+	full := CanaryAuthorization{Execute: true, InvocationID: "invocation-1", CaseID: ready.ID, ChannelID: 1, CatalogHash: plan.CatalogHash, MaxCostPoints: "1800", MaxCostUSD: "5"}
+	full.Confirmation = CanaryConfirmation(full.InvocationID, full.CaseID, full.ChannelID, full.CatalogHash, full.MaxCostPoints)
 	for _, auth := range []CanaryAuthorization{
-		{ConfirmPaid: true, CaseID: ready.ID, MaxCostUSD: "5"},
+		{CaseID: ready.ID, MaxCostUSD: "5"},
 		{Execute: true, CaseID: ready.ID, MaxCostUSD: "5"},
-		{Execute: true, ConfirmPaid: true, CaseID: ready.ID},
+		{Execute: true, CaseID: ready.ID, ChannelID: 1, CatalogHash: plan.CatalogHash, MaxCostPoints: "1800", MaxCostUSD: "5"},
 	} {
 		assert.ErrorContains(t, CheckCanaryAuthorization(auth, ready, ready), "CANARY_AUTHORIZATION_REQUIRED")
 	}
@@ -50,7 +56,7 @@ func TestCanaryPlanAndAuthorization(t *testing.T) {
 	assert.ErrorContains(t, CheckCanaryAuthorization(under, ready, ready), "BLOCKED_BY_BUDGET")
 	changed := ready
 	changed.EstimatedMaxPoints, changed.EstimatedMaxUSD = "2400", "6"
-	assert.ErrorContains(t, CheckCanaryAuthorization(full, ready, changed), "CANARY_PRICE_CHANGED")
+	assert.ErrorContains(t, CheckCanaryAuthorization(full, ready, changed), "CANARY_CATALOG_CHANGED")
 	assert.NoError(t, CheckCanaryAuthorization(full, ready, ready))
 	assert.ErrorContains(t, CheckCanaryAuthorization(full, plan.Cases[0], plan.Cases[0]), "CANARY_DESIGN_UNVERIFIED")
 }
@@ -87,12 +93,15 @@ func TestCanaryOfflineFactsAreOnlyFixtureEvidence(t *testing.T) {
 	tests := []struct {
 		id, body, want string
 	}{
-		{"tts-async", `{"task_id":"t1","status":"succeeded","characters":6,"duration_sec":1.2}`, "RUNTIME_FACT_VERIFIED"},
+		{"tts-async", `{"id":"t1","model":"voice-tts-pro","status":"succeeded","characters":6,"audio_url":"https://example/a","duration_sec":1.2}`, "RUNTIME_FACT_VERIFIED"},
 		{"tts-async", `{"task_id":"t1","status":"succeeded"}`, "RUNTIME_FACT_MISSING"},
 		{"tts-async", `{"task_id":"t1","status":"failed"}`, "EXECUTED_FAILURE"},
 		{"grok-tool-chat", `{"usage":{"prompt_tokens":10,"completion_tokens":2,"num_server_side_tools_used":1}}`, "RUNTIME_FACT_VERIFIED"},
 		{"grok-tool-chat", `{"usage":{"prompt_tokens":10,"completion_tokens":2}}`, "RUNTIME_FACT_MISSING"},
-		{"suno-generation", `{"task_id":"t1","status":"succeeded","tracks":[{"id":"a"},{"id":"b"}]}`, "SEMANTICS_CONFLICT"},
+		{"grok-tool-chat", `{"tools":[{"type":"function"}],"usage":{"prompt_tokens":10,"completion_tokens":2}}`, "RUNTIME_FACT_MISSING"},
+		{"suno-generation", `{"id":"t1","model":"suno-v3.5","status":"succeeded","tracks":[{"clip_id":"a","audio_url":"https://example/a"},{"clip_id":"b","audio_url":"https://example/b"}]}`, "RUNTIME_FACT_VERIFIED"},
+		{"suno-generation", `{"id":"t1","model":"suno-v3.5","status":"succeeded","tracks":[]}`, "RUNTIME_FACT_MISSING"},
+		{"suno-generation", `{"id":"t1","model":"suno-v3.5","status":"expired"}`, "EXECUTED_FAILURE"},
 		{"voice-clone", `{"voice_id":"v1","status":"ready"}`, "RUNTIME_FACT_VERIFIED"},
 		{"voice-clone", `{"status":"failed"}`, "EXECUTED_FAILURE"},
 		{"output-count-midjourney", `{"status":"succeeded","data":[{"url":"https://example/a"},{"revised_prompt":"x"}]}`, "RUNTIME_FACT_VERIFIED"},
@@ -108,7 +117,7 @@ func TestCanaryOfflineFactsAreOnlyFixtureEvidence(t *testing.T) {
 			assert.NotEmpty(t, got.SchemaHash)
 		})
 	}
-	verified, err := VerifyCanaryFixture("tts-async", []byte(`{"task_id":"t1","status":"succeeded","characters":6}`))
+	verified, err := VerifyCanaryFixture("tts-async", []byte(`{"id":"t1","model":"voice-tts-pro","status":"succeeded","characters":6,"audio_url":"https://example/a"}`))
 	require.NoError(t, err)
 	canary := CanaryCase{ID: "tts-async", UnitPricePoints: "0.132066"}
 	require.NoError(t, CompareCanaryProviderPoints(canary, &verified, "0.792396"))
@@ -119,4 +128,189 @@ func TestCanaryOfflineFactsAreOnlyFixtureEvidence(t *testing.T) {
 	image, err := VerifyCanaryFixture("output-count-midjourney", []byte(`{"status":"succeeded","data":[{"url":"https://example/a"},{"b64_json":"encoded"}]}`))
 	require.NoError(t, err)
 	assert.Equal(t, 1, image.ObservedFacts["usable_image_outputs"])
+}
+
+func TestBoundedCanaryCasesAndReplay(t *testing.T) {
+	catalog := []byte(`{"schema_version":"1.0","currency":"points","aliases":{},"models":[{"id":"voice-tts-pro","pricing":{"category":"audio","endpoint_type":"tts","callable":true,"price_per_tts_char":"0.132066"},"billing":{"features":["tts_char"]},"caps":{"surfaces":["audio"]}},{"id":"suno-v3.5","pricing":{"category":"audio","endpoint_type":"music","callable":true,"price_per_music_generation":"20.4"},"billing":{"features":["music"]},"caps":{"surfaces":["audio"]}},{"id":"voice-clone-pro","pricing":{"category":"audio","endpoint_type":"voice_clone","callable":true,"price_per_voice_clone":"1800"},"billing":{"features":["voice_clone"]},"caps":{"surfaces":["audio"]}}]}`)
+	plan, err := BuildCanaryPlan(1, catalog, []byte(`{"unit":"points","points_per_cny":60}`), "etag", "0.15")
+	require.NoError(t, err)
+	require.Len(t, plan.Cases, 3)
+	assert.Equal(t, "0.792396", plan.Cases[0].EstimatedMaxPoints)
+	assert.Equal(t, "READY_FOR_PAID_AUTHORIZATION", plan.Cases[0].Status)
+	underBudget := CanaryAuthorization{Execute: true, InvocationID: "small-budget", CaseID: "tts-async", ChannelID: 1, CatalogHash: plan.CatalogHash, MaxCostPoints: "0.7", MaxCostUSD: "1"}
+	underBudget.Confirmation = CanaryConfirmation(underBudget.InvocationID, underBudget.CaseID, underBudget.ChannelID, underBudget.CatalogHash, underBudget.MaxCostPoints)
+	assert.ErrorContains(t, CheckCanaryAuthorization(underBudget, plan.Cases[0], plan.Cases[0]), "BLOCKED_BY_BUDGET")
+	assert.Equal(t, "20.4", plan.Cases[1].EstimatedMaxPoints)
+	assert.Equal(t, "READY_FOR_PAID_AUTHORIZATION", plan.Cases[1].Status)
+	assert.Equal(t, "BOUNDED", plan.Cases[2].CostReadiness)
+	assert.Equal(t, "BLOCKED_MISSING_FIXTURE", plan.Cases[2].Status)
+	request, err := BuildCanaryRequest(plan.Cases[0])
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"model":"voice-tts-pro","input":"Hello.","async":true}`, request.Body)
+	assert.NotEmpty(t, request.RequestHash)
+	suno, err := BuildCanaryRequest(plan.Cases[1])
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"model":"suno-v3.5","prompt":"Short calm instrumental melody"}`, suno.Body)
+	for _, count := range []int{1, 2} {
+		body := `{"id":"task","model":"suno-v3.5","status":"succeeded","tracks":[{"clip_id":"a","audio_url":"https://example/a"}]}`
+		if count == 2 {
+			body = `{"id":"task","model":"suno-v3.5","status":"succeeded","tracks":[{"clip_id":"a","audio_url":"https://example/a"},{"clip_id":"b","audio_url":"https://example/b"}]}`
+		}
+		verified, err := VerifyCanaryFixture("suno-generation", []byte(body))
+		require.NoError(t, err)
+		require.NoError(t, CompareCanaryProviderPoints(plan.Cases[1], &verified, ""))
+		assert.Equal(t, "20.4", verified.ExpectedPoints)
+	}
+	tooMany, err := VerifyCanaryFixture("tts-async", []byte(`{"id":"task","model":"voice-tts-pro","status":"succeeded","characters":7,"audio_url":"https://example/a"}`))
+	require.NoError(t, err)
+	assert.Equal(t, "CANARY_COST_MODEL_INVALID", tooMany.Status)
+	changed := strings.Replace(string(catalog), "0.132066", "0.2", 1)
+	changedPlan, err := BuildCanaryPlan(1, []byte(changed), []byte(`{"unit":"points","points_per_cny":60}`), "etag2", "0.15")
+	require.NoError(t, err)
+	assert.Equal(t, "1.2", changedPlan.Cases[0].EstimatedMaxPoints)
+	ambiguous := strings.Replace(string(catalog), `"features":["music"]`, `"features":["music","per_image"]`, 1)
+	ambiguousPlan, err := BuildCanaryPlan(1, []byte(ambiguous), []byte(`{"unit":"points","points_per_cny":60}`), "etag", "0.15")
+	require.NoError(t, err)
+	assert.NotEqual(t, "READY_FOR_PAID_AUTHORIZATION", ambiguousPlan.Cases[1].Status)
+}
+
+func TestCanaryTransportPreflightSubmitAndResume(t *testing.T) {
+	catalog := []byte(`{"schema_version":"1.0","currency":"points","aliases":{},"models":[{"id":"voice-tts-pro","pricing":{"category":"audio","endpoint_type":"tts","callable":true,"price_per_tts_char":"0.132066"},"billing":{"features":["tts_char"]},"caps":{"surfaces":["audio"]}}]}`)
+	currency := []byte(`{"unit":"points","points_per_cny":60}`)
+	plan, err := BuildCanaryPlan(1, catalog, currency, "etag", "0.15")
+	require.NoError(t, err)
+	var posts int
+	var receivedKey string
+	balanceUSD := "10"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "Bearer fake-secret", r.Header.Get("Authorization"))
+		switch r.URL.Path {
+		case "/v1/catalog":
+			w.Header().Set("ETag", "etag")
+			_, _ = w.Write(catalog)
+		case "/api/v1/config/currency":
+			_, _ = w.Write(currency)
+		case "/v1/key/balance":
+			_, _ = w.Write([]byte(`{"remaining_usd":"` + balanceUSD + `","used_usd":"0","total_usd":"10"}`))
+		case "/v1/audio/speech":
+			posts++
+			receivedKey = r.Header.Get("Idempotency-Key")
+			body, _ := io.ReadAll(r.Body)
+			assert.JSONEq(t, `{"model":"voice-tts-pro","input":"Hello.","async":true}`, string(body))
+			w.Header().Set("x-gateway-trace", "submit-trace")
+			_, _ = w.Write([]byte(`{"id":"task-1","status":"pending"}`))
+		case "/v1/audio/speech/task-1":
+			w.Header().Set("x-gateway-trace", "terminal-trace")
+			_, _ = w.Write([]byte(`{"id":"task-1","model":"voice-tts-pro","status":"succeeded","characters":6,"audio_url":"https://example/audio"}`))
+		default:
+			t.Errorf("unexpected request %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	auth := CanaryAuthorization{Execute: true, InvocationID: "invocation-2", CaseID: "tts-async", ChannelID: 1, CatalogHash: plan.CatalogHash, MaxCostPoints: "0.792396", MaxCostUSD: "0.01"}
+	auth.Confirmation = CanaryConfirmation(auth.InvocationID, auth.CaseID, auth.ChannelID, auth.CatalogHash, auth.MaxCostPoints)
+	transport := CanaryTransport{HTTP: server.Client(), BaseURL: server.URL, Key: "fake-secret"}
+	dir := t.TempDir()
+	require.NoError(t, os.Chmod(dir, 0700))
+	path, record, err := transport.PrepareCanaryExecution(context.Background(), dir, plan, plan.Cases[0], auth)
+	require.NoError(t, err)
+	assert.Equal(t, "PREPARED", record.State)
+	assert.Equal(t, 0, posts)
+	stored, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.NotContains(t, string(stored), "fake-secret")
+	record, err = transport.SubmitCanaryExecution(context.Background(), path)
+	require.NoError(t, err)
+	assert.Equal(t, 1, posts)
+	assert.Equal(t, record.IdempotencyKey, receivedKey)
+	assert.Equal(t, "submit-trace", record.SubmitTrace)
+	record, err = transport.SubmitCanaryExecution(context.Background(), path)
+	require.NoError(t, err)
+	assert.Equal(t, 1, posts)
+	body, trace, err := transport.PollCanaryExecution(context.Background(), path)
+	require.NoError(t, err)
+	assert.Equal(t, "terminal-trace", trace)
+	captured, err := os.ReadFile(dir + "/captures/" + record.InvocationID + ".json")
+	require.NoError(t, err)
+	assert.Contains(t, string(captured), `"origin":"LIVE_DFLOP_CANARY"`)
+	assert.Contains(t, string(captured), `"terminal_trace":"terminal-trace"`)
+	assert.NotContains(t, string(captured), "https://example/audio")
+	verified, err := VerifyCanaryFixture("tts-async", body)
+	require.NoError(t, err)
+	assert.Equal(t, "RUNTIME_FACT_VERIFIED", verified.Status)
+	record.TaskID = ""
+	record.State = "PREPARED"
+	record.RequestBody = `{"model":"voice-tts-pro","input":"Changed.","async":true}`
+	encoded, err := common.Marshal(record)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, encoded, 0600))
+	wrongCredential := transport
+	wrongCredential.Key = "different-key"
+	_, err = wrongCredential.SubmitCanaryExecution(context.Background(), path)
+	assert.ErrorContains(t, err, "CANARY_CHANNEL_CHANGED")
+	_, err = transport.SubmitCanaryExecution(context.Background(), path)
+	assert.ErrorContains(t, err, "CANARY_REQUEST_CHANGED")
+	assert.Equal(t, 1, posts)
+	balanceUSD = "0"
+	_, _, err = transport.PrepareCanaryExecution(context.Background(), dir, plan, plan.Cases[0], auth)
+	assert.ErrorContains(t, err, "CANARY_INSUFFICIENT_BALANCE")
+	assert.Equal(t, 1, posts)
+	balanceUSD = "10"
+	catalog = []byte(strings.Replace(string(catalog), "0.132066", "0.2", 1))
+	_, _, err = transport.PrepareCanaryExecution(context.Background(), dir, plan, plan.Cases[0], auth)
+	assert.ErrorContains(t, err, "CANARY_CATALOG_CHANGED")
+	assert.Equal(t, 1, posts)
+	record.CreatedAt = time.Now().Add(-8 * 24 * time.Hour)
+	record.RequestBody = `{"model":"voice-tts-pro","input":"Hello.","async":true}`
+	encoded, err = common.Marshal(record)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, encoded, 0600))
+	_, err = transport.SubmitCanaryExecution(context.Background(), path)
+	assert.ErrorContains(t, err, "CANARY_RETRY_UNSAFE")
+}
+
+func TestCanaryLostSubmitResponseReusesKeyAndBody(t *testing.T) {
+	catalog := []byte(`{"schema_version":"1.0","currency":"points","aliases":{},"models":[{"id":"voice-tts-pro","pricing":{"category":"audio","endpoint_type":"tts","callable":true,"price_per_tts_char":"0.132066"},"billing":{"features":["tts_char"]},"caps":{"surfaces":["audio"]}}]}`)
+	plan, err := BuildCanaryPlan(1, catalog, []byte(`{"unit":"points","points_per_cny":60}`), "etag", "0.15")
+	require.NoError(t, err)
+	var firstKey, firstBody string
+	var posts int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/catalog":
+			_, _ = w.Write(catalog)
+		case "/api/v1/config/currency":
+			_, _ = w.Write([]byte(`{"unit":"points","points_per_cny":60}`))
+		case "/v1/key/balance":
+			_, _ = w.Write([]byte(`{"remaining_usd":"1"}`))
+		case "/v1/audio/speech":
+			posts++
+			body, _ := io.ReadAll(r.Body)
+			if posts == 1 {
+				firstKey, firstBody = r.Header.Get("Idempotency-Key"), string(body)
+				w.WriteHeader(http.StatusGatewayTimeout)
+				return
+			}
+			assert.Equal(t, firstKey, r.Header.Get("Idempotency-Key"))
+			assert.Equal(t, firstBody, string(body))
+			_, _ = w.Write([]byte(`{"id":"task-1"}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+	auth := CanaryAuthorization{Execute: true, InvocationID: "invocation-3", CaseID: "tts-async", ChannelID: 1, CatalogHash: plan.CatalogHash, MaxCostPoints: "0.792396", MaxCostUSD: "0.01"}
+	auth.Confirmation = CanaryConfirmation(auth.InvocationID, auth.CaseID, auth.ChannelID, auth.CatalogHash, auth.MaxCostPoints)
+	transport := CanaryTransport{HTTP: server.Client(), BaseURL: server.URL, Key: "fake-secret"}
+	dir := t.TempDir()
+	require.NoError(t, os.Chmod(dir, 0700))
+	path, _, err := transport.PrepareCanaryExecution(context.Background(), dir, plan, plan.Cases[0], auth)
+	require.NoError(t, err)
+	_, err = transport.SubmitCanaryExecution(context.Background(), path)
+	assert.ErrorContains(t, err, "CANARY_HTTP_504")
+	record, err := transport.SubmitCanaryExecution(context.Background(), path)
+	require.NoError(t, err)
+	assert.Equal(t, "task-1", record.TaskID)
+	assert.Equal(t, 2, posts)
+	assert.NotEmpty(t, firstKey)
 }

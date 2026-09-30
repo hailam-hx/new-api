@@ -11,14 +11,15 @@ import (
 )
 
 type CanaryVerification struct {
-	CaseID         string         `json:"case_id"`
-	Status         string         `json:"status"`
-	ObservedFacts  map[string]any `json:"observed_facts,omitempty"`
-	SchemaHash     string         `json:"schema_hash"`
-	ExpectedPoints string         `json:"expected_points,omitempty"`
-	ProviderPoints string         `json:"provider_points,omitempty"`
-	CostStatus     string         `json:"cost_status,omitempty"`
-	Note           string         `json:"note"`
+	CaseID           string         `json:"case_id"`
+	Status           string         `json:"status"`
+	ObservedFacts    map[string]any `json:"observed_facts,omitempty"`
+	SchemaHash       string         `json:"schema_hash"`
+	ExpectedPoints   string         `json:"expected_points,omitempty"`
+	ProviderPoints   string         `json:"provider_points,omitempty"`
+	CostStatus       string         `json:"cost_status,omitempty"`
+	Note             string         `json:"note"`
+	ProductionReplay any            `json:"production_replay,omitempty"`
 }
 
 // CompareCanaryProviderPoints uses the effective catalog unit price retained
@@ -46,6 +47,10 @@ func CompareCanaryProviderPoints(c CanaryCase, verification *CanaryVerification,
 			return errors.New("CANARY_INCOMPLETE")
 		}
 		quantity = int64(fact)
+	case c.ID == "suno-generation":
+		if verification.ObservedFacts["generations"] != 1 {
+			return errors.New("CANARY_INCOMPLETE")
+		}
 	case c.ID == "voice-clone" || strings.HasPrefix(c.ID, "task-"):
 		// One successful operation; task families still require a validated
 		// binding before this can establish settlement evidence.
@@ -78,7 +83,7 @@ func CompareCanaryProviderPoints(c CanaryCase, verification *CanaryVerification,
 // verifier's behavior, never provider semantics or model eligibility.
 func VerifyCanaryFixture(caseID string, raw []byte) (CanaryVerification, error) {
 	var envelope CanaryCapture
-	if err := common.Unmarshal(raw, &envelope); err == nil && len(envelope.Response) > 0 {
+	if err := common.Unmarshal(raw, &envelope); err == nil && envelope.CaseID != "" && len(envelope.Response) > 0 {
 		raw = envelope.Response
 	}
 	var response map[string]json.RawMessage
@@ -102,47 +107,77 @@ func VerifyCanaryFixture(caseID string, raw []byte) (CanaryVerification, error) 
 	status = strings.ToLower(status)
 	if strings.HasPrefix(caseID, "grok-tool-") {
 		var terminal struct {
-			Usage dto.Usage `json:"usage"`
+			Usage    dto.Usage `json:"usage"`
+			Response struct {
+				Usage dto.Usage `json:"usage"`
+			} `json:"response"`
 		}
 		if err := common.Unmarshal(raw, &terminal); err != nil {
 			return result, err
 		}
-		if terminal.Usage.NumServerSideToolsUsed != nil && *terminal.Usage.NumServerSideToolsUsed >= 1 {
-			result.ObservedFacts["num_server_side_tools_used"] = *terminal.Usage.NumServerSideToolsUsed
-			result.ObservedFacts["input_tokens"] = terminal.Usage.PromptTokens
-			result.ObservedFacts["output_tokens"] = terminal.Usage.CompletionTokens
+		usage := terminal.Usage
+		if caseID == "grok-tool-responses" {
+			usage = terminal.Response.Usage
+		}
+		if usage.NumServerSideToolsUsed != nil && *usage.NumServerSideToolsUsed >= 1 {
+			result.ObservedFacts["num_server_side_tools_used"] = *usage.NumServerSideToolsUsed
+			result.ObservedFacts["input_tokens"] = max(usage.PromptTokens, usage.InputTokens)
+			result.ObservedFacts["output_tokens"] = max(usage.CompletionTokens, usage.OutputTokens)
 			result.Status = "RUNTIME_FACT_VERIFIED"
 		}
 		return result, nil
 	}
 	if caseID == "tts-async" {
-		var taskID string
+		var taskID, model, audioURL string
 		var characters, duration json.Number
+		read("id", &taskID)
+		read("model", &model)
+		read("audio_url", &audioURL)
 		if status == "failed" {
-			if !read("characters", &characters) {
-				result.Status = "EXECUTED_FAILURE"
-			}
+			result.Status = "EXECUTED_FAILURE"
 			return result, nil
 		}
-		if read("task_id", &taskID) && taskID != "" && (status == "succeeded" || status == "success") && read("characters", &characters) {
-			if count, err := characters.Int64(); err == nil && count >= 0 {
+		if taskID != "" && model == "voice-tts-pro" && audioURL != "" && status == "succeeded" && read("characters", &characters) {
+			if count, err := characters.Int64(); err == nil && count >= 0 && count <= 6 {
 				result.ObservedFacts["task_id"] = taskID
 				result.ObservedFacts["characters"] = count
 				if read("duration_sec", &duration) {
 					result.ObservedFacts["duration_sec"] = duration.String()
 				}
 				result.Status = "RUNTIME_FACT_VERIFIED"
+			} else if err == nil && count > 6 {
+				result.Status = "CANARY_COST_MODEL_INVALID"
 			}
 		}
 		return result, nil
 	}
 	if caseID == "suno-generation" {
-		var taskID string
-		var tracks []json.RawMessage
-		if read("task_id", &taskID) && taskID != "" && (status == "succeeded" || status == "success") && read("tracks", &tracks) && len(tracks) > 0 {
-			result.ObservedFacts["tracks"] = len(tracks)
-			result.Status = "SEMANTICS_CONFLICT"
-			result.Note = "Tracks are observed; generation-versus-track billing still needs authoritative provider charge evidence"
+		var taskID, model string
+		var tracks []struct {
+			ClipID   string      `json:"clip_id"`
+			AudioURL string      `json:"audio_url"`
+			Duration json.Number `json:"duration_sec"`
+		}
+		read("id", &taskID)
+		read("model", &model)
+		if status == "failed" || status == "expired" {
+			result.Status = "EXECUTED_FAILURE"
+			return result, nil
+		}
+		if taskID != "" && strings.HasPrefix(model, "suno-") && status == "succeeded" && read("tracks", &tracks) {
+			valid := 0
+			for _, track := range tracks {
+				if track.ClipID != "" && track.AudioURL != "" {
+					valid++
+				}
+			}
+			if valid == 0 {
+				return result, nil
+			}
+			result.ObservedFacts["tracks"] = valid
+			result.ObservedFacts["generations"] = 1
+			result.Status = "RUNTIME_FACT_VERIFIED"
+			result.Note = "Offline generation unit proof only; synthetic fixture cannot establish provider settlement"
 		}
 		return result, nil
 	}

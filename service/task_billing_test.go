@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/service/pricing/dflop"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
@@ -25,6 +26,61 @@ import (
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
+
+func TestCanaryReplayUsesProductionBillingEvaluatorAndLogProjection(t *testing.T) {
+	tests := []struct {
+		name       string
+		caseInfo   dflop.CanaryCase
+		body       string
+		wantPoints string
+		wantFact   string
+	}{
+		{"tts", dflop.CanaryCase{ID: "tts-async", UnitPricePoints: "0.132066"}, `{"id":"task","model":"voice-tts-pro","status":"succeeded","characters":6,"audio_url":"https://example/audio"}`, "0.792396", "characters"},
+		{"suno_two_tracks", dflop.CanaryCase{ID: "suno-generation", UnitPricePoints: "20.4"}, `{"id":"task","model":"suno-v3.5","status":"succeeded","tracks":[{"clip_id":"a","audio_url":"https://example/a"},{"clip_id":"b","audio_url":"https://example/b"}]}`, "20.4", "generations"},
+		{"suno_one_track", dflop.CanaryCase{ID: "suno-generation", UnitPricePoints: "20.4"}, `{"id":"task","model":"suno-v3.5","status":"succeeded","tracks":[{"clip_id":"a","audio_url":"https://example/a"}]}`, "20.4", "generations"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			replay, err := ReplayCanaryFixture(tc.caseInfo, []byte(tc.body), "60", "0.15")
+			require.NoError(t, err)
+			assert.Equal(t, "RUNTIME_FACT_VERIFIED", replay.Status)
+			assert.Equal(t, tc.wantPoints, replay.ExpectedPoints)
+			assert.Positive(t, replay.Quota)
+			assert.Equal(t, "tiered_expr", replay.LogOther["billing_mode"])
+			facts, ok := replay.LogOther["usage_facts"].(map[string]any)
+			require.True(t, ok)
+			assert.Contains(t, facts, tc.wantFact)
+		})
+	}
+	grok := dflop.CanaryCase{ID: "grok-tool-chat", PriceComponentsPoints: map[string]string{"input_per_1m": "10", "output_per_1m": "20", "price_per_server_tool_call": "2"}}
+	replay, err := ReplayCanaryFixture(grok, []byte(`{"usage":{"prompt_tokens":10,"completion_tokens":2,"num_server_side_tools_used":1}}`), "60", "0.15")
+	require.NoError(t, err)
+	assert.Equal(t, "2.00014", replay.ExpectedPoints)
+	assert.Equal(t, 1, replay.LogOther["server_tool_calls"])
+	assert.Equal(t, "upstream_final_usage", replay.LogOther["server_tool_calls_source"])
+	grok.ID = "grok-tool-responses"
+	replay, err = ReplayCanaryFixture(grok, []byte(`{"response":{"usage":{"input_tokens":10,"output_tokens":2,"num_server_side_tools_used":1}}}`), "60", "0.15")
+	require.NoError(t, err)
+	assert.Equal(t, "2.00014", replay.ExpectedPoints)
+	assert.Equal(t, 1, replay.LogOther["server_tool_calls"])
+	grok.ID = "grok-tool-chat"
+	grok.PriceComponentsPoints["cached_input_per_1m"] = "5"
+	replay, err = ReplayCanaryFixture(grok, []byte(`{"usage":{"prompt_tokens":10,"completion_tokens":2,"prompt_tokens_details":{"cached_tokens":4},"num_server_side_tools_used":1}}`), "60", "0.15")
+	require.NoError(t, err)
+	assert.Equal(t, "2.00012", replay.ExpectedPoints)
+	for _, failure := range []struct {
+		caseInfo dflop.CanaryCase
+		body     string
+	}{
+		{dflop.CanaryCase{ID: "tts-async", UnitPricePoints: "0.132066"}, `{"id":"task","model":"voice-tts-pro","status":"failed"}`},
+		{dflop.CanaryCase{ID: "suno-generation", UnitPricePoints: "20.4"}, `{"id":"task","model":"suno-v3.5","status":"expired"}`},
+	} {
+		replay, err := ReplayCanaryFixture(failure.caseInfo, []byte(failure.body), "60", "0.15")
+		require.NoError(t, err)
+		assert.Equal(t, "EXECUTED_FAILURE", replay.Status)
+		assert.Empty(t, replay.ExpectedPoints)
+	}
+}
 
 func TestMain(m *testing.M) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})

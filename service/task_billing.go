@@ -66,13 +66,7 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo, task *model
 		other.SetPublic("upstream_model_name", info.UpstreamModelName)
 	}
 	if snap := info.TieredBillingSnapshot; snap != nil {
-		other.SetPublic("billing_mode", "tiered_expr")
-		other.SetPublic("expr_b64", base64.StdEncoding.EncodeToString([]byte(snap.ExprString)))
-		other.SetPublic("matched_tier", snap.EstimatedTier)
-		if len(snap.UsageFacts) > 0 {
-			other.SetPublic("usage_facts", snap.UsageFacts)
-		}
-		setTaskImageCount(other, snap.UsageFacts["image_count"])
+		AppendTaskExpressionLogInfo(other, snap)
 	} else {
 		setTaskImageCount(other, info.PriceData.OtherRatios()["image_count"])
 	}
@@ -90,6 +84,21 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo, task *model
 	})
 	model.UpdateUserUsedQuotaAndRequestCount(info.UserId, info.PriceData.Quota)
 	model.UpdateChannelUsedQuota(info.ChannelId, info.PriceData.Quota)
+}
+
+// AppendTaskExpressionLogInfo is the log projection shared by live task
+// settlement and the offline canary replay.
+func AppendTaskExpressionLogInfo(other *model.LogOther, snap *billingexpr.BillingSnapshot) {
+	if other == nil || snap == nil {
+		return
+	}
+	other.SetPublic("billing_mode", "tiered_expr")
+	other.SetPublic("expr_b64", base64.StdEncoding.EncodeToString([]byte(snap.ExprString)))
+	other.SetPublic("matched_tier", snap.EstimatedTier)
+	if len(snap.UsageFacts) > 0 {
+		other.SetPublic("usage_facts", snap.UsageFacts)
+	}
+	setTaskImageCount(other, snap.UsageFacts["image_count"])
 }
 
 // ---------------------------------------------------------------------------
