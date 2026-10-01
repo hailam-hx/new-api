@@ -102,7 +102,7 @@ import type {
 } from '../../types'
 import { useChannels } from '../channels-provider'
 import { ChannelTestExport } from './channel-test-export'
-import { ChannelTestHideFailed } from './channel-test-hide-failed'
+import { ChannelTestModelVisibilityAction } from './channel-test-model-visibility-action'
 
 type ChannelTestDialogProps = {
   open: boolean
@@ -349,7 +349,8 @@ function ChannelTestDialogContent({
   const [isDeleteFailedDialogOpen, setIsDeleteFailedDialogOpen] =
     useState(false)
   const [isDeletingFailed, setIsDeletingFailed] = useState(false)
-  const [isHidingFailed, setIsHidingFailed] = useState(false)
+  const [isUpdatingModelVisibility, setIsUpdatingModelVisibility] =
+    useState(false)
   const [failureDetails, setFailureDetails] =
     useState<FailureDetailsState | null>(null)
   const [pagination, setPagination] = useState({
@@ -827,10 +828,10 @@ function ChannelTestDialogContent({
   }, [currentRow.id, models, refreshChannelLists, t, testResults])
 
   const handleClose = useCallback(() => {
-    if (isHidingFailed) return
+    if (isUpdatingModelVisibility) return
     resetState()
     onOpenChange(false)
-  }, [isHidingFailed, onOpenChange, resetState])
+  }, [isUpdatingModelVisibility, onOpenChange, resetState])
 
   const handleDialogOpenChange = useCallback(
     (nextOpen: boolean) => {
@@ -842,7 +843,7 @@ function ChannelTestDialogContent({
   )
 
   const isAnyTesting =
-    testingModels.size > 0 || isBatchTesting || isHidingFailed
+    testingModels.size > 0 || isBatchTesting || isUpdatingModelVisibility
   const isFilteringModels =
     searchTerm.trim().length > 0 || visibilityFilter !== 'all'
   const testAllButtonLabel = isFilteringModels
@@ -1089,11 +1090,20 @@ function ChannelTestDialogContent({
                           })}
                         </Button>
                       )}
+                      {successModels.length > 0 && (
+                        <ChannelTestModelVisibilityAction
+                          action='show'
+                          models={successModels}
+                          disabled={isAnyTesting || isDeletingFailed}
+                          onBusyChange={setIsUpdatingModelVisibility}
+                        />
+                      )}
                       {failedModels.length > 0 && (
-                        <ChannelTestHideFailed
+                        <ChannelTestModelVisibilityAction
+                          action='hide'
                           models={failedModels}
                           disabled={isAnyTesting || isDeletingFailed}
-                          onBusyChange={setIsHidingFailed}
+                          onBusyChange={setIsUpdatingModelVisibility}
                         />
                       )}
                       {failedModels.length > 0 && (

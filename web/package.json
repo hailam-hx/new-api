@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "rsbuild dev",
-    "build": "rsbuild build",
-    "build:check": "tsgo -b && rsbuild build",
+    "build": "rsbuild build && bun run docs:prerender",
+    "build:check": "tsgo -b && bun run build",
     "typecheck": "tsgo -b",
     "lint": "oxlint -c .oxlintrc.json .",
     "lint:fix": "oxlint -c .oxlintrc.json . --fix",
@@ -21,7 +21,10 @@
     "copyright:check": "node scripts/add-copyright.mjs --check",
     "copyright": "node scripts/add-copyright.mjs",
     "i18n:sync": "node scripts/sync-i18n.mjs",
-    "knip": "knip"
+    "knip": "knip",
+    "docs:generate": "node scripts/generate-documentation.mjs",
+    "docs:check": "node scripts/generate-documentation.mjs --check",
+    "docs:prerender": "bun scripts/prerender-documentation.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

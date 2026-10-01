@@ -28,14 +28,18 @@ import { createInstance } from 'i18next'
 import { I18nextProvider } from 'react-i18next'
 import { afterEach, expect, test, vi } from 'vitest'
 
-import { handleBatchDisableModels } from '@/features/models/lib/model-actions'
+import {
+  handleBatchDisableModels,
+  handleBatchEnableModels,
+} from '@/features/models/lib/model-actions'
 import type { Model } from '@/features/models/types'
 
 import { loadChannelModels } from '../../lib/channel-model-visibility'
-import { ChannelTestHideFailed } from '../dialogs/channel-test-hide-failed'
+import { ChannelTestModelVisibilityAction } from '../dialogs/channel-test-model-visibility-action'
 
 vi.mock('@/features/models/lib/model-actions', () => ({
   handleBatchDisableModels: vi.fn(),
+  handleBatchEnableModels: vi.fn(),
 }))
 vi.mock('@/features/models/vendor-api', () => ({
   invalidateVendorData: vi.fn(),
@@ -64,11 +68,12 @@ afterEach(() => {
   cleanup()
   vi.resetAllMocks()
 })
-function setup() {
+function setup(action: 'hide' | 'show' = 'hide') {
   render(
     <QueryClientProvider client={new QueryClient()}>
       <I18nextProvider i18n={i18n}>
-        <ChannelTestHideFailed
+        <ChannelTestModelVisibilityAction
+          action={action}
           models={['failed', 'synthetic', 'already-hidden']}
           disabled={false}
           onBusyChange={vi.fn()}
@@ -134,5 +139,50 @@ test('does not mutate visibility if fresh metadata fails to load', async () => {
   )
   fireEvent.click(screen.getByText('Confirm'))
   await waitFor(() => expect(loadChannelModels).toHaveBeenCalled())
+  expect(handleBatchDisableModels).not.toHaveBeenCalled()
+})
+
+test('shows only successful hidden models after confirmation, including exact overrides for inherited hidden rules', async () => {
+  const inherited = {
+    id: 0,
+    model_name: 'synthetic',
+    name_rule: 0,
+    square_state: 'hidden',
+  } as Model
+  vi.mocked(loadChannelModels).mockResolvedValue([
+    {
+      id: 7,
+      model_name: 'failed',
+      name_rule: 0,
+      square_state: 'visible',
+    } as Model,
+    inherited,
+    {
+      id: 9,
+      model_name: 'already-hidden',
+      name_rule: 0,
+      square_state: 'hidden',
+    } as Model,
+    {
+      id: 10,
+      model_name: 'untested',
+      name_rule: 0,
+      square_state: 'hidden',
+    } as Model,
+  ])
+  setup('show')
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Show successful models (3)' })
+  )
+  expect(handleBatchEnableModels).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByText('Confirm'))
+  await waitFor(() =>
+    expect(handleBatchEnableModels).toHaveBeenCalledWith(
+      [9],
+      expect.any(QueryClient),
+      undefined,
+      [inherited]
+    )
+  )
   expect(handleBatchDisableModels).not.toHaveBeenCalled()
 })

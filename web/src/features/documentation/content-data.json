@@ -1,0 +1,1653 @@
+{
+  "groups": [
+    "Getting started",
+    "API & SDK",
+    "Models & Pricing",
+    "APIs",
+    "Integrations",
+    "Guides",
+    "Console",
+    "Administration",
+    "Reference"
+  ],
+  "articles": [
+    {
+      "slug": "overview",
+      "group": "Getting started",
+      "title": "New API Documentation",
+      "description": "Build with one unified API. Access multiple AI models through a consistent interface.",
+      "sources": [
+        "router/relay-router.go",
+        "router/task-plugin-protocol-router.go",
+        "model/pricing.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "One gateway, multiple providers",
+          "body": "New API routes client requests to configured channels. Developers use a gateway API key; administrators manage upstream credentials, model names, routing and prices. OpenAI, Anthropic Messages and Gemini entry points are registered, but each model and channel supports a particular set of endpoints."
+        },
+        {
+          "id": "section-2",
+          "title": "Start with your role",
+          "body": "Use Quickstart to create a key, choose a model and send a request. Platform administrators should configure a channel, its models, pricing and routing before inviting users. The catalog reflects enabled channel abilities and visible groups; it is not a guarantee that every API key can call every listed model."
+        }
+      ],
+      "kind": "home"
+    },
+    {
+      "slug": "quickstart",
+      "group": "Getting started",
+      "title": "Quickstart",
+      "description": "Create a key, choose a model and make your first request.",
+      "sources": [
+        "web/src/routes/(auth)/sign-up.tsx",
+        "web/src/routes/_authenticated/keys/index.tsx",
+        "router/relay-router.go",
+        "controller/model.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Create an account and API key",
+          "body": "Open Sign up if registration is enabled, then sign in and open **API Keys**. Create a key with an appropriate group, quota, expiry and model restrictions. Store it in `NEW_API_KEY` on your server. Never use the upstream channel credential or put this key in browser code."
+        },
+        {
+          "id": "section-2",
+          "title": "Choose a chat model",
+          "body": "The examples select a model from the API key-scoped `/v1/models` response and check its advertised OpenAI endpoint support. Set `NEW_API_MODEL` to choose a particular accessible chat model, or leave it unset to select the first compatible model. No model name is hard-coded. Catalog visibility and key access can differ."
+        },
+        {
+          "id": "section-3",
+          "title": "Send a request",
+          "body": "Set `NEW_API_BASE_URL` to the gateway origin, without `/v1`. Choose a language below. Install `openai` for Python or JavaScript; the cURL example additionally uses `jq`. If no suitable model exists, ask an administrator to configure a chat channel."
+        },
+        {
+          "id": "section-4",
+          "title": "Check usage and logs",
+          "body": "Open **Dashboard** for aggregate usage and **Usage Logs → Common Logs** for request records. Check the requested model, group, consumption, errors and latency. Failed or incomplete requests need investigation before retrying."
+        }
+      ],
+      "kind": "quickstart",
+      "console": "/keys",
+      "protocol": "openai"
+    },
+    {
+      "slug": "base-url",
+      "group": "Getting started",
+      "title": "Base URL",
+      "description": "Use the gateway address for clients and the provider address for channels.",
+      "sources": ["router/relay-router.go", "web/src/hooks/use-status.ts"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Client addresses",
+          "body": "OpenAI SDKs use the gateway origin followed by `/v1`. Anthropic SDKs use the origin without `/v1`, because the SDK adds `/v1/messages`. Gemini uses the origin with API version `v1beta`. Preserve any deployment path prefix configured by your reverse proxy."
+        },
+        {
+          "id": "section-2",
+          "title": "Upstream addresses",
+          "body": "A channel Base URL points to the upstream provider and is configured by an administrator. It is different from the gateway URL used by clients. Use HTTPS for public deployments; keep credentials out of URLs."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "authentication",
+      "group": "Getting started",
+      "title": "Authentication",
+      "description": "Relay API keys, management access tokens and browser sessions have different purposes.",
+      "sources": [
+        "middleware/auth.go",
+        "docs/authentication.md",
+        "router/api-router.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Relay requests",
+          "body": "Send a key created in **API Keys** as `Authorization: Bearer <NEW_API_KEY>`. Anthropic Messages also accepts `x-api-key`; Gemini paths accept `x-goog-api-key`. Prefer headers to query-string credentials. Key status, expiry, quota, model restrictions, IP restrictions and group access are enforced by the server."
+        },
+        {
+          "id": "section-2",
+          "title": "Console and management",
+          "body": "The console uses a short-lived access JWT in memory and a rotating HttpOnly refresh cookie backed by server sessions. A personal management access token is separate from a relay API key. Administrator and root routes apply their own authorization and may require permission checks or security verification. Do not substitute a relay key for an administrator credential."
+        },
+        {
+          "id": "section-3",
+          "title": "Credential hygiene",
+          "body": "Keep credentials in server environment variables or a secret manager. Rotate a compromised key and revoke affected sessions from Security. Never include passwords, verification codes, refresh cookies or usable tokens in troubleshooting screenshots or logs."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "faq",
+      "group": "Getting started",
+      "title": "FAQ",
+      "description": "Resolve common setup and compatibility questions.",
+      "sources": [
+        "controller/pricing.go",
+        "middleware/auth.go",
+        "middleware/distributor.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Why is a catalog model rejected?",
+          "body": "The catalog lists visible groups and configured channel abilities. Your key can have a different group, model allowlist, expiry or quota. Check `/v1/models` with that key, then confirm that the chosen endpoint is supported."
+        },
+        {
+          "id": "section-2",
+          "title": "Why does the copied price differ from a log?",
+          "body": "A displayed base price can be modified by group ratios, cache categories, expression tiers, request conditions or provider-specific task usage. The consumption log records settlement. The pre-consumed reservation is not always the final charge."
+        },
+        {
+          "id": "section-3",
+          "title": "Does a compatible endpoint support every upstream feature?",
+          "body": "No. Conversion and provider behavior depend on the selected channel. Unsupported fields, modes and tools may be rejected. File storage and fine-tuning routes registered as unimplemented are excluded from the supported API reference."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "sdk-openai",
+      "group": "API & SDK",
+      "title": "OpenAI",
+      "description": "Configure the SDK against the actual gateway protocol.",
+      "sources": [
+        "router/relay-router.go",
+        "middleware/auth.go",
+        "relaykit/dto/openai_request.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Install and configure",
+          "body": "Use `pip install openai` / `npm install openai` for OpenAI, `pip install anthropic` / `npm install @anthropic-ai/sdk` for Anthropic, or `pip install google-genai` / `npm install @google/genai` for Gemini. Set the gateway origin, API key and an accessible model advertising the selected protocol. cURL uses the same headers and request body without an SDK."
+        },
+        {
+          "id": "section-2",
+          "title": "Minimal request and streaming",
+          "body": "The example uses a model selected by you and checked against the credential-scoped model list. Enable streaming only if the selected upstream supports it. Anthropic produces message events, Gemini streams GenerateContent responses, and OpenAI Chat produces chat completion chunks. These envelopes are not interchangeable."
+        },
+        {
+          "id": "section-3",
+          "title": "Errors and multimodal input",
+          "body": "Check the HTTP status and structured error before retrying. Start with a text request. Add images, audio or tools only when the model metadata and upstream documentation support them; the existence of a gateway route does not prove model capability."
+        }
+      ],
+      "kind": "sdk",
+      "protocol": "openai"
+    },
+    {
+      "slug": "sdk-anthropic",
+      "group": "API & SDK",
+      "title": "Anthropic",
+      "description": "Configure the SDK against the actual gateway protocol.",
+      "sources": [
+        "router/relay-router.go",
+        "middleware/auth.go",
+        "relaykit/dto/openai_request.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Install and configure",
+          "body": "Use `pip install openai` / `npm install openai` for OpenAI, `pip install anthropic` / `npm install @anthropic-ai/sdk` for Anthropic, or `pip install google-genai` / `npm install @google/genai` for Gemini. Set the gateway origin, API key and an accessible model advertising the selected protocol. cURL uses the same headers and request body without an SDK."
+        },
+        {
+          "id": "section-2",
+          "title": "Minimal request and streaming",
+          "body": "The example uses a model selected by you and checked against the credential-scoped model list. Enable streaming only if the selected upstream supports it. Anthropic produces message events, Gemini streams GenerateContent responses, and OpenAI Chat produces chat completion chunks. These envelopes are not interchangeable."
+        },
+        {
+          "id": "section-3",
+          "title": "Errors and multimodal input",
+          "body": "Check the HTTP status and structured error before retrying. Start with a text request. Add images, audio or tools only when the model metadata and upstream documentation support them; the existence of a gateway route does not prove model capability."
+        }
+      ],
+      "kind": "sdk",
+      "protocol": "anthropic"
+    },
+    {
+      "slug": "sdk-gemini",
+      "group": "API & SDK",
+      "title": "Gemini",
+      "description": "Configure the SDK against the actual gateway protocol.",
+      "sources": [
+        "router/relay-router.go",
+        "middleware/auth.go",
+        "relaykit/dto/openai_request.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Install and configure",
+          "body": "Use `pip install openai` / `npm install openai` for OpenAI, `pip install anthropic` / `npm install @anthropic-ai/sdk` for Anthropic, or `pip install google-genai` / `npm install @google/genai` for Gemini. Set the gateway origin, API key and an accessible model advertising the selected protocol. cURL uses the same headers and request body without an SDK."
+        },
+        {
+          "id": "section-2",
+          "title": "Minimal request and streaming",
+          "body": "The example uses a model selected by you and checked against the credential-scoped model list. Enable streaming only if the selected upstream supports it. Anthropic produces message events, Gemini streams GenerateContent responses, and OpenAI Chat produces chat completion chunks. These envelopes are not interchangeable."
+        },
+        {
+          "id": "section-3",
+          "title": "Errors and multimodal input",
+          "body": "Check the HTTP status and structured error before retrying. Start with a text request. Add images, audio or tools only when the model metadata and upstream documentation support them; the existence of a gateway route does not prove model capability."
+        }
+      ],
+      "kind": "sdk",
+      "protocol": "gemini"
+    },
+    {
+      "slug": "sdk-curl",
+      "group": "API & SDK",
+      "title": "cURL",
+      "description": "Configure the SDK against the actual gateway protocol.",
+      "sources": [
+        "router/relay-router.go",
+        "middleware/auth.go",
+        "relaykit/dto/openai_request.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Install and configure",
+          "body": "Use `pip install openai` / `npm install openai` for OpenAI, `pip install anthropic` / `npm install @anthropic-ai/sdk` for Anthropic, or `pip install google-genai` / `npm install @google/genai` for Gemini. Set the gateway origin, API key and an accessible model advertising the selected protocol. cURL uses the same headers and request body without an SDK."
+        },
+        {
+          "id": "section-2",
+          "title": "Minimal request and streaming",
+          "body": "The example uses a model selected by you and checked against the credential-scoped model list. Enable streaming only if the selected upstream supports it. Anthropic produces message events, Gemini streams GenerateContent responses, and OpenAI Chat produces chat completion chunks. These envelopes are not interchangeable."
+        },
+        {
+          "id": "section-3",
+          "title": "Errors and multimodal input",
+          "body": "Check the HTTP status and structured error before retrying. Start with a text request. Add images, audio or tools only when the model metadata and upstream documentation support them; the existence of a gateway route does not prove model capability."
+        }
+      ],
+      "kind": "sdk",
+      "protocol": "openai"
+    },
+    {
+      "slug": "models",
+      "group": "Models & Pricing",
+      "title": "Model Catalog",
+      "description": "Live models, endpoint compatibility and prices from the existing catalog.",
+      "sources": [
+        "controller/pricing.go",
+        "model/pricing.go",
+        "web/src/features/pricing/hooks/use-pricing-data.ts"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Catalog source",
+          "body": "This catalog shares `/api/pricing` and the pricing page query cache. The backend builds it from enabled channel abilities, model metadata, vendors, endpoint support and effective pricing. Visibility follows the configured pricing module and usable groups."
+        },
+        {
+          "id": "section-2",
+          "title": "Access and missing metadata",
+          "body": "A listed model may be inaccessible to a particular key. Use `/v1/models` with that key to verify access. Unspecified context, modalities or capabilities are shown as unknown; no model-name heuristic is used. Coming soon and deprecated states are not invented."
+        }
+      ],
+      "kind": "models"
+    },
+    {
+      "slug": "compatibility",
+      "group": "Models & Pricing",
+      "title": "Compatibility Matrix",
+      "description": "Compare only endpoint types and capabilities reported by the backend.",
+      "sources": [
+        "model/pricing.go",
+        "constant/endpoint_type.go",
+        "web/src/features/pricing/types.ts"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Read the matrix",
+          "body": "Supported APIs come from `supported_endpoint_types` and the server endpoint map. These are configured protocol bindings, not a promise of complete feature parity. Capabilities and modalities appear only when supplied by catalog metadata."
+        },
+        {
+          "id": "section-2",
+          "title": "Before choosing a model",
+          "body": "Check the endpoint, then confirm the model is in your key-scoped list. For streaming, tools, reasoning or structured output, test the selected channel with a small request. Blank metadata means unknown rather than unsupported."
+        }
+      ],
+      "kind": "matrix"
+    },
+    {
+      "slug": "capabilities",
+      "group": "Models & Pricing",
+      "title": "Capability Matrix",
+      "description": "Compare only endpoint types and capabilities reported by the backend.",
+      "sources": [
+        "model/pricing.go",
+        "constant/endpoint_type.go",
+        "web/src/features/pricing/types.ts"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Read the matrix",
+          "body": "Supported APIs come from `supported_endpoint_types` and the server endpoint map. These are configured protocol bindings, not a promise of complete feature parity. Capabilities and modalities appear only when supplied by catalog metadata."
+        },
+        {
+          "id": "section-2",
+          "title": "Before choosing a model",
+          "body": "Check the endpoint, then confirm the model is in your key-scoped list. For streaming, tools, reasoning or structured output, test the selected channel with a small request. Blank metadata means unknown rather than unsupported."
+        }
+      ],
+      "kind": "matrix"
+    },
+    {
+      "slug": "pricing",
+      "group": "Models & Pricing",
+      "title": "Pricing",
+      "description": "Use configured prices and the same display logic as Model Square.",
+      "sources": [
+        "controller/pricing.go",
+        "model/pricing.go",
+        "web/src/features/pricing/components/model-price-cell.tsx"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Effective prices",
+          "body": "The table uses the existing ModelPriceCell, including token prices, per-request prices, expression-based tiers, cache categories and provider variants. Without a selected group it follows Model Square and displays the lowest enabled group multiplier. Choose a group to view its multiplier and matching models. The catalog is read-only."
+        },
+        {
+          "id": "section-2",
+          "title": "Task and provider variants",
+          "body": "Task schemas identify canonical billing units such as seconds, counts, tokens and credits. Different plugins serving the same model can use different schemas and expressions. Unconfigured provider pricing must be corrected by an administrator before submission."
+        },
+        {
+          "id": "section-3",
+          "title": "Platform price and upstream cost",
+          "body": "Platform consumption is controlled by New API pricing. An upstream provider cost is a separate value; do not assume that a catalog price is the provider invoice or that every provider publishes cost data."
+        }
+      ],
+      "kind": "pricing"
+    },
+    {
+      "slug": "billing",
+      "group": "Models & Pricing",
+      "title": "Billing",
+      "description": "Understand reservations, actual usage, settlement and refunds.",
+      "sources": [
+        "relay/request_billing.go",
+        "service/billing_session.go",
+        "service/tiered_settle.go",
+        "service/task_billing.go",
+        "pkg/billingexpr/expr.md"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Request lifecycle",
+          "body": "The request path resolves effective pricing and group access, estimates usage, reserves quota when required, executes the provider, then settles measured or locally estimated usage. The billing session reconciles the reservation with the final charge. Failure refund policy runs after eligible attempts end; a settled session is not refunded twice."
+        },
+        {
+          "id": "section-2",
+          "title": "Token and request pricing",
+          "body": "Text expressions use USD per million tokens. Input, output, cache, image and audio token categories are separated only when the expression explicitly prices them. Context tier conditions use total input length, not the input remainder after cache subtraction. Fixed request leaves charge per successful request, not per streamed chunk. Legacy ratio and per-call pricing remain supported."
+        },
+        {
+          "id": "section-3",
+          "title": "Image, video and audio quantities",
+          "body": "Images can use image count, tokens or a task schema. Video tasks can use seconds, counts, vendor credits or tokens. Audio pricing depends on the actual relay or task implementation; there is no universal duration or character rule. Read the live schema and expression for the chosen model instead of inferring a unit from its modality."
+        },
+        {
+          "id": "section-4",
+          "title": "Asynchronous settlement",
+          "body": "Task submission freezes its selected expression and usage facts. Completion overlays validated measured facts and reconciles quota. Missing completion facts retain submission values; evaluation failure retains the reservation and records a warning. The task record and consumption log are the sources for settlement troubleshooting."
+        },
+        {
+          "id": "section-5",
+          "title": "Wallet and subscriptions",
+          "body": "Funding can come from a wallet or a subscription under the configured billing preference. Subscription reservations and asynchronous tasks do not use the wallet trust bypass. Group changes on retry refresh group-dependent reservation values before another provider attempt."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "api-chat",
+      "group": "APIs",
+      "title": "Chat Completions",
+      "description": "Registered API surface with model-specific compatibility limits.",
+      "sources": ["router/relay-router.go", "relaykit/dto/openai_request.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Endpoint",
+          "body": "`/v1/chat/completions`\n\nUse `model` and `messages`. Streaming uses OpenAI-style SSE chunks. Tools and response formats are conditional on the selected provider."
+        },
+        {
+          "id": "section-2",
+          "title": "Request and response contract",
+          "body": "Use API Reference for registered methods, middleware and matched OpenAPI schemas. An OpenAPI schema is a checked-in contract, not a recorded upstream response. Where no current schema exists, the reference identifies that gap instead of inventing fields."
+        },
+        {
+          "id": "section-3",
+          "title": "Choose a compatible model",
+          "body": "Open the live catalog and check Supported APIs. Verify the model with your API key before calling. For multipart and asynchronous operations, follow the operation-specific schema and inspect the HTTP response before attempting to parse it."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "api-responses",
+      "group": "APIs",
+      "title": "Responses",
+      "description": "Registered API surface with model-specific compatibility limits.",
+      "sources": [
+        "router/relay-router.go",
+        "router/task-plugin-protocol-router.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Endpoint",
+          "body": "`/v1/responses`\n\nThe host supports POST Responses, GET retrieval for stored plugin results, compact and a WebSocket entry point. Go relay and task plugins have different support for stream, sync and background. A plugin rejects modes it did not declare; do not assume full OpenAI Responses parity."
+        },
+        {
+          "id": "section-2",
+          "title": "Request and response contract",
+          "body": "Use API Reference for registered methods, middleware and matched OpenAPI schemas. An OpenAPI schema is a checked-in contract, not a recorded upstream response. Where no current schema exists, the reference identifies that gap instead of inventing fields."
+        },
+        {
+          "id": "section-3",
+          "title": "Choose a compatible model",
+          "body": "Open the live catalog and check Supported APIs. Verify the model with your API key before calling. For multipart and asynchronous operations, follow the operation-specific schema and inspect the HTTP response before attempting to parse it."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "api-embeddings",
+      "group": "APIs",
+      "title": "Embeddings",
+      "description": "Registered API surface with model-specific compatibility limits.",
+      "sources": ["router/relay-router.go", "relaykit/dto/embedding.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Endpoint",
+          "body": "`/v1/embeddings`\n\nSend a model supporting embeddings and `input`. The OpenAI-compatible response is produced by the selected adaptor. Do not send a chat model merely because it appears in the model list."
+        },
+        {
+          "id": "section-2",
+          "title": "Request and response contract",
+          "body": "Use API Reference for registered methods, middleware and matched OpenAPI schemas. An OpenAPI schema is a checked-in contract, not a recorded upstream response. Where no current schema exists, the reference identifies that gap instead of inventing fields."
+        },
+        {
+          "id": "section-3",
+          "title": "Choose a compatible model",
+          "body": "Open the live catalog and check Supported APIs. Verify the model with your API key before calling. For multipart and asynchronous operations, follow the operation-specific schema and inspect the HTTP response before attempting to parse it."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "api-images",
+      "group": "APIs",
+      "title": "Images",
+      "description": "Registered API surface with model-specific compatibility limits.",
+      "sources": ["router/relay-router.go", "pkg/jsplugin/routing.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Endpoint",
+          "body": "`/v1/images/generations`\n\nImage generation and image edits are host protocols. Unclaimed models fall back to the image relay. JSON and multipart support varies by operation and plugin. Image variations are unimplemented and excluded."
+        },
+        {
+          "id": "section-2",
+          "title": "Request and response contract",
+          "body": "Use API Reference for registered methods, middleware and matched OpenAPI schemas. An OpenAPI schema is a checked-in contract, not a recorded upstream response. Where no current schema exists, the reference identifies that gap instead of inventing fields."
+        },
+        {
+          "id": "section-3",
+          "title": "Choose a compatible model",
+          "body": "Open the live catalog and check Supported APIs. Verify the model with your API key before calling. For multipart and asynchronous operations, follow the operation-specific schema and inspect the HTTP response before attempting to parse it."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "api-video",
+      "group": "APIs",
+      "title": "Video",
+      "description": "Registered API surface with model-specific compatibility limits.",
+      "sources": ["router/relay-router.go", "router/video-router.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Endpoint",
+          "body": "`/v1/videos`\n\nVideo creation, task retrieval and content are registered host operations. `/v1/video/generations` is a separate compatibility surface. Plugin and legacy adaptor support varies. Native vendor routes exist only for installed, enabled plugins."
+        },
+        {
+          "id": "section-2",
+          "title": "Request and response contract",
+          "body": "Use API Reference for registered methods, middleware and matched OpenAPI schemas. An OpenAPI schema is a checked-in contract, not a recorded upstream response. Where no current schema exists, the reference identifies that gap instead of inventing fields."
+        },
+        {
+          "id": "section-3",
+          "title": "Choose a compatible model",
+          "body": "Open the live catalog and check Supported APIs. Verify the model with your API key before calling. For multipart and asynchronous operations, follow the operation-specific schema and inspect the HTTP response before attempting to parse it."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "api-audio",
+      "group": "APIs",
+      "title": "Audio / TTS",
+      "description": "Registered API surface with model-specific compatibility limits.",
+      "sources": [
+        "router/relay-router.go",
+        "router/task-plugin-protocol-router.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Endpoint",
+          "body": "`/v1/audio/speech`\n\nTranscriptions and translations accept their provider-supported audio request forms. Speech normally returns audio bytes, but an asynchronous speech plugin returns task JSON and uses a retrieval route. Check the selected model contract before treating every speech response as a binary file."
+        },
+        {
+          "id": "section-2",
+          "title": "Request and response contract",
+          "body": "Use API Reference for registered methods, middleware and matched OpenAPI schemas. An OpenAPI schema is a checked-in contract, not a recorded upstream response. Where no current schema exists, the reference identifies that gap instead of inventing fields."
+        },
+        {
+          "id": "section-3",
+          "title": "Choose a compatible model",
+          "body": "Open the live catalog and check Supported APIs. Verify the model with your API key before calling. For multipart and asynchronous operations, follow the operation-specific schema and inspect the HTTP response before attempting to parse it."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "api-tasks",
+      "group": "APIs",
+      "title": "Async Tasks",
+      "description": "Registered API surface with model-specific compatibility limits.",
+      "sources": ["router/relay-router.go", "router/task-router.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Endpoint",
+          "body": "`/v1/tasks/{key}`\n\nPOST uses the plugin key; GET uses a public task ID at the same path position. Artifact listing and content are separate routes. Keep the gateway task ID; private upstream IDs and credentials are not client configuration. A synchronous result not retained by its protocol may not be retrievable."
+        },
+        {
+          "id": "section-2",
+          "title": "Request and response contract",
+          "body": "Use API Reference for registered methods, middleware and matched OpenAPI schemas. An OpenAPI schema is a checked-in contract, not a recorded upstream response. Where no current schema exists, the reference identifies that gap instead of inventing fields."
+        },
+        {
+          "id": "section-3",
+          "title": "Choose a compatible model",
+          "body": "Open the live catalog and check Supported APIs. Verify the model with your API key before calling. For multipart and asynchronous operations, follow the operation-specific schema and inspect the HTTP response before attempting to parse it."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "integration-claude-code",
+      "group": "Integrations",
+      "title": "Claude Code",
+      "description": "Connect a client using supported gateway protocols.",
+      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Configuration",
+          "body": "Select an Anthropic-compatible model and configure `ANTHROPIC_BASE_URL` to the gateway origin, `ANTHROPIC_AUTH_TOKEN` to your gateway key and `ANTHROPIC_MODEL` to the accessible model ID. The Messages route exists, but `/v1/messages/count_tokens` is disabled in this repository. Client features requiring that route or provider-specific beta features may fail."
+        },
+        {
+          "id": "section-2",
+          "title": "Verify the connection",
+          "body": "Create a dedicated gateway key for this client, verify model access, send a small request, then inspect Usage Logs. If authentication succeeds but generation fails, check the endpoint type and channel health. This guide describes protocol configuration; it is not a certification of every client version."
+        },
+        {
+          "id": "section-3",
+          "title": "Client documentation",
+          "body": "Consult the [official client documentation](https://code.claude.com/docs/en/llm-gateway) for the current settings UI."
+        }
+      ],
+      "kind": "integration",
+      "protocol": "anthropic"
+    },
+    {
+      "slug": "integration-cursor",
+      "group": "Integrations",
+      "title": "Cursor",
+      "description": "Connect a client using supported gateway protocols.",
+      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Configuration",
+          "body": "Use the client model settings to configure an OpenAI-compatible base URL ending in `/v1`, your gateway key and an accessible chat model. Client-owned features may use other services or protocols. Validate a basic chat request before enabling agent features."
+        },
+        {
+          "id": "section-2",
+          "title": "Verify the connection",
+          "body": "Create a dedicated gateway key for this client, verify model access, send a small request, then inspect Usage Logs. If authentication succeeds but generation fails, check the endpoint type and channel health. This guide describes protocol configuration; it is not a certification of every client version."
+        },
+        {
+          "id": "section-3",
+          "title": "Client documentation",
+          "body": "Consult the [official client documentation](https://docs.cursor.com/settings/api-keys) for the current settings UI."
+        }
+      ],
+      "kind": "integration",
+      "protocol": "openai"
+    },
+    {
+      "slug": "integration-cline",
+      "group": "Integrations",
+      "title": "Cline",
+      "description": "Connect a client using supported gateway protocols.",
+      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Configuration",
+          "body": "Choose the OpenAI Compatible provider and set the gateway `/v1` base URL, API key and model ID. Configure tool and context options according to the chosen model, not the model name."
+        },
+        {
+          "id": "section-2",
+          "title": "Verify the connection",
+          "body": "Create a dedicated gateway key for this client, verify model access, send a small request, then inspect Usage Logs. If authentication succeeds but generation fails, check the endpoint type and channel health. This guide describes protocol configuration; it is not a certification of every client version."
+        },
+        {
+          "id": "section-3",
+          "title": "Client documentation",
+          "body": "Consult the [official client documentation](https://docs.cline.bot/provider-config/openai-compatible) for the current settings UI."
+        }
+      ],
+      "kind": "integration",
+      "protocol": "openai"
+    },
+    {
+      "slug": "integration-continue",
+      "group": "Integrations",
+      "title": "Continue integration",
+      "description": "Connect a client using supported gateway protocols.",
+      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Configuration",
+          "body": "Configure an OpenAI provider with a gateway `/v1` API base and an accessible model ID. Chat, autocomplete and embeddings are different roles and can require different endpoint types; assign a model that supports each role."
+        },
+        {
+          "id": "section-2",
+          "title": "Verify the connection",
+          "body": "Create a dedicated gateway key for this client, verify model access, send a small request, then inspect Usage Logs. If authentication succeeds but generation fails, check the endpoint type and channel health. This guide describes protocol configuration; it is not a certification of every client version."
+        },
+        {
+          "id": "section-3",
+          "title": "Client documentation",
+          "body": "Consult the [official client documentation](https://docs.continue.dev/customize/model-providers/top-level/openai) for the current settings UI."
+        }
+      ],
+      "kind": "integration",
+      "protocol": "openai"
+    },
+    {
+      "slug": "integration-open-webui",
+      "group": "Integrations",
+      "title": "Open WebUI",
+      "description": "Connect a client using supported gateway protocols.",
+      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Configuration",
+          "body": "Add an OpenAI-compatible connection with the gateway `/v1` URL and API key. Discover models with that key and select a chat model. Keep server-to-server connectivity and proxy timeouts in mind when streaming."
+        },
+        {
+          "id": "section-2",
+          "title": "Verify the connection",
+          "body": "Create a dedicated gateway key for this client, verify model access, send a small request, then inspect Usage Logs. If authentication succeeds but generation fails, check the endpoint type and channel health. This guide describes protocol configuration; it is not a certification of every client version."
+        },
+        {
+          "id": "section-3",
+          "title": "Client documentation",
+          "body": "Consult the [official client documentation](https://docs.openwebui.com/getting-started/quick-start/connect-a-provider/starting-with-openai-compatible/) for the current settings UI."
+        }
+      ],
+      "kind": "integration",
+      "protocol": "openai"
+    },
+    {
+      "slug": "integration-cherry-studio",
+      "group": "Integrations",
+      "title": "Cherry Studio",
+      "description": "Connect a client using supported gateway protocols.",
+      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Configuration",
+          "body": "Add an OpenAI-compatible provider, set the gateway URL according to the client base-URL convention, add the gateway key, and refresh the model list. Select a model with the endpoint and modalities your conversation uses."
+        },
+        {
+          "id": "section-2",
+          "title": "Verify the connection",
+          "body": "Create a dedicated gateway key for this client, verify model access, send a small request, then inspect Usage Logs. If authentication succeeds but generation fails, check the endpoint type and channel health. This guide describes protocol configuration; it is not a certification of every client version."
+        },
+        {
+          "id": "section-3",
+          "title": "Client documentation",
+          "body": "Consult the [official client documentation](https://docs.cherry-ai.com/) for the current settings UI."
+        }
+      ],
+      "kind": "integration",
+      "protocol": "openai"
+    },
+    {
+      "slug": "integration-chatbox",
+      "group": "Integrations",
+      "title": "ChatBox",
+      "description": "Connect a client using supported gateway protocols.",
+      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Configuration",
+          "body": "Choose a custom OpenAI-compatible provider and configure the gateway API host, API key and model. Check whether your client version appends `/v1`; avoid duplicating the path."
+        },
+        {
+          "id": "section-2",
+          "title": "Verify the connection",
+          "body": "Create a dedicated gateway key for this client, verify model access, send a small request, then inspect Usage Logs. If authentication succeeds but generation fails, check the endpoint type and channel health. This guide describes protocol configuration; it is not a certification of every client version."
+        },
+        {
+          "id": "section-3",
+          "title": "Client documentation",
+          "body": "Consult the [official client documentation](https://docs.chatboxai.app/en/guides/providers/) for the current settings UI."
+        }
+      ],
+      "kind": "integration",
+      "protocol": "openai"
+    },
+    {
+      "slug": "integration-compatible-apps",
+      "group": "Integrations",
+      "title": "OpenAI-compatible applications",
+      "description": "Connect a client using supported gateway protocols.",
+      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Configuration",
+          "body": "Configure base URL, key and model. A successful `/v1/models` request proves authentication and access, while a small `/v1/chat/completions` request checks chat compatibility. Features that require Files, fine-tuning or another unimplemented API are unavailable."
+        },
+        {
+          "id": "section-2",
+          "title": "Verify the connection",
+          "body": "Create a dedicated gateway key for this client, verify model access, send a small request, then inspect Usage Logs. If authentication succeeds but generation fails, check the endpoint type and channel health. This guide describes protocol configuration; it is not a certification of every client version."
+        },
+        {
+          "id": "section-3",
+          "title": "Client documentation",
+          "body": "Consult the [official client documentation](https://docs.newapi.ai/) for the current settings UI."
+        }
+      ],
+      "kind": "integration",
+      "protocol": "openai"
+    },
+    {
+      "slug": "guide-streaming",
+      "group": "Guides",
+      "title": "Streaming",
+      "description": "Practical guidance constrained by the actual protocol and provider.",
+      "sources": [
+        "router/relay-router.go",
+        "relay/channel/openai/relay-openai.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Workflow",
+          "body": "Use `stream: true` only with a supported model and endpoint. OpenAI Chat streams SSE chunks, Anthropic streams message events, and Gemini uses its own stream shape. Keep proxy buffering disabled and timeouts long enough for generation. Do not concatenate arbitrary event JSON as final text."
+        },
+        {
+          "id": "section-2",
+          "title": "Validate with your deployment",
+          "body": "Use the catalog to inspect endpoint support, make a minimal request, and check Usage Logs. Add one feature at a time. Consult API Reference and the selected upstream contract when field support differs."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "guide-tools",
+      "group": "Guides",
+      "title": "Tool Calling",
+      "description": "Practical guidance constrained by the actual protocol and provider.",
+      "sources": ["router/relay-router.go", "relaykit/dto/openai_request.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Workflow",
+          "body": "Pass protocol-specific tool definitions only to a provider that supports them. A tool call is a request for your application to execute a function; the gateway does not execute your local function. Validate arguments and permissions, run the tool, and return the result using the same conversation protocol."
+        },
+        {
+          "id": "section-2",
+          "title": "Validate with your deployment",
+          "body": "Use the catalog to inspect endpoint support, make a minimal request, and check Usage Logs. Add one feature at a time. Consult API Reference and the selected upstream contract when field support differs."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "guide-structured-output",
+      "group": "Guides",
+      "title": "Structured Output",
+      "description": "Practical guidance constrained by the actual protocol and provider.",
+      "sources": ["router/relay-router.go", "relaykit/dto/openai_request.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Workflow",
+          "body": "OpenAI-compatible requests can carry `response_format`. Support for JSON mode and schema-constrained output depends on the model and adaptor. Validate returned data against your application schema even when generation requested structured output. Unknown catalog metadata is not proof of support."
+        },
+        {
+          "id": "section-2",
+          "title": "Validate with your deployment",
+          "body": "Use the catalog to inspect endpoint support, make a minimal request, and check Usage Logs. Add one feature at a time. Consult API Reference and the selected upstream contract when field support differs."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "guide-multimodal",
+      "group": "Guides",
+      "title": "Multimodal",
+      "description": "Practical guidance constrained by the actual protocol and provider.",
+      "sources": ["router/relay-router.go", "relaykit/dto/openai_request.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Workflow",
+          "body": "Use a model whose input and output modalities match the request. Image content belongs in the chosen protocol message format; image generation is a separate API. Provider size and media limits still apply. Never infer vision capability from a vendor name."
+        },
+        {
+          "id": "section-2",
+          "title": "Validate with your deployment",
+          "body": "Use the catalog to inspect endpoint support, make a minimal request, and check Usage Logs. Add one feature at a time. Consult API Reference and the selected upstream contract when field support differs."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "guide-image-to-image",
+      "group": "Guides",
+      "title": "Image-to-Image",
+      "description": "Practical guidance constrained by the actual protocol and provider.",
+      "sources": ["router/relay-router.go", "pkg/jsplugin/routing.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Workflow",
+          "body": "Use `/v1/images/edits` with an edit-capable model. This host protocol can accept JSON or multipart according to its implementation. Native task plugins normalize file references without exposing server temporary paths. Image variations are not implemented."
+        },
+        {
+          "id": "section-2",
+          "title": "Validate with your deployment",
+          "body": "Use the catalog to inspect endpoint support, make a minimal request, and check Usage Logs. Add one feature at a time. Consult API Reference and the selected upstream contract when field support differs."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "guide-video-generation",
+      "group": "Guides",
+      "title": "Video Generation",
+      "description": "Practical guidance constrained by the actual protocol and provider.",
+      "sources": ["router/relay-router.go", "router/video-router.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Workflow",
+          "body": "Choose a configured video task model, submit using its supported surface, preserve the public task ID and poll the corresponding retrieval endpoint. Retrieve content only after successful completion. An enabled native vendor route requires its installed plugin; it is not guaranteed by the Go video route alone."
+        },
+        {
+          "id": "section-2",
+          "title": "Validate with your deployment",
+          "body": "Use the catalog to inspect endpoint support, make a minimal request, and check Usage Logs. Add one feature at a time. Consult API Reference and the selected upstream contract when field support differs."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "guide-errors-retries",
+      "group": "Guides",
+      "title": "Retry & Error Handling",
+      "description": "Practical guidance constrained by the actual protocol and provider.",
+      "sources": ["router/relay-router.go", "controller/relay.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Workflow",
+          "body": "Inspect HTTP status and structured errors. Correct authentication, access and request validation failures before retrying. For rate limiting or transient upstream failure, use bounded retries with exponential backoff and jitter. Do not automatically resubmit an ambiguous asynchronous creation: it can duplicate billable work. Streams may report an error after HTTP headers were sent."
+        },
+        {
+          "id": "section-2",
+          "title": "Validate with your deployment",
+          "body": "Use the catalog to inspect endpoint support, make a minimal request, and check Usage Logs. Add one feature at a time. Consult API Reference and the selected upstream contract when field support differs."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "guide-migrate-openai",
+      "group": "Guides",
+      "title": "Migrate from OpenAI",
+      "description": "Practical guidance constrained by the actual protocol and provider.",
+      "sources": ["router/relay-router.go", "router/relay-router.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Workflow",
+          "body": "Change the SDK base URL to the gateway `/v1` address, use a gateway key, and select a model listed for that key. Begin with Chat Completions or Responses according to actual endpoint support. Files, fine-tuning and provider-exclusive tools are not implied by OpenAI compatibility."
+        },
+        {
+          "id": "section-2",
+          "title": "Validate with your deployment",
+          "body": "Use the catalog to inspect endpoint support, make a minimal request, and check Usage Logs. Add one feature at a time. Consult API Reference and the selected upstream contract when field support differs."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "guide-migrate-anthropic",
+      "group": "Guides",
+      "title": "Migrate from Anthropic",
+      "description": "Practical guidance constrained by the actual protocol and provider.",
+      "sources": ["router/relay-router.go", "router/relay-router.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Workflow",
+          "body": "Use the gateway origin as the Anthropic SDK base URL and a gateway key. Choose an accessible Messages-compatible model. Streaming, tool use, prompt caching and beta headers depend on the channel. Count-tokens is disabled, so clients depending on it need a supported alternative."
+        },
+        {
+          "id": "section-2",
+          "title": "Validate with your deployment",
+          "body": "Use the catalog to inspect endpoint support, make a minimal request, and check Usage Logs. Add one feature at a time. Consult API Reference and the selected upstream contract when field support differs."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "console-overview",
+      "group": "Console",
+      "title": "Overview",
+      "description": "Use the current console menu and workflow.",
+      "sources": [
+        "web/src/features/dashboard/index.tsx",
+        "router/api-router.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Where to find it",
+          "body": "Open **Overview** at `/dashboard`.\n\nUse Dashboard for an overview of consumption and request activity. Model Call Analytics and Flow are separate sections. User Analytics is restricted to administrators."
+        },
+        {
+          "id": "section-2",
+          "title": "Restrictions and troubleshooting",
+          "body": "The server checks your role, group and permissions. Some controls appear only when enabled by platform settings. If a request is rejected, check the visible error and your account status; do not use administrator routes to work around an access restriction."
+        }
+      ],
+      "kind": "article",
+      "console": "/dashboard"
+    },
+    {
+      "slug": "console-keys",
+      "group": "Console",
+      "title": "API Keys",
+      "description": "Use the current console menu and workflow.",
+      "sources": ["web/src/features/keys/index.tsx", "router/api-router.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Where to find it",
+          "body": "Open **API Keys** at `/keys`.\n\nCreate a dedicated key per application. Set the name, group, quota, expiry, model restrictions and allowed IPs as needed. Copy it securely, monitor usage, and disable or delete it when no longer needed. A quota-limited or expired key is rejected before relay."
+        },
+        {
+          "id": "section-2",
+          "title": "Restrictions and troubleshooting",
+          "body": "The server checks your role, group and permissions. Some controls appear only when enabled by platform settings. If a request is rejected, check the visible error and your account status; do not use administrator routes to work around an access restriction."
+        }
+      ],
+      "kind": "article",
+      "console": "/keys"
+    },
+    {
+      "slug": "console-models",
+      "group": "Console",
+      "title": "Model Square",
+      "description": "Use the current console menu and workflow.",
+      "sources": ["web/src/features/pricing/index.tsx", "router/api-router.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Where to find it",
+          "body": "Open **Model Square** at `/pricing`.\n\nSearch the live catalog, check Supported APIs and pricing, then copy the model ID. Visibility depends on the pricing module configuration and usable groups; key-scoped access must still be checked."
+        },
+        {
+          "id": "section-2",
+          "title": "Restrictions and troubleshooting",
+          "body": "The server checks your role, group and permissions. Some controls appear only when enabled by platform settings. If a request is rejected, check the visible error and your account status; do not use administrator routes to work around an access restriction."
+        }
+      ],
+      "kind": "article",
+      "console": "/pricing"
+    },
+    {
+      "slug": "console-usage",
+      "group": "Console",
+      "title": "Usage",
+      "description": "Use the current console menu and workflow.",
+      "sources": [
+        "web/src/features/dashboard/index.tsx",
+        "router/api-router.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Where to find it",
+          "body": "Open **Usage** at `/dashboard/models`.\n\nUse Model Call Analytics to inspect consumption by model and time range. Aggregate charts are different from individual request logs. Match the time range and group when comparing totals."
+        },
+        {
+          "id": "section-2",
+          "title": "Restrictions and troubleshooting",
+          "body": "The server checks your role, group and permissions. Some controls appear only when enabled by platform settings. If a request is rejected, check the visible error and your account status; do not use administrator routes to work around an access restriction."
+        }
+      ],
+      "kind": "article",
+      "console": "/dashboard/models"
+    },
+    {
+      "slug": "console-logs",
+      "group": "Console",
+      "title": "Usage Logs",
+      "description": "Use the current console menu and workflow.",
+      "sources": [
+        "web/src/features/usage-logs/index.tsx",
+        "router/api-router.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Where to find it",
+          "body": "Open **Usage Logs** at `/usage-logs`.\n\nCommon Logs, Drawing Logs and Task Logs expose different request surfaces. Filter by time, model or key, inspect consumption and errors, and use task status for asynchronous work. Administrator details are restricted by server authorization."
+        },
+        {
+          "id": "section-2",
+          "title": "Restrictions and troubleshooting",
+          "body": "The server checks your role, group and permissions. Some controls appear only when enabled by platform settings. If a request is rejected, check the visible error and your account status; do not use administrator routes to work around an access restriction."
+        }
+      ],
+      "kind": "article",
+      "console": "/usage-logs"
+    },
+    {
+      "slug": "console-wallet",
+      "group": "Console",
+      "title": "Wallet",
+      "description": "Use the current console menu and workflow.",
+      "sources": ["web/src/features/wallet/index.tsx", "router/api-router.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Where to find it",
+          "body": "Open **Wallet** at `/wallet`.\n\nReview balance, recharge options and redemption codes. Payment methods and minimum amounts depend on administrator configuration. Verify the order state after a payment before paying again."
+        },
+        {
+          "id": "section-2",
+          "title": "Restrictions and troubleshooting",
+          "body": "The server checks your role, group and permissions. Some controls appear only when enabled by platform settings. If a request is rejected, check the visible error and your account status; do not use administrator routes to work around an access restriction."
+        }
+      ],
+      "kind": "article",
+      "console": "/wallet"
+    },
+    {
+      "slug": "console-payments",
+      "group": "Console",
+      "title": "Recharge / Payment",
+      "description": "Use the current console menu and workflow.",
+      "sources": ["web/src/features/wallet/index.tsx", "router/api-router.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Where to find it",
+          "body": "Open **Recharge / Payment** at `/wallet`.\n\nChoose a configured payment method, enter a valid recharge amount, create the payment order and finish the provider checkout. Gateway callbacks reconcile successful payments. A redirected browser page alone is not proof that balance was credited."
+        },
+        {
+          "id": "section-2",
+          "title": "Restrictions and troubleshooting",
+          "body": "The server checks your role, group and permissions. Some controls appear only when enabled by platform settings. If a request is rejected, check the visible error and your account status; do not use administrator routes to work around an access restriction."
+        }
+      ],
+      "kind": "article",
+      "console": "/wallet"
+    },
+    {
+      "slug": "console-subscription",
+      "group": "Console",
+      "title": "Subscriptions",
+      "description": "Use the current console menu and workflow.",
+      "sources": [
+        "web/src/features/subscriptions/index.tsx",
+        "router/api-router.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Where to find it",
+          "body": "Open **Subscriptions** at `/subscriptions`.\n\nInspect available plans, purchase a plan when offered, and review active subscription limits and expiry. Funding preferences control wallet/subscription usage; group assignment can change with a plan. Availability depends on platform configuration."
+        },
+        {
+          "id": "section-2",
+          "title": "Restrictions and troubleshooting",
+          "body": "The server checks your role, group and permissions. Some controls appear only when enabled by platform settings. If a request is rejected, check the visible error and your account status; do not use administrator routes to work around an access restriction."
+        }
+      ],
+      "kind": "article",
+      "console": "/subscriptions"
+    },
+    {
+      "slug": "console-orders",
+      "group": "Console",
+      "title": "Orders",
+      "description": "Use the current console menu and workflow.",
+      "sources": ["web/src/features/wallet/index.tsx", "router/api-router.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Where to find it",
+          "body": "Open **Orders** at `/wallet`.\n\nOrder and recharge history belong to the Wallet workflow, with subscription orders in Subscriptions. There is no separate Orders route in this frontend. For a pending or disputed payment, keep the order reference and ask an administrator to reconcile it."
+        },
+        {
+          "id": "section-2",
+          "title": "Restrictions and troubleshooting",
+          "body": "The server checks your role, group and permissions. Some controls appear only when enabled by platform settings. If a request is rejected, check the visible error and your account status; do not use administrator routes to work around an access restriction."
+        }
+      ],
+      "kind": "article",
+      "console": "/wallet"
+    },
+    {
+      "slug": "console-profile",
+      "group": "Console",
+      "title": "Profile",
+      "description": "Use the current console menu and workflow.",
+      "sources": ["web/src/features/profile/index.tsx", "router/api-router.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Where to find it",
+          "body": "Open **Profile** at `/profile`.\n\nMaintain account information and preferences from Profile. Sensitive changes can require security verification. Use Security for authentication factors and active-session management."
+        },
+        {
+          "id": "section-2",
+          "title": "Restrictions and troubleshooting",
+          "body": "The server checks your role, group and permissions. Some controls appear only when enabled by platform settings. If a request is rejected, check the visible error and your account status; do not use administrator routes to work around an access restriction."
+        }
+      ],
+      "kind": "article",
+      "console": "/profile"
+    },
+    {
+      "slug": "console-security",
+      "group": "Console",
+      "title": "Security",
+      "description": "Use the current console menu and workflow.",
+      "sources": [
+        "web/src/features/security/index.tsx",
+        "router/api-router.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Where to find it",
+          "body": "Open **Security** at `/security`.\n\nManage supported authentication factors and login sessions. Enable 2FA or a passkey when available, store recovery codes securely, and revoke unfamiliar sessions. A relay API key and a browser session are separate credentials."
+        },
+        {
+          "id": "section-2",
+          "title": "Restrictions and troubleshooting",
+          "body": "The server checks your role, group and permissions. Some controls appear only when enabled by platform settings. If a request is rejected, check the visible error and your account status; do not use administrator routes to work around an access restriction."
+        }
+      ],
+      "kind": "article",
+      "console": "/security"
+    },
+    {
+      "slug": "admin-overview",
+      "group": "Administration",
+      "title": "Administration",
+      "description": "Operate the platform through its existing administrator tools.",
+      "sources": ["router/channel-router.go", "router/api-router.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Workflow",
+          "body": "Platform operations are separate from developer API access. Begin with a channel and valid upstream credentials, configure model names and groups, test the channel, then set pricing and routing. Admin/root permissions and delegated resource permissions govern each operation."
+        },
+        {
+          "id": "section-2",
+          "title": "Verify before enabling traffic",
+          "body": "Save the intended configuration, test a supported request and inspect the relevant logs. Confirm group access, pricing and channel selection together. A channel test is not a certification of every model, modality or endpoint."
+        }
+      ],
+      "kind": "article",
+      "console": "/channels"
+    },
+    {
+      "slug": "admin-providers",
+      "group": "Administration",
+      "title": "Providers / Channels",
+      "description": "Operate the platform through its existing administrator tools.",
+      "sources": [
+        "web/src/features/channels/constants.ts",
+        "router/api-router.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Workflow",
+          "body": "Open Channels and add a supported provider type. Configure its upstream Base URL, credentials, group, models and optional task plugin. Fetch models when the provider supports discovery, review the selection, then test a supported request. Test failures and provider balances depend on the adaptor; neither is fabricated by documentation."
+        },
+        {
+          "id": "section-2",
+          "title": "Verify before enabling traffic",
+          "body": "Save the intended configuration, test a supported request and inspect the relevant logs. Confirm group access, pricing and channel selection together. A channel test is not a certification of every model, modality or endpoint."
+        }
+      ],
+      "kind": "article",
+      "console": "/channels"
+    },
+    {
+      "slug": "admin-channel-config",
+      "group": "Administration",
+      "title": "Channel Configuration",
+      "description": "Operate the platform through its existing administrator tools.",
+      "sources": ["model/channel.go", "router/api-router.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Workflow",
+          "body": "Client model names are exposed by channel abilities. Model mapping converts a client-facing name to an upstream name. Priority chooses routing tiers; weight affects selection within a tier. Check enabled keys, group access, request/header overrides and proxy configuration before enabling traffic. Upstream keys remain administrator-only."
+        },
+        {
+          "id": "section-2",
+          "title": "Verify before enabling traffic",
+          "body": "Save the intended configuration, test a supported request and inspect the relevant logs. Confirm group access, pricing and channel selection together. A channel test is not a certification of every model, modality or endpoint."
+        }
+      ],
+      "kind": "article",
+      "console": "/channels"
+    },
+    {
+      "slug": "admin-models",
+      "group": "Administration",
+      "title": "Models",
+      "description": "Operate the platform through its existing administrator tools.",
+      "sources": [
+        "web/src/features/models/section-registry.tsx",
+        "router/api-router.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Workflow",
+          "body": "The current Models workspace has Metadata, Vendors and Deployments sections. Metadata and vendor descriptions organize the catalog; enabled channel abilities determine callable names. Do not interpret a metadata entry as a deployed model. Review model mappings on Channels and deployment group access before publishing."
+        },
+        {
+          "id": "section-2",
+          "title": "Verify before enabling traffic",
+          "body": "Save the intended configuration, test a supported request and inspect the relevant logs. Confirm group access, pricing and channel selection together. A channel test is not a certification of every model, modality or endpoint."
+        }
+      ],
+      "kind": "article",
+      "console": "/models"
+    },
+    {
+      "slug": "admin-routing",
+      "group": "Administration",
+      "title": "Routing",
+      "description": "Operate the platform through its existing administrator tools.",
+      "sources": ["middleware/distributor.go", "router/api-router.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Workflow",
+          "body": "Routing matches requested model and group to enabled channel abilities. Channel priority and weight affect selection; retry and health settings affect fallback. Configure **System Settings → Request Policies → Sessions and retries / Channel health** for the existing policies. There is no independent rule-builder route implied by this documentation."
+        },
+        {
+          "id": "section-2",
+          "title": "Verify before enabling traffic",
+          "body": "Save the intended configuration, test a supported request and inspect the relevant logs. Confirm group access, pricing and channel selection together. A channel test is not a certification of every model, modality or endpoint."
+        }
+      ],
+      "kind": "article",
+      "console": "/channels"
+    },
+    {
+      "slug": "admin-pricing",
+      "group": "Administration",
+      "title": "Model Pricing",
+      "description": "Operate the platform through its existing administrator tools.",
+      "sources": [
+        "web/src/features/system-settings/billing/section-registry.tsx",
+        "router/api-router.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Workflow",
+          "body": "Use the Model Pricing editor for model-level expressions and provider overrides. Expressions may price tokens, fixed requests or task usage according to the actual schema. Provider cost synchronization, when supported, is a separate administrator workflow. Preview changes and resolve expected-version conflicts before saving."
+        },
+        {
+          "id": "section-2",
+          "title": "Verify before enabling traffic",
+          "body": "Save the intended configuration, test a supported request and inspect the relevant logs. Confirm group access, pricing and channel selection together. A channel test is not a certification of every model, modality or endpoint."
+        }
+      ],
+      "kind": "article",
+      "console": "/system-settings/billing/model-pricing"
+    },
+    {
+      "slug": "admin-groups",
+      "group": "Administration",
+      "title": "Groups / Roles",
+      "description": "Operate the platform through its existing administrator tools.",
+      "sources": ["service/authz/permission.go", "router/api-router.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Workflow",
+          "body": "Group Pricing controls usable groups and price multipliers. User role and delegated permissions govern administration, independently of billing groups. Auto-group selection follows configured routing and usable-group rules; a group label alone does not grant an administrative permission."
+        },
+        {
+          "id": "section-2",
+          "title": "Verify before enabling traffic",
+          "body": "Save the intended configuration, test a supported request and inspect the relevant logs. Confirm group access, pricing and channel selection together. A channel test is not a certification of every model, modality or endpoint."
+        }
+      ],
+      "kind": "article",
+      "console": "/system-settings/billing/group-pricing"
+    },
+    {
+      "slug": "admin-users",
+      "group": "Administration",
+      "title": "Users",
+      "description": "Operate the platform through its existing administrator tools.",
+      "sources": ["router/api-router.go", "router/api-router.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Workflow",
+          "body": "Review users, account status, role and quota through Users. Sensitive management actions can require stronger permissions or verification. Account security changes can invalidate login sessions; subscription group transitions do not intentionally log users out."
+        },
+        {
+          "id": "section-2",
+          "title": "Verify before enabling traffic",
+          "body": "Save the intended configuration, test a supported request and inspect the relevant logs. Confirm group access, pricing and channel selection together. A channel test is not a certification of every model, modality or endpoint."
+        }
+      ],
+      "kind": "article",
+      "console": "/users"
+    },
+    {
+      "slug": "admin-subscriptions",
+      "group": "Administration",
+      "title": "Subscriptions",
+      "description": "Operate the platform through its existing administrator tools.",
+      "sources": [
+        "web/src/features/subscriptions/index.tsx",
+        "router/api-router.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Workflow",
+          "body": "Manage plans, validity, limits and subscription orders using the administrator controls in Subscriptions. Validate plan access groups and funding preference before offering the plan. Availability and visibility follow the current subscription APIs and role checks."
+        },
+        {
+          "id": "section-2",
+          "title": "Verify before enabling traffic",
+          "body": "Save the intended configuration, test a supported request and inspect the relevant logs. Confirm group access, pricing and channel selection together. A channel test is not a certification of every model, modality or endpoint."
+        }
+      ],
+      "kind": "article",
+      "console": "/subscriptions"
+    },
+    {
+      "slug": "admin-finance",
+      "group": "Administration",
+      "title": "Finance",
+      "description": "Operate the platform through its existing administrator tools.",
+      "sources": ["router/api-router.go", "router/api-router.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Workflow",
+          "body": "Finance workflows are split across Wallet, subscription orders and user top-up management APIs. Reconcile pending orders using recorded provider events and order identifiers. This frontend has no separate Finance menu; documentation does not introduce one."
+        },
+        {
+          "id": "section-2",
+          "title": "Verify before enabling traffic",
+          "body": "Save the intended configuration, test a supported request and inspect the relevant logs. Confirm group access, pricing and channel selection together. A channel test is not a certification of every model, modality or endpoint."
+        }
+      ],
+      "kind": "article",
+      "console": "/wallet"
+    },
+    {
+      "slug": "admin-logs",
+      "group": "Administration",
+      "title": "Logs",
+      "description": "Operate the platform through its existing administrator tools.",
+      "sources": [
+        "web/src/features/usage-logs/section-registry.tsx",
+        "router/api-router.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Workflow",
+          "body": "Use Common, Drawing and Task Logs to investigate requests and settlement. Filter by model, user, channel and time when authorized. Log maintenance settings control retention and cleanup; exporting or deleting logs is governed by permissions."
+        },
+        {
+          "id": "section-2",
+          "title": "Verify before enabling traffic",
+          "body": "Save the intended configuration, test a supported request and inspect the relevant logs. Confirm group access, pricing and channel selection together. A channel test is not a certification of every model, modality or endpoint."
+        }
+      ],
+      "kind": "article",
+      "console": "/usage-logs"
+    },
+    {
+      "slug": "admin-audit",
+      "group": "Administration",
+      "title": "Audit",
+      "description": "Operate the platform through its existing administrator tools.",
+      "sources": [
+        "web/src/routes/_authenticated/usage-logs/audit.tsx",
+        "router/api-router.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Workflow",
+          "body": "Use the audit view for operational and sensitive-account events. Investigate using non-secret identifiers, actor, action and result. Do not include upstream credentials, verification codes or usable tokens in incident reports."
+        },
+        {
+          "id": "section-2",
+          "title": "Verify before enabling traffic",
+          "body": "Save the intended configuration, test a supported request and inspect the relevant logs. Confirm group access, pricing and channel selection together. A channel test is not a certification of every model, modality or endpoint."
+        }
+      ],
+      "kind": "article",
+      "console": "/usage-logs/audit"
+    },
+    {
+      "slug": "admin-system",
+      "group": "Administration",
+      "title": "System Settings",
+      "description": "Operate the platform through its existing administrator tools.",
+      "sources": [
+        "web/src/components/layout/config/system-settings.config.ts",
+        "router/api-router.go"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Workflow",
+          "body": "Settings are grouped into Site, Billing, Models, Operations, Content, Request Policies, Authentication and Security. Use the existing section navigation. Some settings are root-only. Preserve the configured public URL, Docs override, payment callback origins and provider credentials when changing presentation settings."
+        },
+        {
+          "id": "section-2",
+          "title": "Verify before enabling traffic",
+          "body": "Save the intended configuration, test a supported request and inspect the relevant logs. Confirm group access, pricing and channel selection together. A channel test is not a certification of every model, modality or endpoint."
+        }
+      ],
+      "kind": "article",
+      "console": "/system-settings"
+    },
+    {
+      "slug": "api-reference",
+      "group": "Reference",
+      "title": "API Reference",
+      "description": "Generated route inventory joined to matching checked-in OpenAPI schemas.",
+      "sources": [
+        "router/relay-router.go",
+        "router/api-router.go",
+        "pkg/jsplugin/routing.go",
+        "docs/openapi/relay.json",
+        "docs/openapi/api.json"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Source and coverage",
+          "body": "Methods and paths are extracted from Go router syntax and the host protocol registry. Only matching OpenAPI operations contribute schemas. Routes registered as unimplemented and stale OpenAPI paths are excluded. Native plugin routes depend on installed plugins and are outside this static route inventory."
+        },
+        {
+          "id": "section-2",
+          "title": "Authentication and schemas",
+          "body": "Each operation shows its declared middleware. Relay uses API keys; management routes may require user, administrator, root, resource permissions or security verification. Parameters, request and response schemas are shown when a matching checked-in OpenAPI operation exists. Examples and actual responses are not fabricated."
+        }
+      ],
+      "kind": "reference"
+    },
+    {
+      "slug": "headers",
+      "group": "Reference",
+      "title": "Request Headers",
+      "description": "Use protocol-specific headers without confusing client keys with channel credentials.",
+      "sources": ["middleware/auth.go", "relay/channel/claude/adaptor.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Headers",
+          "body": "Send `Authorization: Bearer <NEW_API_KEY>` for relay calls and `Content-Type: application/json` for JSON requests. Anthropic also uses `x-api-key` and its protocol version header. Gemini accepts `x-goog-api-key`. Multipart clients should let the HTTP library generate the boundary."
+        },
+        {
+          "id": "section-2",
+          "title": "Forwarded and administrative headers",
+          "body": "Channel configuration controls upstream header overrides. Do not send provider credentials from a browser or assume arbitrary headers bypass server authorization. Request conditions can influence configured pricing, so consult Billing for the model rather than treating beta headers as universally free."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "error-codes",
+      "group": "Reference",
+      "title": "Error Codes",
+      "description": "Generated gateway error constants with no invented status mapping.",
+      "sources": ["relaykit/types/error.go", "middleware/auth.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Interpret errors",
+          "body": "The index below is generated from ErrorCode declarations. HTTP status depends on the call site, adaptor and upstream response; there is no universal constant-to-status map. Inspect both status and `error.code` / protocol-specific error fields."
+        },
+        {
+          "id": "section-2",
+          "title": "Suggested action",
+          "body": "For request errors, correct the request shape and endpoint. For access errors, check key restrictions and account status. For pricing or channel errors, ask the administrator to review configuration. For upstream errors, inspect the provider response and avoid unbounded retries."
+        }
+      ],
+      "kind": "errors"
+    },
+    {
+      "slug": "rate-limits",
+      "group": "Reference",
+      "title": "Rate Limits",
+      "description": "Limits depend on deployment settings and user group.",
+      "sources": [
+        "middleware/model-rate-limit.go",
+        "middleware/rate-limit.go",
+        "web/src/features/system-settings/security/section-registry.tsx"
+      ],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Configured limits",
+          "body": "Model request limits can track total attempts and successful requests within configured windows. Group-specific limits can override global model limits. API, login and email paths also have their own protection. No fixed public RPM/TPM value is implied by the gateway."
+        },
+        {
+          "id": "section-2",
+          "title": "When limited",
+          "body": "Check the actual HTTP response, wait before retrying and use bounded backoff. Some limit paths return a status without a JSON body; do not assume every 429 contains an OpenAI error object. Administrators manage these controls under Security → Rate Limiting."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "webhooks",
+      "group": "Reference",
+      "title": "Payment Webhooks",
+      "description": "Inbound payment callbacks are distinct from asynchronous AI task polling.",
+      "sources": ["router/api-router.go", "router/task-router.go"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Payment callbacks",
+          "body": "The gateway registers provider-specific payment callback routes, including Stripe, Creem and configured Waffo integrations. Configure the matching payment provider with the deployment URL and its required verification settings. These routes are not a generic task completion callback service."
+        },
+        {
+          "id": "section-2",
+          "title": "Task completion",
+          "body": "AI task completion is handled by polling and protocol retrieval unless a particular installed plugin explicitly provides a native mechanism. Do not expect a generic outbound webhook from the presence of payment webhook routes."
+        }
+      ],
+      "kind": "article"
+    },
+    {
+      "slug": "changelog",
+      "group": "Reference",
+      "title": "Changelog",
+      "description": "Find release history without synthesizing changes for this deployment.",
+      "sources": ["VERSION", "README.en.md"],
+      "sections": [
+        {
+          "id": "section-1",
+          "title": "Release history",
+          "body": "The repository VERSION identifies its release base. Local customizations may differ from upstream. Consult [New API releases](https://github.com/QuantumNous/new-api/releases) and the deployment Git history for the actual change set. This documentation does not generate release claims from model names or marketing pages."
+        }
+      ],
+      "kind": "article"
+    }
+  ]
+}

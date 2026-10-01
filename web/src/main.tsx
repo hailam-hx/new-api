@@ -67,12 +67,20 @@ const rootElement = document.querySelector<HTMLElement>('#root')
 if (!rootElement) {
   throw new Error('Root element not found')
 }
+if (rootElement.hasAttribute('data-docs-prerender')) {
+  for (const tag of document.head.querySelectorAll('[data-docs-head]')) {
+    tag.remove()
+  }
+  document.title = String(readCachedStatus()?.system_name || 'New API')
+}
 // Set document.title and favicon from cached status, then refresh from network
 ;(function initSystemBranding() {
   try {
     if (typeof window === 'undefined' || typeof document === 'undefined') return
     const apply = (name: string) => {
-      document.title = name
+      if (!document.head.querySelector('[data-new-api-docs-meta]')) {
+        document.title = name
+      }
       const metaTitle = document.querySelector(
         'meta[name="title"]'
       ) as HTMLMetaElement | null
@@ -100,7 +108,7 @@ if (!rootElement) {
     /* empty */
   }
 })()
-if (!rootElement.innerHTML) {
+if (!rootElement.innerHTML || rootElement.hasAttribute('data-docs-prerender')) {
   const root = ReactDOM.createRoot(rootElement)
   root.render(
     <StrictMode>
