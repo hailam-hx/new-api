@@ -672,6 +672,58 @@ it('shows task tier ranges in the schema unit and converts site currency only on
   expect(button).not.toHaveTextContent('1M tokens')
 })
 
+it.each(['single', 'mixed', 'stale'] as const)(
+  'shows configured provider pricing in the Configured filter with %s providers',
+  async (scenario) => {
+    const variant = {
+      plugin_key: 'video-provider',
+      plugin_name: 'Video provider',
+      usage_schema: {
+        seconds: { type: 'number' as const, unit: 'second' as const },
+      },
+      configured: 'tier("video", u("seconds") * 0.4)',
+      effective: 'tier("video", u("seconds") * 0.4)',
+      compatible: true,
+    }
+    const variants = [variant]
+    if (scenario !== 'single') {
+      variants.push({
+        ...variant,
+        plugin_key: 'other-provider',
+        plugin_name: 'Other provider',
+        configured: 'tier("invalid", u("missing") * 9)',
+        effective: 'tier("invalid", u("missing") * 9)',
+        compatible: false,
+        ...(scenario === 'stale' ? { stale: true } : {}),
+      })
+    }
+    await renderList([channel], {
+      initialUrl: '/models/metadata?pricing=%5B%22configured%22%5D',
+      pricing: [
+        {
+          model_name: channel.model_name,
+          version: 'v1',
+          configured: {},
+          effective: {},
+          plugin_variants: variants,
+        },
+      ],
+    })
+    const button = screen.getByRole('button', {
+      name: 'View pricing for channel-only',
+    })
+    expect(button).toHaveTextContent('0.4/s')
+    expect(button).not.toHaveTextContent('Unset price')
+    expect(button).not.toHaveTextContent('9/s')
+    if (scenario === 'mixed') {
+      expect(button).toHaveTextContent('2 providers')
+      expect(button).toHaveTextContent('Not configured for some providers')
+    } else {
+      expect(button).not.toHaveTextContent('providers')
+    }
+  }
+)
+
 it('opens the effective expression breakdown from the price without creating metadata', async () => {
   const expression =
     '(len <= 200000 ? tier("standard", p * 3 + c * 15 + cr * 0.3) : tier("long", p * 6 + c * 22.5 + cr * 0.6)) * (header("x-priority") == "high" ? 2 : 1)'

@@ -65,7 +65,12 @@ export type LegacyBillingDetails = {
 
 export function modelPricingDisplay(
   entry: Pick<ModelPricingEntry, 'model_name' | 'effective' | 'usage_schema'> &
-    Partial<Pick<ModelPricingEntry, 'configured' | 'cache_write_mode'>>
+    Partial<
+      Pick<
+        ModelPricingEntry,
+        'configured' | 'cache_write_mode' | 'plugin_variants'
+      >
+    >
 ): PricingModel {
   const values = entry.effective
   return {
@@ -113,6 +118,21 @@ export function modelPricingDisplay(
         ? values['billing_setting.billing_expr']
         : undefined,
     billing_usage_schema: entry.usage_schema,
+    billing_plugin_variants: entry.plugin_variants
+      ?.filter((variant) => !variant.stale)
+      .map((variant) => ({
+        plugin_key: variant.plugin_key,
+        plugin_name: variant.plugin_name,
+        icon: variant.icon,
+        billing_mode:
+          variant.configured ||
+          values['billing_setting.billing_mode'] === 'tiered_expr'
+            ? 'tiered_expr'
+            : 'ratio',
+        billing_expr: variant.compatible ? variant.effective : '',
+        billing_usage_schema: variant.usage_schema,
+        billing_usage_examples: variant.usage_examples,
+      })),
   }
 }
 
