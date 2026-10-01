@@ -81,10 +81,6 @@ func Plan(items []Item, config model.DFLOPConfig, entries []model.ModelPricingEn
 					}
 					variants[pluginKey] = item.TaskExpression
 					proposed[billing_setting.PluginBillingExprOption] = variants
-					if item.ModelID == "voice-tts-pro" && pluginKey == "dflop-tts" {
-						status, reasonCode = UnsupportedMapping, "NO_ASYNC_TTS_BINDING"
-						reason = "durable submit intent and complete production replay are not verified"
-					}
 				} else {
 					reason = "task plugin usage facts do not match DFLOP pricing requirements"
 				}

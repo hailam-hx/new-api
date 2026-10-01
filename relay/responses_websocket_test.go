@@ -16,6 +16,7 @@ import (
 	appdto "github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -679,4 +680,54 @@ func TestResponsesWSErrorAttribution(t *testing.T) {
 			assert.Equal(t, tc.controlError, controlError)
 		})
 	}
+}
+
+func TestDFLOPResponsesWebsocketRejectsBeforePayloadOrDial(t *testing.T) {
+	for _, expr := range []string{"", `tier("dflop_chat_standard_responses", p * 2 + c * 10)`} {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+		info := &relaycommon.RelayInfo{OriginModelName: "gpt-6-sol", ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://api.dflop.top", UpstreamModelName: "gpt-6-sol"}}
+		if expr != "" {
+			info.TieredBillingSnapshot = &billingexpr.BillingSnapshot{ExprString: expr}
+		}
+		payload, apiErr := buildResponsesWSCreatePayload(c, info, dto.OpenAIResponsesRequest{Model: "gpt-6-sol"}, nil, "")
+		require.NotNil(t, apiErr)
+		assert.Contains(t, apiErr.Error(), "DFLOP_RESPONSES_WEBSOCKET_PROFILE_UNVERIFIED")
+		assert.True(t, types.IsSkipRetryError(apiErr))
+		assert.Nil(t, payload)
+	}
+	t.Run("mapped canonical DFLOP model", func(t *testing.T) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"site-alias","input":"hi"}`))
+		c.Request.Header.Set("Content-Type", "application/json")
+		common.SetContextKey(c, constant.ContextKeyOriginalModel, "site-alias")
+		common.SetContextKey(c, constant.ContextKeyChannelType, constant.ChannelTypeOpenAI)
+		common.SetContextKey(c, constant.ContextKeyChannelBaseUrl, "https://api.dflop.top")
+		common.SetContextKey(c, constant.ContextKeyChannelSetting, dto.ChannelSettings{PassThroughBodyEnabled: true})
+		c.Set("model_mapping", `{"site-alias":"gpt-6-sol"}`)
+		request := dto.OpenAIResponsesRequest{Model: "site-alias"}
+		info := relaycommon.GenRelayInfoResponses(c, &request)
+		payload, apiErr := buildResponsesWSCreatePayload(c, info, request, nil, "")
+		require.NotNil(t, apiErr)
+		assert.Contains(t, apiErr.Error(), "DFLOP_RESPONSES_WEBSOCKET_PROFILE_UNVERIFIED")
+		assert.Nil(t, payload)
+	})
+
+	t.Run("final parameter override to canonical GPT", func(t *testing.T) {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"site-alias","input":"hi"}`))
+		c.Request.Header.Set("Content-Type", "application/json")
+		common.SetContextKey(c, constant.ContextKeyOriginalModel, "site-alias")
+		common.SetContextKey(c, constant.ContextKeyChannelType, constant.ChannelTypeOpenAI)
+		common.SetContextKey(c, constant.ContextKeyChannelBaseUrl, "https://api.dflop.top")
+		common.SetContextKey(c, constant.ContextKeyChannelParamOverride, map[string]any{"model": "gpt-6-sol"})
+		request := dto.OpenAIResponsesRequest{Model: "site-alias", Input: common.RawMessage(`"hi"`)}
+		info := relaycommon.GenRelayInfoResponses(c, &request)
+		payload, apiErr := buildResponsesWSCreatePayload(c, info, request, nil, "")
+		require.NotNil(t, apiErr)
+		assert.Contains(t, apiErr.Error(), "DFLOP_RESPONSES_WEBSOCKET_PROFILE_UNVERIFIED")
+		assert.Nil(t, payload)
+		assert.Equal(t, "site-alias", info.GetUpstreamModelName(), "the final override does not mutate the pinned upstream identity")
+	})
+
 }

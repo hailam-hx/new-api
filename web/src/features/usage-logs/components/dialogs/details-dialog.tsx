@@ -1157,7 +1157,18 @@ export function DetailsDialog(props: DetailsDialogProps) {
         )}
 
         {/* Billing breakdown (consume type) */}
-        {isConsume && other && !isViolation && (
+        {other?.billing_state === 'QUARANTINED' && (
+          <DetailSection
+            label={t('Billing quarantined')}
+            variant='danger'
+            icon={<AlertTriangle className='size-3.5' aria-hidden='true' />}
+          >
+            <p className='text-xs'>
+              {t('Reservation retained; settlement requires manual review')}
+            </p>
+          </DetailSection>
+        )}
+        {isConsume && other && !isViolation && other.billing_state !== 'QUARANTINED' && (
           <BillingBreakdown
             log={props.log}
             other={other}
@@ -1166,7 +1177,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
         )}
 
         {/* Tiered pricing breakdown (when billing_mode is tiered_expr) */}
-        {isTieredBilling && other?.expr_b64 && (
+        {isTieredBilling && other?.expr_b64 && other.billing_state !== 'QUARANTINED' && (
           <DetailSection label={t('Dynamic Pricing')}>
             {other.image_count !== undefined && (
               <DetailRow

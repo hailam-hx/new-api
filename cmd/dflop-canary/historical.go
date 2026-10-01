@@ -394,7 +394,9 @@ func correlateLocalHistory(report *dflop.HistoricalReport, channelID int) ([]dfl
 	correlations := []dflop.RuntimeBinding{}
 	for _, capture := range report.Captures {
 		localLog := strings.HasPrefix(capture.EvidenceID, "local-log:")
-		if !strings.HasPrefix(capture.EvidenceID, "task-poll:") && !localLog {
+		taskPoll := strings.HasPrefix(capture.EvidenceID, "task-poll:")
+		providerLog := strings.HasPrefix(capture.EvidenceID, "log:") || strings.HasPrefix(capture.EvidenceID, "technical:")
+		if !taskPoll && !localLog && !providerLog {
 			continue
 		}
 		id := strings.TrimPrefix(capture.EvidenceID, "task-poll:")
@@ -403,9 +405,16 @@ func correlateLocalHistory(report *dflop.HistoricalReport, channelID int) ([]dfl
 			return nil, status, err
 		}
 		requestID := requests[id]
-		if localLog {
-			id = ""
+		if localLog || providerLog {
+			id, _ = row["task_id"].(string)
 			requestID, _ = row["request_id"].(string)
+		}
+		if taskPoll {
+			returnedID, _ := row["id"].(string)
+			returnedTaskID, _ := row["task_id"].(string)
+			if returnedID == "" && returnedTaskID == "" || returnedID != "" && returnedID != id || returnedTaskID != "" && returnedTaskID != id {
+				continue
+			}
 		}
 		binding := dflop.CorrelateRuntimeBinding(id, requestID, capture.Model, channelID, records, capture.GatewayTrace)
 		if returned, ok := row["model"].(string); ok && returned != "" && returned != capture.Model {

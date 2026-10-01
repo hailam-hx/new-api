@@ -167,7 +167,11 @@ func channelMatchesExpectedTaskPlugin(c *gin.Context, channel *model.Channel, ex
 		return channel.Type != constant.ChannelTypeTaskPlugin
 	}
 	if channel.Type == constant.ChannelTypeTaskPlugin || channel.Type == constant.ChannelTypeNewAPI {
-		return channel.GetSetting().BindsTaskPlugin(expected)
+		modelName := ""
+		if c != nil {
+			modelName = c.GetString("resolved_task_model")
+		}
+		return channel.BindsTaskPluginForModel(expected, modelName, nil)
 	}
 	if channel.Type == constant.ChannelTypeOpenAI && expected == "dflop-tts" {
 		return channel.GetSetting().BindsTaskPlugin(expected)
@@ -214,7 +218,7 @@ func pinnedEndpointCandidateForChannel(c *gin.Context, channel *model.Channel, e
 			// candidate in generation order executes, so the billing provider
 			// depends only on the channel and the request, never on which
 			// channels an earlier retry attempt happened to try.
-			if selected.Plugin == nil && setting.BindsTaskPlugin(candidate.Plugin.Meta.Key) {
+			if selected.Plugin == nil && channel.BindsTaskPluginForModel(candidate.Plugin.Meta.Key, candidate.Model, pinned.Generation) {
 				selected = candidate
 			}
 			continue

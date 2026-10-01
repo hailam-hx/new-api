@@ -325,13 +325,31 @@ func RecoverHistoricalEvidence(ctx context.Context, transport HistoricalTranspor
 			continue
 		}
 		detailPath := "/v1/logs/" + id
-		body, status, err := transport.Read(ctx, http.MethodGet, detailPath, nil)
+		body, status, err := transport.Read(ctx, http.MethodGet, detailPath, url.Values{"scope": {options.Scope}})
 		detailRequest := HistoricalRequest{Method: http.MethodGet, Path: detailPath, HTTPStatus: status, Pages: 1, Complete: err == nil}
 		if err != nil {
 			detailRequest.Error = err.Error()
+			if options.Scope == "account" && status == http.StatusForbidden {
+				detailRequest.Error = "ACCOUNT_SCOPE_PERMISSION_REQUIRED"
+			}
 		} else {
 			var detail map[string]any
 			if common.Unmarshal(body, &detail) == nil {
+				contradictory := false
+				for _, field := range []string{"id", "request_id", "task_id", "model"} {
+					expected, actual := historicalID(row[field]), historicalID(detail[field])
+					if actual != "" && expected != "" && actual != expected {
+						contradictory = true
+						break
+					}
+				}
+				if contradictory {
+					modelReport.Notes = append(modelReport.Notes, "TECHNICAL_LOG_IDENTITY_MISMATCH")
+					detailRequest.Complete = false
+					detailRequest.Error = "TECHNICAL_LOG_IDENTITY_MISMATCH"
+					report.Requests = append(report.Requests, detailRequest)
+					continue
+				}
 				detailRequest.Records = 1
 				if detail["request_id"] == nil {
 					detail["request_id"] = row["request_id"]
@@ -434,6 +452,16 @@ func RecoverHistoricalEvidence(ctx context.Context, transport HistoricalTranspor
 			modelReport.Notes = append(modelReport.Notes, "TERMINAL_MODEL_MISMATCH")
 			continue
 		}
+		returnedID := historicalID(row["id"])
+		returnedTaskID := historicalID(row["task_id"])
+		if returnedID == "" && returnedTaskID == "" {
+			modelReport.Notes = append(modelReport.Notes, "TERMINAL_TASK_ID_MISSING")
+			continue
+		}
+		if returnedID != "" && returnedID != id || returnedTaskID != "" && returnedTaskID != id {
+			modelReport.Notes = append(modelReport.Notes, "TERMINAL_TASK_ID_MISMATCH")
+			continue
+		}
 		var replay *HistoricalReplay
 		if options.Replay != nil {
 			result, replayErr := options.Replay(ctx, itemByModel[modelName], body)
@@ -453,7 +481,9 @@ func RecoverHistoricalEvidence(ctx context.Context, transport HistoricalTranspor
 	}
 	for i := range report.Models {
 		row := &report.Models[i]
-		if row.HistoricalCallsFound == 0 {
+		if options.Scope == "account" && report.Requests[0].Error == "ACCOUNT_SCOPE_PERMISSION_REQUIRED" {
+			row.Notes = append(row.Notes, "ACCOUNT_SCOPE_PERMISSION_REQUIRED")
+		} else if row.HistoricalCallsFound == 0 {
 			row.Notes = append(row.Notes, "NO_HISTORICAL_EVIDENCE")
 		}
 		if row.HistoricalCallsFound > 0 {
@@ -582,7 +612,12 @@ func captureHistoricalRecord(report *HistoricalReport, modelReport *HistoricalMo
 	if err != nil {
 		return err
 	}
-	trace, _ := row["request_id"].(string)
+	// Only original execution trace fields establish trace correlation.
+	// The request ID and the current GET response trace identify different things.
+	trace, _ := row["x-gateway-trace"].(string)
+	if trace == "" {
+		trace, _ = row["trace_id"].(string)
+	}
 	report.Captures = append(report.Captures, HistoricalCapture{EvidenceID: id, EvidenceClass: class, SourcePath: path, Model: modelReport.Model, CapturedAt: time.Now().UTC(), CatalogHash: report.Options.CatalogHash, CaptureHash: fmt.Sprintf("%x", sha256.Sum256(redacted)), RedactionVersion: "2", GatewayTrace: trace, Response: redacted, Replay: replay})
 	modelReport.EvidenceIDs = append(modelReport.EvidenceIDs, id)
 	var safe map[string]any

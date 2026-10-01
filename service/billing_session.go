@@ -101,6 +101,7 @@ func (s *BillingSession) Settle(actualQuota int) error {
 	}
 	s.settled = true
 	if tokenErr != nil {
+		s.quarantined = s.reservationLogID != 0
 		return tokenErr
 	}
 	return s.transitionReservation("SETTLED", nil)
@@ -220,7 +221,15 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 		return nil
 	}
 
-	if err := s.reserveFunding(delta, imageRequest || s.relayInfo.ChannelMeta != nil && dflop.DFLOPCacheContractApplies(s.relayInfo.ChannelBaseUrl, s.relayInfo.UpstreamModelName)); err != nil {
+	strictReservation := imageRequest
+	if s.relayInfo != nil && s.relayInfo.ChannelMeta != nil {
+		expression := ""
+		if s.relayInfo.TieredBillingSnapshot != nil {
+			expression = s.relayInfo.TieredBillingSnapshot.ExprString
+		}
+		strictReservation = strictReservation || dflop.DFLOPCacheContractApplies(s.relayInfo.ChannelBaseUrl, s.relayInfo.UpstreamModelName) || dflop.DFLOPEndpointModelApplies(s.relayInfo.ChannelBaseUrl, s.relayInfo.GetUpstreamModelName()) || dflop.DFLOPEndpointProfileApplies(s.relayInfo.ChannelBaseUrl, expression)
+	}
+	if err := s.reserveFunding(delta, strictReservation); err != nil {
 		return err
 	}
 	if err := s.reserveToken(delta); err != nil {
@@ -246,6 +255,13 @@ func (s *BillingSession) Reserve(targetQuota int) error {
 // 任一步骤失败时原子回滚已完成的步骤。
 func (s *BillingSession) preConsume(c *gin.Context, quota int) *types.NewAPIError {
 	effectiveQuota := quota
+	if DFLOPTaskReservationApplies(s.relayInfo) {
+		s.reservationLogID = s.relayInfo.DFLOPTaskReservationLogID
+		s.reservationState = "CLAIMED"
+		if wallet, ok := s.funding.(*WalletFunding); ok {
+			wallet.durable = true
+		}
+	}
 
 	// ---- 信任额度旁路 ----
 	if s.shouldTrust(c) {

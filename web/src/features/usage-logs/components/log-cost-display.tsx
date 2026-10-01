@@ -80,6 +80,13 @@ function ToolSurchargeMarker() {
 
 export function LogCostDisplay(props: LogCostDisplayProps) {
   const { t } = useTranslation()
+  if (props.other?.billing_state === 'QUARANTINED') {
+    return (
+      <StatusBadge type='badge' variant='danger' size='lg' copyable={false}>
+        {t('Billing quarantined')}
+      </StatusBadge>
+    )
+  }
   const isSubscription = props.other?.billing_source === 'subscription'
   const showToolSurcharge = hasToolSurcharge(props.other)
   const quota = isSubscription

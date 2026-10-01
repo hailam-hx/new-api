@@ -1,0 +1,424 @@
+[
+  {
+    "id": "SEEDANCE_LITE_UPSCALE",
+    "model/profile": [
+      "doubao-seedance-2.0-fast-lite",
+      "doubao-seedance-2.0-lite",
+      "doubao-seedance-2.0-mini-lite",
+      "doubao-seedance-2.5-lite"
+    ],
+    "authenticated_catalog_value": {
+      "video_second_stage_per_second": {
+        "doubao-seedance-2.0-fast-lite": null,
+        "doubao-seedance-2.0-lite": null,
+        "doubao-seedance-2.0-mini-lite": null,
+        "doubao-seedance-2.5-lite": null
+      }
+    },
+    "public_docs_value": "Lite token charge plus delivery-resolution second-stage/upscale component; docs amount is not an authenticated account price",
+    "observed_runtime_value": null,
+    "severity": "BLOCKING",
+    "production_behavior": "KEEP_BLOCKED; reject unsupported profile before outbound; unexpected/missing usage remains pending",
+    "provider_question": [
+      "What are the effective account-specific second-stage/upscale rates for 720p and 1080p? Please expose both in /v1/catalog and specify exact field names.",
+      "Is settlement always token_rate(selected delivery tier/input mode) × usage.completion_tokens + second_stage_rate(delivery tier) × terminal duration_sec?",
+      "Is the second-stage component additive for all four Lite SKUs? Please confirm delivery tier rather than downgraded generation-stage tier selects its rate."
+    ],
+    "provider_question_zh": [
+      "请提供该账户实际生效的720p和1080p二阶段/超分单价，并在/v1/catalog中以机器可读字段暴露；请给出准确字段名。",
+      "结算公式是否始终为：按交付档位/输入模式选择的token单价 × usage.completion_tokens + 按交付档位选择的二阶段单价 × 终态duration_sec？",
+      "四个Lite SKU是否都叠加二阶段费用？请确认选择交付分辨率，而不是生成阶段降档分辨率。"
+    ],
+    "required_catalog_runtime_field": [
+      "effective second-stage 720p rate",
+      "effective second-stage 1080p rate",
+      "documented catalog field names"
+    ],
+    "resolved": false
+  },
+  {
+    "id": "MINIMAX_H3_INPUT_SECONDS",
+    "model/profile": [
+      "minimax-h3"
+    ],
+    "authenticated_catalog_value": {
+      "features": [
+        "video_input_seconds",
+        "video_second",
+        "video_tiers"
+      ],
+      "video_bills_input_seconds": true,
+      "video_max_input_seconds": 15
+    },
+    "public_docs_value": "H3 model card describes delivered output seconds; media contract identifies Wan3/WanPrime as special input+output basis",
+    "observed_runtime_value": null,
+    "severity": "BLOCKING",
+    "production_behavior": "KEEP_BLOCKED; reject unsupported profile before outbound; unexpected/missing usage remains pending",
+    "provider_question": [
+      "Does minimax-h3 settle output duration_sec only, input_video_duration_sec + output duration_sec, or another basis?",
+      "If input is billable, which terminal field is authoritative, and which modes are charged: reference video, video-to-video, omni-reference, all video inputs, or specific modes?",
+      "Please align /v1/catalog billing.features with settlement and clarify minimax-h3 versus MiniMax-H3: which canonical ID is accepted, returned and settled?"
+    ],
+    "provider_question_zh": [
+      "minimax-h3实际按输出duration_sec、输入input_video_duration_sec加输出duration_sec，还是其他数量结算？",
+      "如输入视频收费，哪个终态字段是权威数量？参考视频、视频转视频、全能参考、所有输入视频，还是特定模式收费？",
+      "请统一/v1/catalog的billing.features与实际结算；并澄清minimax-h3与MiniMax-H3哪个规范ID被网关接受、返回和结算。"
+    ],
+    "required_catalog_runtime_field": [
+      "aligned billing.features/video_bills_input_seconds",
+      "canonical settlement model ID",
+      "authoritative terminal billed durations"
+    ],
+    "resolved": false
+  },
+  {
+    "id": "QWEN_THRESHOLD_DOMAIN",
+    "model/profile": [
+      "qwen-image-3.0-pro"
+    ],
+    "authenticated_catalog_value": {
+      "large_pixel_threshold": 2097152,
+      "caps": {
+        "chat": null,
+        "image": "[REDACTED]",
+        "surfaces": [
+          "chat",
+          "image_studio",
+          "canvas_image"
+        ],
+        "ui": {
+          "label": null,
+          "rank": {},
+          "vendor_group": null
+        },
+        "video": "[REDACTED]"
+      }
+    },
+    "public_docs_value": "Model card lower tier <=2,360,000 pixels; 1536×1536=2,359,296 lies in disputed band; catalog min_pixels=3,686,400 conflicts with custom-size domain",
+    "observed_runtime_value": null,
+    "severity": "BLOCKING",
+    "production_behavior": "KEEP_BLOCKED; reject unsupported profile before outbound; unexpected/missing usage remains pending",
+    "provider_question": [
+      "Which exact pixel threshold does gateway settlement use, and is comparison <= or <?",
+      "Is tier selected from requested dimensions or actual upstream output dimensions? What exact width/height domain does DFLOP enforce, including whether 1536×1536 is accepted?",
+      "What do min_pixels and threshold mean? Is omitted size guaranteed to settle as 2048×2048? Please align authenticated catalog and public model card."
+    ],
+    "provider_question_zh": [
+      "网关结算实际使用哪个精确像素阈值？比较运算是<=还是<？",
+      "档位依据请求尺寸还是上游实际输出尺寸？DFLOP强制执行的宽高范围是什么，1536×1536是否接受？",
+      "min_pixels与threshold分别代表什么？省略size是否保证按2048×2048结算？请统一认证目录与公开模型卡。"
+    ],
+    "required_catalog_runtime_field": [
+      "authoritative threshold/operator",
+      "requested versus actual-output dimension source",
+      "enforced width/height domain",
+      "guaranteed omitted-size settlement dimensions"
+    ],
+    "resolved": false
+  },
+  {
+    "id": "SUBTITLE_SOURCE_DURATION",
+    "model/profile": [
+      "tvod-subtitle-soft"
+    ],
+    "authenticated_catalog_value": {
+      "video_price_tiers": {
+        "asr": "0.06066",
+        "translate": "0.04044"
+      },
+      "price_per_video_second": "0.1011"
+    },
+    "public_docs_value": "source_seconds × (ASR passes × ASR rate + translation passes × translation rate); request duration is not authoritative",
+    "observed_runtime_value": {
+      "historical_key_scope": "HTTP200 no matching records",
+      "account_scope": "HTTP403 ACCOUNT_SCOPE_PERMISSION_REQUIRED",
+      "videos_list": "latest100 no match; not whole-history proof"
+    },
+    "severity": "BLOCKING",
+    "production_behavior": "KEEP_BLOCKED; reject unsupported profile before outbound; unexpected/missing usage remains pending",
+    "provider_question": [
+      "Which response/task/log/technical field contains authoritative source video seconds, and does the terminal task return it?",
+      "Does ledger unit_count mean source seconds, processing passes, source seconds × processing units, or something else? How are ASR and translation quantities represented separately?",
+      "How is reserve determined for a remote source_video_url without supplied duration: is media probed server-side before reservation?",
+      "What maximum source duration is accepted, is it provider-enforced, and is source duration in technical logs when absent from public task responses?"
+    ],
+    "provider_question_zh": [
+      "哪个响应/任务/日志/技术字段提供权威源视频秒数？终态任务是否返回该字段？",
+      "账本unit_count是源秒数、处理次数、源秒数×处理次数，还是其他单位？ASR和翻译数量如何分别表示？",
+      "远程source_video_url未提供时长时如何预留额度？是否在预留前由服务端探测媒体？",
+      "接受的最长源视频时长是多少，是否由提供方强制执行？公开任务响应缺失时长时，技术日志是否仍包含该字段？"
+    ],
+    "required_catalog_runtime_field": [
+      "source_duration_sec",
+      "ledger unit_count/unit_type semantics",
+      "provider-enforced maximum source duration",
+      "reservation/probe semantics"
+    ],
+    "resolved": false
+  },
+  {
+    "id": "GPT_FAST",
+    "model/profile": [
+      "gpt-5.5",
+      "gpt-5.6-luna",
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-6",
+      "gpt-6-astra",
+      "gpt-6-luna",
+      "gpt-6-sol"
+    ],
+    "authenticated_catalog_value": {
+      "supports_fast_mode": {
+        "gpt-5.5": true,
+        "gpt-5.6-luna": true,
+        "gpt-5.6-sol": true,
+        "gpt-5.6-terra": true,
+        "gpt-6": true,
+        "gpt-6-astra": true,
+        "gpt-6-luna": true,
+        "gpt-6-sol": true
+      },
+      "fast_mode_multiplier": {
+        "gpt-5.5": "1.5",
+        "gpt-5.6-luna": "1.5",
+        "gpt-5.6-sol": "1.5",
+        "gpt-5.6-terra": "1.5",
+        "gpt-6": "1.5",
+        "gpt-6-astra": "1.5",
+        "gpt-6-luna": "2",
+        "gpt-6-sol": "2"
+      }
+    },
+    "public_docs_value": "Fast feature exists but selector, served tier and effective component tariff are not sufficient for bounded route billing",
+    "observed_runtime_value": null,
+    "severity": "BLOCKING",
+    "production_behavior": "KEEP_BLOCKED; reject unsupported profile before outbound; unexpected/missing usage remains pending",
+    "provider_question": [
+      "What request field enables Fast, and is it provider-enforced or only a routing preference? What response/usage field proves the actually served tier?",
+      "What authenticated effective input, cached-input, output, and applicable image/tool prices apply? Are they replacement or additive rates?",
+      "Can requested Fast fall back to Standard, and which tariff is charged? Please expose selector, served tier and effective Fast prices machine-readably."
+    ],
+    "provider_question_zh": [
+      "哪个请求字段启用Fast？是强制执行还是路由偏好？哪个响应/usage字段证明实际服务档位？",
+      "实际生效的输入、缓存输入、输出及适用图片/工具价格是什么？是替换单价还是叠加费用？",
+      "请求Fast能否回退Standard，回退按哪个价格结算？请提供机器可读的选择器、实际档位与生效价格。"
+    ],
+    "required_catalog_runtime_field": [
+      "provider-enforced fast selector",
+      "served tier",
+      "effective input/cached-input/output/image/tool prices",
+      "fallback tariff semantics"
+    ],
+    "resolved": false
+  },
+  {
+    "id": "DEDICATED_IMAGE_MAPPING",
+    "model/profile": [
+      "codex-auto-review",
+      "gpt-5.5",
+      "gpt-5.6-luna",
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-6",
+      "gpt-6-astra",
+      "gpt-6-luna",
+      "gpt-6-sol"
+    ],
+    "authenticated_catalog_value": {
+      "price_per_image": {
+        "codex-auto-review": "80.88",
+        "gpt-5.5": "80.88",
+        "gpt-5.6-luna": "80.88",
+        "gpt-5.6-sol": "80.88",
+        "gpt-5.6-terra": "80.88",
+        "gpt-6": "80.88",
+        "gpt-6-astra": "80.88",
+        "gpt-6-luna": "80.88",
+        "gpt-6-sol": "80.88"
+      },
+      "endpoint_type": {
+        "codex-auto-review": null,
+        "gpt-5.5": null,
+        "gpt-5.6-luna": null,
+        "gpt-5.6-sol": null,
+        "gpt-5.6-terra": null,
+        "gpt-6": null,
+        "gpt-6-astra": null,
+        "gpt-6-luna": null,
+        "gpt-6-sol": null
+      }
+    },
+    "public_docs_value": "Dedicated image endpoints use image canonical IDs; conversational image_generation is token-billed",
+    "observed_runtime_value": null,
+    "severity": "BLOCKING",
+    "production_behavior": "KEEP_BLOCKED; reject unsupported profile before outbound; unexpected/missing usage remains pending",
+    "provider_question": [
+      "Do these exact nine text IDs directly support /v1/images/generations or /v1/images/edits? If not, what canonical image IDs and text→image mapping, if any, apply?",
+      "What are the authenticated effective per-image prices? Does n control reserve only or actual billing, and which response/ledger field is authoritative actual output count?",
+      "Are reference images billed separately, and is Idempotency-Key supported on these submits?"
+    ],
+    "provider_question_zh": [
+      "这九个准确文本ID是否直接支持/v1/images/generations或/v1/images/edits？如不支持，规范图片ID及文本→图片映射（如有）是什么？",
+      "认证后实际生效的每张价格是什么？n仅用于预留还是实际计费？哪个响应/账本字段提供权威实际出图数量？",
+      "参考图是否单独收费？这些提交是否支持Idempotency-Key？"
+    ],
+    "required_catalog_runtime_field": [
+      "canonical image ID and endpoint binding",
+      "effective per-image price",
+      "actual output count field",
+      "reference charge",
+      "Idempotency-Key support"
+    ],
+    "resolved": false
+  },
+  {
+    "id": "GROK_SERVER_TOOL_CAP",
+    "model/profile": [
+      "grok-3-mini",
+      "grok-3-mini-fast",
+      "grok-4.20-0309-non-reasoning",
+      "grok-4.20-0309-reasoning",
+      "grok-4.20-multi-agent-0309",
+      "grok-4.3",
+      "grok-4.5",
+      "grok-4.6",
+      "grok-4.7"
+    ],
+    "authenticated_catalog_value": {
+      "price_per_server_tool_call": {
+        "grok-3-mini": "2.022",
+        "grok-3-mini-fast": "2.022",
+        "grok-4.20-0309-non-reasoning": "2.022",
+        "grok-4.20-0309-reasoning": "2.022",
+        "grok-4.20-multi-agent-0309": "2.022",
+        "grok-4.3": "2.022",
+        "grok-4.5": "2.022",
+        "grok-4.6": "2.022",
+        "grok-4.7": "2.022"
+      }
+    },
+    "public_docs_value": "Actual tool charge uses usage.num_server_side_tools_used; a client expectation is not a hard bound",
+    "observed_runtime_value": null,
+    "severity": "BLOCKING",
+    "production_behavior": "KEEP_BLOCKED; reject unsupported profile before outbound; unexpected/missing usage remains pending",
+    "provider_question": [
+      "Is there a provider-enforced maximum server-tool-call request parameter? What exact name, minimum and maximum apply?",
+      "Is the bound enforced for web_search, other server tools and multi-agent tools? Can usage.num_server_side_tools_used exceed a client-declared limit?",
+      "If no request bound exists, what guaranteed per-request/account/model hard ceiling applies, and which catalog field exposes maximum billable tool calls?"
+    ],
+    "provider_question_zh": [
+      "是否有由提供方强制执行的服务端工具调用上限参数？准确名称、最小值和最大值是什么？",
+      "该上限是否覆盖web_search、其他服务端工具及多智能体工具？usage.num_server_side_tools_used能否超过客户端声明上限？",
+      "如无请求上限，单次请求/账户/模型有哪些保证执行的硬上限？目录哪个字段描述最大可计费工具次数？"
+    ],
+    "required_catalog_runtime_field": [
+      "provider-enforced maximum tool calls",
+      "exact request parameter/range",
+      "bound coverage for web_search/other/multi-agent tools"
+    ],
+    "resolved": false
+  },
+  {
+    "id": "CLAUDE_CACHE_AFFINITY",
+    "model/profile": [
+      "claude-sonnet-5"
+    ],
+    "authenticated_catalog_value": {
+      "cache_creation_per_1m": "808.8"
+    },
+    "public_docs_value": "Native /v1/messages cache affinity/stickiness across upstream lanes is not established",
+    "observed_runtime_value": {
+      "model": "claude-sonnet-5",
+      "endpoint": "/v1/messages",
+      "B_request_id": "dc1cc675-c379-4b12-b044-eb89c738d340",
+      "C_request_id": "91abf82d-e339-4596-a2d5-d0164f2dea36",
+      "prefix_hash": "608dc35570131bd44582c099c5876161683f1cf41da2373301ed413774212891",
+      "prefix_identical": true,
+      "cache_creation_tokens_B": 4178,
+      "cache_creation_tokens_C": 4178,
+      "cache_read_tokens_B": 0,
+      "cache_read_tokens_C": 0,
+      "seconds_B_terminal_to_C_start": "89.226498",
+      "correlation": "EXACT_REQUEST_ID",
+      "same_upstream_proven": false,
+      "root_cause_proven": false,
+      "blocking_model_coverage": false
+    },
+    "severity": "NON_BLOCKING",
+    "production_behavior": "Existing coverage unchanged; no paid probe or pricing change",
+    "provider_question": [
+      "For the exact B/C request IDs below, why did identical client cache prefixes produce 4178 cache-creation tokens and zero reads twice within 89.226498 seconds?",
+      "Does native /v1/messages preserve upstream-account/cache affinity across routed lanes? Is there a documented stickiness header or guarantee? Please inspect upstream account/lane and protocol translation for these exact IDs."
+    ],
+    "provider_question_zh": [
+      "下列B/C准确请求ID的客户端缓存前缀相同，间隔89.226498秒，为何两次均创建4178 token且读取0？",
+      "原生/v1/messages跨路由通道是否保持上游账户/缓存亲和性？是否有文档化粘性请求头或保证？请按准确ID检查上游账户/通道及协议转换。"
+    ],
+    "required_catalog_runtime_field": [
+      "documented cache-affinity header/guarantee",
+      "upstream lane/account correlation",
+      "protocol-translation metadata"
+    ],
+    "resolved": false
+  },
+  {
+    "id": "SUNO_MUSIC_UNIT_WATCH",
+    "model/profile": [
+      "suno-v5",
+      "suno-v5.5"
+    ],
+    "authenticated_catalog_value": {
+      "billing_features": "music",
+      "price_field": "price_per_music_generation"
+    },
+    "public_docs_value": "Media contract bills one generation containing two songs; reference model list labels price per track",
+    "observed_runtime_value": {
+      "contract_watch": {
+        "suno-v3.5": {
+          "safe": true,
+          "detail": "one generation is billed once and includes two songs; output track count is not a billing multiplier",
+          "billing_unit": "generation",
+          "songs_per_generation": 2
+        },
+        "suno-v4": {
+          "safe": true,
+          "detail": "one generation is billed once and includes two songs; output track count is not a billing multiplier",
+          "billing_unit": "generation",
+          "songs_per_generation": 2
+        },
+        "suno-v4.5": {
+          "safe": true,
+          "detail": "one generation is billed once and includes two songs; output track count is not a billing multiplier",
+          "billing_unit": "generation",
+          "songs_per_generation": 2
+        },
+        "suno-v5": {
+          "safe": true,
+          "detail": "one generation is billed once and includes two songs; output track count is not a billing multiplier",
+          "billing_unit": "generation",
+          "songs_per_generation": 2
+        },
+        "suno-v5.5": {
+          "safe": true,
+          "detail": "one generation is billed once and includes two songs; output track count is not a billing multiplier",
+          "billing_unit": "generation",
+          "songs_per_generation": 2
+        }
+      },
+      "production_behavior_changed": false
+    },
+    "severity": "NON_BLOCKING",
+    "production_behavior": "Existing coverage unchanged; no paid probe or pricing change",
+    "provider_question": [
+      "Please align reference-model-list per-track wording with the authoritative media contract: is one generation including two songs billed exactly once, including partial-success behavior?"
+    ],
+    "provider_question_zh": [
+      "请统一模型参考列表的“每首”与媒体合同的“每次生成”措辞：包含两首歌的一次生成是否只计费一次（包括部分成功情形）？"
+    ],
+    "required_catalog_runtime_field": [
+      "consistent documented generation billing unit"
+    ],
+    "resolved": false
+  }
+]

@@ -115,6 +115,8 @@ export interface ToolSurchargeItem {
 }
 
 export interface LogOtherData {
+  billing_state?: string
+  settlement_verified?: boolean
   admin_info?: {
     request_policy?: PolicyEvent[]
     is_multi_key?: boolean

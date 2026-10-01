@@ -56,11 +56,39 @@ func PreConsumeBilling(c *gin.Context, preConsumedQuota int, relayInfo *relaycom
 			return types.NewError(errors.New("BILLING_RESERVATION_REPLAY_REQUIRES_MANUAL_RESOLUTION"), types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
 		}
 	}
+	taskJournal := DFLOPTaskReservationApplies(relayInfo)
+	if taskJournal && relayInfo.Billing != nil {
+		return nil
+	}
+	if taskJournal {
+		if common.BatchUpdateEnabled {
+			return types.NewError(errors.New("BILLING_JOURNAL_BATCH_UNSUPPORTED"), types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+		}
+		if relayInfo.RequestId == "" {
+			return types.NewError(errors.New("task billing identity missing"), types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
+		}
+		journal := model.Log{UserId: relayInfo.UserId, TokenId: relayInfo.TokenId, ChannelId: relayInfo.ChannelId, ModelName: relayInfo.OriginModelName, RequestId: relayInfo.RequestId, CreatedAt: common.GetTimestamp(), Type: model.LogTypeSystem, Content: "BILLING_RESERVATION_CLAIMED", Other: `{"billing_state":"CLAIMED","settlement_verified":false}`}
+		if err := model.CreateBillingReservationLog(&journal); err != nil {
+			return types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
+		}
+		relayInfo.DFLOPTaskReservationLogID = journal.Id
+	}
 	session, apiErr := NewBillingSession(c, relayInfo, preConsumedQuota)
 	if apiErr != nil {
 		return apiErr
 	}
 	relayInfo.Billing = session
+	if taskJournal {
+		session.mu.Lock()
+		err := session.transitionReservation("HELD", nil)
+		if err != nil {
+			session.quarantined = true
+		}
+		session.mu.Unlock()
+		if err != nil {
+			return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
+		}
+	}
 	return nil
 }
 

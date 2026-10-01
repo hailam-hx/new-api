@@ -65,13 +65,22 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo, task *model
 		other.SetPublic("is_model_mapped", true)
 		other.SetPublic("upstream_model_name", info.UpstreamModelName)
 	}
-	if snap := info.TieredBillingSnapshot; snap != nil {
+	if snap := info.TieredBillingSnapshot; snap != nil && !TaskBillingIsPending(task.PrivateData.PluginState) {
 		AppendTaskExpressionLogInfo(other, snap)
 	} else {
 		setTaskImageCount(other, info.PriceData.OtherRatios()["image_count"])
 	}
 	appendTaskLogInfo(task, other)
 	attachQuotaSaturation(c, info, other)
+	if DFLOPTaskReservationApplies(info) && (task.Status != model.TaskStatusSuccess && task.Status != model.TaskStatusFailure || TaskBillingIsPending(task.PrivateData.PluginState)) {
+		other.SetPublic("billing_state", "HELD")
+		if TaskBillingIsPending(task.PrivateData.PluginState) {
+			other.SetPublic("billing_state", "PENDING")
+		}
+		other.SetPublic("settlement_verified", false)
+		model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{UserId: info.UserId, LogType: model.LogTypeSystem, Content: "DFLOP task accepted with reserved quota", ChannelId: info.ChannelId, ModelName: info.OriginModelName, Quota: 0, TokenId: info.TokenId, Group: info.UsingGroup, Other: other})
+		return
+	}
 	model.RecordConsumeLog(c, info.UserId, model.RecordConsumeLogParams{
 		ChannelId: info.ChannelId,
 		ModelName: info.OriginModelName,
@@ -123,6 +132,9 @@ func taskIsSubscription(task *model.Task) bool {
 
 // taskAdjustFunding 调整任务的资金来源（钱包或订阅），delta > 0 表示扣费，delta < 0 表示退还。
 func taskAdjustFunding(task *model.Task, delta int) error {
+	if delta == 0 {
+		return nil
+	}
 	if taskIsSubscription(task) {
 		return model.PostConsumeUserSubscriptionDelta(task.PrivateData.SubscriptionId, int64(delta))
 	}
@@ -134,13 +146,13 @@ func taskAdjustFunding(task *model.Task, delta int) error {
 
 // taskAdjustTokenQuota 调整任务的令牌额度，delta > 0 表示扣费，delta < 0 表示退还。
 // 需要通过 resolveTokenKey 运行时获取 key（不从 PrivateData 中读取）。
-func taskAdjustTokenQuota(ctx context.Context, task *model.Task, delta int) {
+func taskAdjustTokenQuota(ctx context.Context, task *model.Task, delta int) bool {
 	if task.PrivateData.TokenId <= 0 || delta == 0 {
-		return
+		return true
 	}
 	tokenKey := resolveTokenKey(ctx, task.PrivateData.TokenId, task.TaskID)
 	if tokenKey == "" {
-		return
+		return false
 	}
 	var err error
 	if delta > 0 {
@@ -150,7 +162,9 @@ func taskAdjustTokenQuota(ctx context.Context, task *model.Task, delta int) {
 	}
 	if err != nil {
 		logger.LogWarn(ctx, fmt.Sprintf("调整令牌额度失败 (delta=%d, task=%s): %s", delta, task.TaskID, err.Error()))
+		return false
 	}
+	return true
 }
 
 // taskBillingOther 从 task 的 BillingContext 构建日志 Other 字段。
@@ -173,10 +187,12 @@ func taskBillingOther(task *model.Task) *model.LogOther {
 			other.SetPublic("billing_mode", "tiered_expr")
 			other.SetPublic("expr_b64", base64.StdEncoding.EncodeToString([]byte(snap.ExprString)))
 			other.SetPublic("matched_tier", snap.EstimatedTier)
-			if len(snap.UsageFacts) > 0 {
-				other.SetPublic("usage_facts", snap.UsageFacts)
+			if !TaskBillingIsPending(task.PrivateData.PluginState) {
+				if len(snap.UsageFacts) > 0 {
+					other.SetPublic("usage_facts", snap.UsageFacts)
+				}
+				setTaskImageCount(other, snap.UsageFacts["image_count"])
 			}
-			setTaskImageCount(other, snap.UsageFacts["image_count"])
 		} else if priceData := taskBillingContextPriceData(bc); priceData != nil {
 			setTaskImageCount(other, priceData.OtherRatios()["image_count"])
 		}
@@ -226,6 +242,12 @@ func appendTaskLogInfo(task *model.Task, other *model.LogOther) {
 	if task.TaskID != "" {
 		other.SetPublic("task_id", task.TaskID)
 	}
+	if IsDFLOPTaskPlatform(task.Platform) && TaskBillingIsPending(task.PrivateData.PluginState) {
+		other.SetPublic("billing_state", "PENDING")
+		other.SetPublic("settlement_verified", false)
+		other.SetAdmin("reserved_quota", task.Quota)
+		other.SetAdmin("billing_blocker", "MISSING_AUTHORITATIVE_FINAL_USAGE")
+	}
 	if task.PrivateData.ResultDiscarded {
 		// The result was delivered inline and the upstream snapshot was not
 		// persisted, so no artifact can be retrieved for this task.
@@ -271,6 +293,9 @@ func taskModelName(task *model.Task) string {
 // 当异步任务失败时，退还资金与令牌额度，并回减用户和渠道用量。
 // 返回资金来源是否已成功退还；失败时保留 quota，供显式重试或人工对账。
 func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) bool {
+	if handled, succeeded := settleDFLOPTaskReservation(ctx, task, nil, reason); handled {
+		return succeeded
+	}
 	quota := task.Quota
 	if quota == 0 {
 		return true
@@ -455,4 +480,154 @@ func EvaluateTaskCompletionUsage(snap *billingexpr.BillingSnapshot, facts map[st
 		err = fmt.Errorf("task completion expression produced an invalid cost")
 	}
 	return result, usage, err
+}
+
+// IsDFLOPTaskPlatform identifies the exact DFLOP quantity-contract drivers.
+func IsDFLOPTaskPlatform(platform constant.TaskPlatform) bool {
+	return platform == "dflop-media" || platform == "dflop-image" || platform == "dflop-tts"
+}
+
+// EvaluateDFLOPTaskCompletionUsage requires actual terminal facts for every
+// expression dependency, including selectors. Reservation estimates are never
+// substituted for absent completion facts. Explicit numeric zero is valid.
+func EvaluateDFLOPTaskCompletionUsage(snap *billingexpr.BillingSnapshot, facts map[string]any, state []byte) (billingexpr.TieredResult, map[string]any, error) {
+	if snap == nil {
+		return billingexpr.TieredResult{}, nil, fmt.Errorf("task billing snapshot is missing")
+	}
+	if len(state) > 0 {
+		var pending map[string]any
+		if err := common.Unmarshal(state, &pending); err != nil {
+			return billingexpr.TieredResult{}, nil, fmt.Errorf("invalid terminal billing state: %w", err)
+		}
+		if pending["billingPending"] == true {
+			return billingexpr.TieredResult{}, nil, fmt.Errorf("terminal billing facts remain pending")
+		}
+	}
+	for key := range billingexpr.UsedUsageKeys(snap.ExprString) {
+		if value, present := facts[key]; !present || value == nil {
+			return billingexpr.TieredResult{}, nil, fmt.Errorf("authoritative final usage %q is missing", key)
+		}
+	}
+	usage := maps.Clone(facts)
+	result, err := billingexpr.ComputeTieredQuotaWithRequest(snap, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: usage})
+	if err != nil {
+		return result, nil, err
+	}
+	if result.ActualQuotaBeforeGroup < 0 || math.IsNaN(result.ActualQuotaBeforeGroup) {
+		return result, nil, fmt.Errorf("task completion expression produced an invalid cost")
+	}
+	return result, usage, nil
+}
+
+// TaskBillingPendingState preserves frozen plugin selectors while recording a
+// successful deliverable whose reservation requires manual reconciliation.
+func TaskBillingPendingState(state []byte, blocker string) ([]byte, error) {
+	pending := make(map[string]any)
+	if len(state) > 0 {
+		if err := common.Unmarshal(state, &pending); err != nil {
+			return nil, fmt.Errorf("invalid task plugin state: %w", err)
+		}
+	}
+	if pending == nil {
+		pending = make(map[string]any)
+	}
+	pending["billingPending"] = true
+	pending["blocker"] = blocker
+	return common.Marshal(pending)
+}
+
+// TaskBillingIsPending is also used at the synchronous settlement barrier.
+func TaskBillingIsPending(state []byte) bool {
+	if len(state) == 0 {
+		return false
+	}
+	var pending map[string]any
+	if err := common.Unmarshal(state, &pending); err != nil {
+		return true
+	}
+	return pending["billingPending"] == true
+}
+
+// settleDFLOPTaskReservation finalizes a durable async hold once. Intermediate
+// states deliberately require operator recovery after a partial funds mutation.
+func settleDFLOPTaskReservation(ctx context.Context, task *model.Task, actual *int, reason string) (bool, bool) {
+	if !IsDFLOPTaskPlatform(task.Platform) || task.PrivateData.Execution == nil || task.PrivateData.Execution.RequestID == "" {
+		return false, false
+	}
+	journal, err := model.FindBillingReservationLog(task.PrivateData.Execution.RequestID, task.UserId)
+	if err != nil {
+		logger.LogError(ctx, fmt.Sprintf("DFLOP task %s journal lookup failed: %v", task.TaskID, err))
+		return true, false
+	}
+	if journal == nil {
+		return false, false
+	} // Existing tasks predate the hold journal.
+	if actual == nil && TaskBillingIsPending(task.PrivateData.PluginState) {
+		logger.LogWarn(ctx, fmt.Sprintf("DFLOP task %s delivered output with pending billing; refusing refund", task.TaskID))
+		return true, false
+	}
+	state := strings.TrimPrefix(journal.Content, "BILLING_RESERVATION_")
+	target, finished := "SETTLING", "SETTLED"
+	finalQuota := 0
+	if actual == nil {
+		target, finished = "REFUNDING", "REFUNDED"
+	} else {
+		finalQuota = *actual
+	}
+	if state == finished {
+		return true, true
+	}
+	if common.BatchUpdateEnabled {
+		logger.LogError(ctx, fmt.Sprintf("DFLOP task %s final journal cannot use queued quota updates", task.TaskID))
+		return true, false
+	}
+	if state != "HELD" && state != "PENDING" {
+		logger.LogWarn(ctx, fmt.Sprintf("DFLOP task %s journal %s requires manual resolution", task.TaskID, state))
+		return true, false
+	}
+	if finalQuota < 0 {
+		return true, false
+	}
+	other := taskBillingOther(task)
+	other.SetPublic("billing_state", target)
+	other.SetPublic("settlement_verified", false)
+	other.SetAdmin("reserved_quota", task.Quota)
+	other.SetAdmin("actual_quota", finalQuota)
+	other.SetRoot("request_id", task.PrivateData.Execution.RequestID)
+	if err := model.TransitionBillingReservationLog(journal.Id, state, target, other); err != nil {
+		logger.LogWarn(ctx, fmt.Sprintf("DFLOP task %s journal transition failed: %v", task.TaskID, err))
+		return true, false
+	}
+	if _, err := task.UpdateWithStatus(task.Status); err != nil {
+		logger.LogError(ctx, fmt.Sprintf("DFLOP task %s final usage persistence failed: %v", task.TaskID, err))
+		return true, false
+	}
+	delta := finalQuota - task.Quota
+	if err := taskAdjustFunding(task, delta); err != nil {
+		logger.LogError(ctx, fmt.Sprintf("DFLOP task %s final funds adjustment failed: %v", task.TaskID, err))
+		return true, false
+	}
+	if !taskAdjustTokenQuota(ctx, task, delta) {
+		return true, false
+	}
+	task.Quota = finalQuota
+	if err := task.UpdateQuota(); err != nil {
+		logger.LogError(ctx, fmt.Sprintf("DFLOP task %s final quota persistence failed: %v", task.TaskID, err))
+		return true, false
+	}
+	if actual != nil {
+		model.UpdateUserUsedQuotaAndRequestCount(task.UserId, finalQuota)
+		model.UpdateChannelUsedQuota(task.ChannelId, finalQuota)
+		logOther := taskBillingOther(task)
+		logOther.SetPublic("billing_state", "SETTLED")
+		logOther.SetPublic("settlement_verified", true)
+		model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{UserId: task.UserId, LogType: model.LogTypeConsume, Content: reason, ChannelId: task.ChannelId, ModelName: taskModelName(task), Quota: finalQuota, TokenId: task.PrivateData.TokenId, Group: task.Group, Other: logOther, NodeName: task.PrivateData.NodeName})
+	}
+	other.SetPublic("billing_state", finished)
+	other.SetPublic("settlement_verified", actual != nil)
+	if err := model.TransitionBillingReservationLog(journal.Id, target, finished, other); err != nil {
+		logger.LogError(ctx, fmt.Sprintf("DFLOP task %s final journal persistence failed: %v", task.TaskID, err))
+		return true, false
+	}
+	return true, true
 }

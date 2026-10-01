@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 )
@@ -47,16 +48,35 @@ func videoPricesMatch(item Item, tiers map[string]string) bool {
 // classifyTaskPricing creates a candidate only for source shapes whose
 // quantities are reported by an exact task-plugin model binding.
 func classifyTaskPricing(item *Item, source Model) {
+	if classifyDFLOPMediaPricing(item, source) {
+		return
+	}
 	features := slices.Clone(source.BillingFeatures)
 	slices.Sort(features)
 	shape := strings.Join(features, "+")
 	price := func(name string) string { return item.Prices[name].SellingUSD }
 	switch {
+	case slices.Contains([]string{"tvod-midjourney-v7", "tvod-midjourney-v8.1"}, source.ID) && source.Category == "image" && source.EndpointType == "images_generations" && shape == "fixed_output_count+per_image" && source.ImagesPerRequest != nil && *source.ImagesPerRequest == 4 && source.PricePerImage != nil && mediaPricesMatch(*item, "price_per_image"):
+		var contract struct {
+			Caps struct {
+				Image struct {
+					FixedOutputs *int `json:"fixed_outputs"`
+				} `json:"image"`
+			} `json:"caps"`
+		}
+		if common.Unmarshal(item.Raw, &contract) != nil || contract.Caps.Image.FixedOutputs == nil || *contract.Caps.Image.FixedOutputs != 4 {
+			item.ReasonCode = "PROVIDER_CONTRACT_REQUIRED"
+			return
+		}
+		item.TaskPlugin = "dflop-image"
+		item.RequiredFacts = []string{"image_count"}
+		item.TaskExpression = fmt.Sprintf("tier(\"image\", u(\"image_count\") * %s)", price("price_per_image"))
+		item.ReasonCode = "NO_PLUGIN_USAGE_PROFILE"
 	case source.ID == "voice-tts-pro" && source.Category == "audio" && source.EndpointType == "tts_synthesize" &&
 		shape == "tts_char" && source.PricePerTTSChar != nil && mediaPricesMatch(*item, "price_per_tts_char"):
 		item.TaskPlugin = "dflop-tts"
-		item.RequiredFacts = []string{"characters"}
-		item.TaskExpression = fmt.Sprintf("u(\"characters\") * %s", price("price_per_tts_char"))
+		item.RequiredFacts = []string{"character_count"}
+		item.TaskExpression = fmt.Sprintf("u(\"character_count\") * %s", price("price_per_tts_char"))
 		item.ReasonCode = "NO_ASYNC_TTS_BINDING"
 	case source.Category == "video" && source.EndpointType == "videos_generations" &&
 		(shape == "video_second+video_tiers" || shape == "video_input_seconds+video_second+video_tiers") &&
@@ -107,9 +127,26 @@ func classifyTaskPricing(item *Item, source Model) {
 }
 
 func classifyUnsupportedReason(item *Item, source Model) {
+	if item.ReasonCode == "PROVIDER_CATALOG_MISSING_UPSCALE_RATE" {
+		return
+	}
+	if source.ID == "minimax-h3" {
+		item.RequiredFacts = []string{"duration_sec", "resolution"}
+		item.ReasonCode = "NO_EXACT_VIDEO_PLUGIN_BINDING"
+		if slices.Contains(source.BillingFeatures, "video_input_seconds") || source.VideoBillsInputSeconds != nil && *source.VideoBillsInputSeconds {
+			item.ReasonCode = "MISSING_INPUT_VIDEO_DURATION"
+			item.RequiredFacts = append(item.RequiredFacts, "input_video_duration_sec")
+		}
+		return
+	}
+	if source.ID == "tvod-subtitle-soft" {
+		item.ReasonCode = "MISSING_SUBTITLE_SOURCE_DURATION"
+		item.RequiredFacts = []string{"source_duration_sec", "asr_units", "translation_units"}
+		return
+	}
 	switch {
 	case source.ID == "qwen-image-3.0-pro" && source.LargePixelThreshold != nil:
-		item.ReasonCode = "IMAGE_TIER_THRESHOLD_MISMATCH"
+		item.ReasonCode = "PROVIDER_CONTRACT_IMAGE_THRESHOLD_CONFLICT"
 		item.RequiredFacts = []string{"image_count", "output_pixel_tier", "input_image_count"}
 	case source.PricePerTTSChar != nil:
 		item.ReasonCode = "UNKNOWN_CHARACTER_COUNT_SEMANTICS"
@@ -166,7 +203,14 @@ func taskPricingCompatibility(item Item, schema map[string]jsplugin.UsageFieldSc
 				continue
 			}
 			for key := range item.Prices {
-				if tier, ok := strings.CutPrefix(key, "video_tier:"); ok && !slices.Contains(field.Enum, strings.ToUpper(tier)) {
+				tier, ok := strings.CutPrefix(key, "video_tier:")
+				if !ok {
+					continue
+				}
+				if item.TaskPlugin != "dflop-media" {
+					tier = strings.ToUpper(tier)
+				}
+				if !slices.Contains(field.Enum, tier) {
 					missing = append(missing, name)
 					break
 				}
@@ -183,9 +227,23 @@ func taskPricingCompatibility(item Item, schema map[string]jsplugin.UsageFieldSc
 				}
 				continue
 			}
-		} else if field.Type != "number" || (name == "seconds" && field.Unit != "second") || (name != "seconds" && field.Unit != "count") {
-			missing = append(missing, name)
-			continue
+		} else if name == "input_mode" {
+			if !slices.Equal(field.Enum, []string{"default", "with_video_input"}) {
+				missing = append(missing, name)
+				continue
+			}
+		} else {
+			unit := "count"
+			switch name {
+			case "seconds", "duration_sec", "input_video_duration_sec":
+				unit = "second"
+			case "completion_tokens":
+				unit = "token"
+			}
+			if field.Type != "number" || field.Unit != unit {
+				missing = append(missing, name)
+				continue
+			}
 		}
 		available = append(available, name)
 	}
@@ -204,4 +262,165 @@ func taskPricingCompatibility(item Item, schema map[string]jsplugin.UsageFieldSc
 		return available, []string{"validated_expression"}, "INCOMPATIBLE_PLUGIN_SCHEMA"
 	}
 	return available, nil, ""
+}
+
+// classifyDFLOPMediaPricing selects only an exact factory contract. The
+// existing Alibaba/Doubao profiles keep their independently verified bindings.
+// Subtitle ASR/translation tiers are operations, not output resolutions; its
+// authoritative source duration contract remains unavailable.
+func classifyDFLOPMediaPricing(item *Item, source Model) bool {
+	if slices.Contains([]string{"wan2.7-t2v", "wan3.0-video", "wan3.0-video-prime", "tvod-subtitle-soft"}, source.ID) {
+		return false
+	}
+	plugin, exists := jsplugin.DefaultRegistry.Generation().Get("dflop-media")
+	if !exists || !slices.Contains(plugin.Meta.Models, source.ID) {
+		return false
+	}
+	schema, _ := plugin.Meta.UsageForModel(source.ID)
+	features := slices.Clone(source.BillingFeatures)
+	slices.Sort(features)
+	shape := strings.Join(features, "+")
+	price := func(name string) string { return item.Prices[name].SellingUSD }
+	requiredPrices := []string{}
+	facts := []string{}
+	quantity := ""
+	switch {
+	case source.Category == "audio" && source.EndpointType == "music_generations" && shape == "music" && source.PricePerMusicGeneration != nil:
+		requiredPrices = []string{"price_per_music_generation"}
+		facts = []string{"generation_count"}
+		quantity = "u(\"generation_count\") * " + price("price_per_music_generation")
+	case source.ID == "voice-clone-pro" && source.EndpointType == "voice_clone" && shape == "voice_clone" && source.PricePerVoiceClone != nil:
+		requiredPrices = []string{"price_per_voice_clone"}
+		facts = []string{"count"}
+		quantity = "u(\"count\") * " + price("price_per_voice_clone")
+	case source.ID == "dh-avatar-create" && source.EndpointType == "avatar_create" && shape == "avatar" && source.PricePerAvatar != nil:
+		requiredPrices = []string{"price_per_avatar"}
+		facts = []string{"count"}
+		quantity = "u(\"count\") * " + price("price_per_avatar")
+	case source.ID == "clip-compose" && source.EndpointType == "videos_generations" && shape == "video_task" && source.PricePerVideoTask != nil:
+		requiredPrices = []string{"price_per_video_task"}
+		facts = []string{"count"}
+		quantity = "u(\"count\") * " + price("price_per_video_task")
+	case source.Category == "video" && source.EndpointType == "videos_generations" && len(source.VideoTokenPricePer1M) > 0:
+		if source.PricePerVideoSecond == nil || len(source.VideoPriceTiers) == 0 {
+			return false
+		}
+		formula := "video_token_formula_seedance_2_0"
+		if slices.Contains(source.BillingFeatures, "video_token_formula_seedance_2_5") {
+			formula = "video_token_formula_seedance_2_5"
+		}
+		wanted := []string{"video_second", "video_tiers", "video_token", formula}
+		lite := slices.Contains(source.BillingFeatures, "video_two_stage")
+		if lite {
+			wanted = append(wanted, "video_two_stage")
+		}
+		slices.Sort(wanted)
+		if !slices.Equal(features, wanted) {
+			return false
+		}
+		tiers := slices.Clone(schema["resolution"].Enum)
+		slices.Sort(tiers)
+		expectedTokenTiers := 2 * len(tiers)
+		if source.ID == "doubao-seedance-2.5" {
+			expectedTokenTiers = 4
+		}
+		if len(tiers) == 0 || len(source.VideoTokenPricePer1M) != expectedTokenTiers {
+			return false
+		}
+		requiredPrices = append(requiredPrices, "price_per_video_second")
+		facts = []string{"completion_tokens", "resolution", "input_mode"}
+		for tier := range source.VideoPriceTiers {
+			requiredPrices = append(requiredPrices, "video_tier:"+tier)
+		}
+		for key := range source.VideoTokenPricePer1M {
+			requiredPrices = append(requiredPrices, "video_token_tier:"+key)
+		}
+		if lite {
+			if len(source.VideoSecondStagePerSecond) != len(tiers) {
+				item.ReasonCode = "PROVIDER_CATALOG_MISSING_UPSCALE_RATE"
+				item.RequiredFacts = []string{"completion_tokens", "duration_sec", "resolution", "input_mode"}
+				return true
+			}
+			for tier := range source.VideoSecondStagePerSecond {
+				requiredPrices = append(requiredPrices, "video_second_stage:"+tier)
+			}
+			facts = append(facts, "duration_sec")
+		} else if len(source.VideoSecondStagePerSecond) > 0 {
+			return false
+		}
+		var expression strings.Builder
+		branches := 0
+		for _, tier := range tiers {
+			for _, mode := range []string{"default", "with_video_input"} {
+				key := mode + "@" + tier
+				// Seedance2.5 endpoint card defines the bare mode rate for480p/720p
+				// and an explicit1080p delivery override. Amounts stay catalog-derived.
+				if source.ID == "doubao-seedance-2.5" && (tier == "480p" || tier == "720p") {
+					key = mode
+				}
+				if _, ok := source.VideoTokenPricePer1M[key]; !ok {
+					return false
+				}
+				if branches > 0 {
+					expression.WriteString(" : ")
+				}
+				if branches < len(tiers)*2-1 {
+					fmt.Fprintf(&expression, "u(\"resolution\") == %q && u(\"input_mode\") == %q ? ", tier, mode)
+				}
+				fmt.Fprintf(&expression, "tier(%q, u(\"completion_tokens\") * %s / 1000000", key, price("video_token_tier:"+key))
+				if lite {
+					if _, ok := source.VideoSecondStagePerSecond[tier]; !ok {
+						return false
+					}
+					fmt.Fprintf(&expression, " + u(\"duration_sec\") * %s", price("video_second_stage:"+tier))
+				}
+				expression.WriteString(")")
+				branches++
+			}
+		}
+		// The final leaf covers the last validated enum combination.
+		quantity = expression.String()
+	case source.Category == "video" && source.EndpointType == "videos_generations" && source.PricePerVideoSecond != nil && (shape == "video_second" || shape == "video_second+video_tiers") && (source.VideoBillsInputSeconds == nil || !*source.VideoBillsInputSeconds):
+		facts = []string{"duration_sec"}
+		requiredPrices = []string{"price_per_video_second"}
+		if shape == "video_second" && len(source.VideoPriceTiers) == 0 {
+			quantity = "u(\"duration_sec\") * " + price("price_per_video_second")
+			break
+		}
+		if shape != "video_second+video_tiers" || len(source.VideoPriceTiers) == 0 {
+			return false
+		}
+		tiers := make([]string, 0, len(source.VideoPriceTiers))
+		for tier := range source.VideoPriceTiers {
+			tiers = append(tiers, tier)
+			requiredPrices = append(requiredPrices, "video_tier:"+tier)
+		}
+		slices.Sort(tiers)
+		facts = append(facts, "resolution")
+		var expression strings.Builder
+		for index, tier := range tiers {
+			if index > 0 {
+				expression.WriteString(" : ")
+			}
+			if index < len(tiers)-1 {
+				fmt.Fprintf(&expression, "u(\"resolution\") == %q ? ", tier)
+			}
+			fmt.Fprintf(&expression, "tier(%q, u(\"duration_sec\") * %s)", tier, price("video_tier:"+tier))
+		}
+		quantity = expression.String()
+	default:
+		return false
+	}
+	if !mediaPricesMatch(*item, requiredPrices...) {
+		return false
+	}
+	item.TaskPlugin = "dflop-media"
+	item.RequiredFacts = facts
+	if strings.Contains(quantity, "tier(") {
+		item.TaskExpression = quantity
+	} else {
+		item.TaskExpression = "tier(\"base\", " + quantity + ")"
+	}
+	item.ReasonCode = "NO_PLUGIN_USAGE_PROFILE"
+	return true
 }

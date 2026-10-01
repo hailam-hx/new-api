@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -215,5 +216,28 @@ func TestToWebSocketURL(t *testing.T) {
 		"ws://127.0.0.1:3000/backend-api/codex/responses": "ws://127.0.0.1:3000/backend-api/codex/responses",
 	} {
 		assert.Equal(t, want, toWebSocketURL(input), input)
+	}
+}
+
+func TestDFLOPLegacyPricingRejectsBlockedProfilesBeforeOutbound(t *testing.T) {
+	for _, tc := range []struct{ model, path, body, reason string }{
+		{"gpt-6-sol", "/v1/chat/completions", `{"model":"gpt-6-sol","service_tier":"priority"}`, "DFLOP_FAST_MODE_PRICING_UNAVAILABLE"},
+		{"gpt-6-luna", "/v1/chat/completions", `{"model":"gpt-6-sol","messages":[]}`, "DFLOP_BILLING_MODEL_MISMATCH"},
+		{"grok-4.7", "/v1/chat/completions", `{"model":"grok-4.7","tools":[{"type":"web_search"}]}`, "DFLOP_SERVER_TOOL_UNBOUNDED"},
+		{"gpt-6-sol", "/v1/responses", `{"model":"gpt-6-sol","input":[]}`, "DFLOP_RESPONSES_PROFILE_UNVERIFIED"},
+		{"gpt-6-sol", "/v1/images/generations", `{"model":"gpt-6-sol","prompt":"a"}`, "DFLOP_DEDICATED_IMAGE_PROFILE_UNVERIFIED"},
+	} {
+		t.Run(tc.reason, func(t *testing.T) {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(tc.body))
+			req, err := http.NewRequest(http.MethodPost, "https://api.dflop.top"+tc.path, strings.NewReader(tc.body))
+			require.NoError(t, err)
+			info := &relaycommon.RelayInfo{OriginModelName: tc.model, ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://api.dflop.top", UpstreamModelName: tc.model}}
+			require.Nil(t, info.TieredBillingSnapshot)
+			// No client is initialized: this must stop before acquiring outbound transport.
+			response, err := DoRequest(c, req, info)
+			require.ErrorContains(t, err, tc.reason)
+			assert.Nil(t, response)
+		})
 	}
 }

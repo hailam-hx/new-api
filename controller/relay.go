@@ -168,7 +168,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		if relayFormat == types.RelayFormatOpenAIAudio && c.Request.URL.Path == "/v1/audio/speech" &&
 			relayInfo.OriginModelName == "voice-tts-pro" &&
-			(channel.GetSetting().BindsTaskPlugin("dflop-tts") || strings.TrimSuffix(channel.GetBaseURL(), "/") == "https://api.dflop.top") {
+			channel.BindsTaskPluginForModel("dflop-tts", relayInfo.OriginModelName, nil) {
 			newAPIError = types.NewError(errors.New("voice-tts-pro on the DFLOP channel requires async=true and the task billing path"), types.ErrorCodeInvalidRequest, types.ErrOptionWithStatusCode(http.StatusBadRequest), types.ErrOptionWithSkipRetry())
 			break
 		}
@@ -491,6 +491,12 @@ func executeTaskSubmissionWith(
 	stage := "start"
 	defer func() {
 		if !durable && relayInfo.Billing != nil {
+			if relayInfo.DFLOPTaskOutbound && service.DFLOPTaskReservationApplies(relayInfo) && (relayInfo.DFLOPTaskHTTPStatus/100 != 4 || relayInfo.DFLOPTaskAccepted) {
+				if err := service.HoldDFLOPTaskReservation(relayInfo, stage); err != nil {
+					logger.LogError(c, "task submit hold: "+err.Error())
+				}
+				return
+			}
 			diagnostics.refund(stage)
 			relayInfo.Billing.Refund(c)
 		}
@@ -559,6 +565,9 @@ func executeTaskSubmissionWith(
 
 		stage = "submit"
 		result, taskErr = submit(c, relayInfo)
+		if result != nil && service.DFLOPTaskReservationApplies(relayInfo) {
+			relayInfo.DFLOPTaskUpstreamTaskID = result.UpstreamTaskID
+		}
 		if requestErr := c.Request.Context().Err(); requestErr != nil {
 			diagnostics.cancelled("after_submit", retryParam.GetRetry()+1)
 			taskErr = service.TaskErrorWrapperLocal(requestErr, "request_cancelled", http.StatusRequestTimeout)
@@ -571,6 +580,9 @@ func executeTaskSubmissionWith(
 
 		taskAPIError := taskSubmissionAPIError(taskErr)
 		relayInfo.LastError = taskAPIError
+		if relayInfo.DFLOPTaskOutbound && service.DFLOPTaskReservationApplies(relayInfo) {
+			taskErr.NoRetry = true
+		}
 		decision := decideTaskRetry(c, taskErr, retryLimit-retryParam.GetRetry())
 		service.RecordPolicyFailure(c, channel.Id, taskAPIError, decision)
 		if !taskErr.LocalError {
@@ -707,11 +719,27 @@ func executeTaskSubmissionWith(
 		return nil, taskErr
 	}
 	durable = true
+	if err := service.LinkDFLOPTaskReservation(relayInfo, task); err != nil {
+		if holdErr := service.HoldDFLOPTaskReservation(relayInfo, "task_journal_binding_failed"); holdErr != nil {
+			logger.LogError(c, holdErr.Error())
+		}
+		return nil, service.TaskErrorWrapperLocal(err, "task_billing_journal_failed", http.StatusInternalServerError)
+	}
 	stage = "settle"
 	diagnostics.durable(task)
 	diagnostics.settleStart(task, result.Quota)
 
-	if settleErr := service.SettleBilling(c, relayInfo, result.Quota); settleErr != nil {
+	pendingDFLOP := service.DFLOPTaskReservationApplies(relayInfo) && (result.Immediate == nil || service.TaskBillingIsPending(task.PrivateData.PluginState))
+	if pendingDFLOP && service.TaskBillingIsPending(task.PrivateData.PluginState) {
+		if err := service.HoldDFLOPTaskReservation(relayInfo, "MISSING_AUTHORITATIVE_FINAL_USAGE"); err != nil {
+			logger.LogError(c, "task billing pending: "+err.Error())
+		}
+	}
+	var settleErr error
+	if !pendingDFLOP {
+		settleErr = service.SettleBilling(c, relayInfo, result.Quota)
+	}
+	if settleErr != nil {
 		common.SysError("settle task billing error: " + settleErr.Error())
 		taskErr = service.TaskErrorWrapperLocal(errors.New("failed to settle task billing"), "task_billing_settlement_failed", http.StatusInternalServerError)
 		diagnostics.failed("settle", "billing_error", taskErr, true)

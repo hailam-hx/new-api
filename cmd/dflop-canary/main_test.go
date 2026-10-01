@@ -1,14 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/glebarez/sqlite"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"io"
+	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/service/pricing/dflop"
@@ -87,6 +93,15 @@ func TestLocalHistoricalCorrelationDatabaseMatrix(t *testing.T) {
 			assert.True(t, bindings[0].BindingVerified)
 			assert.True(t, bindings[0].RuntimeUsageVerified)
 			assert.False(t, bindings[0].SettledCostReconciled)
+			for _, prefix := range []string{"log:", "technical:"} {
+				providerReport := report
+				providerReport.Captures = []dflop.HistoricalCapture{{Model: "voice-tts-pro", EvidenceID: prefix + "1", Response: json.RawMessage(`{"request_id":"provider-request","model":"voice-tts-pro"}`)}}
+				exact, _, err := correlateLocalHistory(&providerReport, 991)
+				require.NoError(t, err)
+				require.Len(t, exact, 2)
+				assert.Equal(t, "EXACT_REQUEST_ID", exact[0].Confidence)
+				assert.True(t, exact[0].BindingVerified)
+			}
 			localReport := report
 			localReport.Captures = nil
 			passive, _, err := correlateLocalHistory(&localReport, 991)
@@ -107,4 +122,44 @@ func TestLocalHistoricalCorrelationDatabaseMatrix(t *testing.T) {
 			t.Log(version)
 		})
 	}
+}
+
+func TestProviderContractAuditRejectsPaidFlagsBeforeDatabase(t *testing.T) {
+	for _, args := range [][]string{
+		{"provider-contract-audit", "--execute", "--sqlite-db", "/missing"},
+		{"provider-contract-audit", "--confirm-paid-canary", "never", "--sqlite-db", "/missing"},
+	} {
+		require.ErrorContains(t, run(args), "PROVIDER_CONTRACT_GET_ONLY")
+	}
+}
+
+type contractAuditTransport struct{ paths []string }
+
+func (tr *contractAuditTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	tr.paths = append(tr.paths, req.Method+" "+req.URL.Path)
+	body := `{ "schema_version":"1.0", "currency":"points", "aliases":{}, "models":[{"id":"doubao-seedance-2.0-lite","billing":{"features":["video_two_stage"]},"pricing":{"callable":true,"category":"video","endpoint_type":"videos_generations","supported_protocols":[],"video_second_stage_per_second":null},"caps":{},"authorization":"Bearer fixture-secret","prompt":"private prompt","source_video_url":"https://private.example/media?token=private"}]}`
+	if req.URL.Path != "/v1/catalog" {
+		body = `{"models":[]}`
+	}
+	return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/json"}}, Body: io.NopCloser(strings.NewReader(body)), Request: req}, nil
+}
+
+func TestProviderContractAuditGETOnlyRedactedNoPromotion(t *testing.T) {
+	tr := &contractAuditTransport{}
+	path := filepath.Join(t.TempDir(), "audit.json")
+	require.NoError(t, runProviderContractAudit(context.Background(), dflop.Client{HTTP: &http.Client{Transport: tr}}, 1, "fixture-secret", "", path))
+	assert.Equal(t, []string{"GET /v1/catalog", "GET /api/v1/models/public"}, tr.paths)
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	for _, secret := range []string{"fixture-secret", "private prompt", "private.example"} {
+		assert.False(t, bytes.Contains(raw, []byte(secret)))
+	}
+	var report map[string]any
+	require.NoError(t, common.Unmarshal(raw, &report))
+	assert.Equal(t, "PROVIDER_CONTRACT_GET_ONLY", report["mode"])
+	assert.Equal(t, false, report["auto_promotes"])
+	assert.Equal(t, false, report["pricing_applied"])
+	assert.Equal(t, true, report["fresh_preview_required"])
+	assert.Equal(t, false, report["paid_requests_executed"])
+	assert.Greater(t, len(report["blockers"].([]any)), 0)
 }

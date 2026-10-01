@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -198,6 +199,12 @@ func TestBuildEffectiveCatalogFailsClosedOnUnknownContract(t *testing.T) {
 	items, _, _, err = BuildEffective([]byte(`{"schema_version":"1.0","currency":"points","aliases":{},"models":[{"id":"future-price","pricing":{"category":"text","callable":true,"input_per_1m":"1","output_per_1m":"2","future_price":"3"},"billing":{"features":["token"]},"caps":{"surfaces":["chat"]}}]}`), []byte(`{"points_per_cny":60}`), "1", "1")
 	require.NoError(t, err)
 	assert.Equal(t, "UNKNOWN_BILLING_FEATURE", items[0].ReasonCode)
+	items, _, _, err = BuildEffective([]byte(`{"schema_version":"1.0","currency":"points","aliases":{},"models":[{"id":"future-basis","pricing":{"category":"text","callable":true,"input_per_1m":"1","output_per_1m":"2"},"billing":{"features":["token"],"additional_per_second":"5"},"caps":{"surfaces":["chat"]}}]}`), []byte(`{"points_per_cny":60}`), "1", "1")
+	require.NoError(t, err)
+	assert.Equal(t, UnsupportedMapping, items[0].Status)
+	assert.Equal(t, "UNKNOWN_BILLING_FEATURE", items[0].ReasonCode)
+	assert.Contains(t, items[0].BillingFeatures, "unmapped_billing_field:additional_per_second")
+	assert.Empty(t, items[0].Expression)
 	_, _, _, err = BuildEffective([]byte(`{"schema_version":"2.0","currency":"points","aliases":{},"models":[]}`), []byte(`{"points_per_cny":60}`), "1", "1")
 	require.ErrorContains(t, err, "SCHEMA_VERSION_CHANGED")
 	_, _, _, err = BuildEffective([]byte(`{"schema_version":"1.0","currency":"usd","aliases":{},"models":[]}`), []byte(`{"unit":"points","points_per_cny":60}`), "1", "1")
@@ -216,7 +223,7 @@ func TestBuildEffectiveCatalogPreservesCompositeVideoComponents(t *testing.T) {
 	assert.Empty(t, items[0].Expression)
 }
 
-func TestEffectiveMediaPricesRemainSourceDrivenWhileBindingsAreUnverified(t *testing.T) {
+func TestEffectiveMediaPricesRemainSourceDrivenWithExactBindings(t *testing.T) {
 	for _, tc := range []struct {
 		name, category, endpoint, feature, priceField, points, usd, reason string
 	}{
@@ -235,8 +242,16 @@ func TestEffectiveMediaPricesRemainSourceDrivenWhileBindingsAreUnverified(t *tes
 			assert.Equal(t, tc.usd, items[0].Prices[tc.priceField].CostUSD)
 			planned, err := Plan(items, model.DefaultDFLOPConfig(), nil, nil)
 			require.NoError(t, err)
-			assert.Equal(t, UnsupportedMapping, planned[0].Status)
-			assert.Equal(t, tc.reason, planned[0].ReasonCode)
+			if tc.name == "voice-tts-pro" {
+				assert.Equal(t, SupportedAuto, planned[0].Status)
+				assert.Empty(t, planned[0].ReasonCode)
+				assert.Equal(t, "dflop-tts", planned[0].PluginKey)
+				assert.Contains(t, planned[0].Expression, `u("character_count")`)
+			} else {
+				assert.Equal(t, SupportedAuto, planned[0].Status)
+				assert.Empty(t, planned[0].ReasonCode)
+				assert.Equal(t, "dflop-media", planned[0].PluginKey)
+			}
 		})
 	}
 }
@@ -353,4 +368,239 @@ func TestPromotionSemanticsFailClosedOnChangedOrMissingBadge(t *testing.T) {
 		assert.Empty(t, item.Prices["input_per_1m"].EffectiveCredits)
 	}
 	assert.Equal(t, "AMBIGUOUS_DISCOUNT", byID["codex-auto-review"].ReasonCode)
+}
+
+func TestDFLOPTaskProfilesKeepDistinctBillingUnits(t *testing.T) {
+	unitPrice := "6"
+	for _, tc := range []struct {
+		name   string
+		source Model
+		prices map[string]Price
+		usage  map[string]any
+		want   float64
+		plugin string
+	}{
+		{"delivered seconds", Model{ID: "grok-imagine-video", Category: "video", EndpointType: "videos_generations", BillingFeatures: []string{"video_second"}, PricePerVideoSecond: &unitPrice}, map[string]Price{"price_per_video_second": {SellingUSD: "0.1"}}, map[string]any{"duration_sec": 4.25}, 0.425, "dflop-media"},
+		{"one music generation", Model{ID: "suno-v5", Category: "audio", EndpointType: "music_generations", BillingFeatures: []string{"music"}, PricePerMusicGeneration: &unitPrice}, map[string]Price{"price_per_music_generation": {SellingUSD: "0.1"}}, map[string]any{"generation_count": 1}, 0.1, "dflop-media"},
+		{"successful fixed compose", Model{ID: "clip-compose", Category: "video", EndpointType: "videos_generations", BillingFeatures: []string{"video_task"}, PricePerVideoTask: &unitPrice}, map[string]Price{"price_per_video_task": {SellingUSD: "0.1"}}, map[string]any{"count": 1}, 0.1, "dflop-media"},
+		{"terminal characters", Model{ID: "voice-tts-pro", Category: "audio", EndpointType: "tts_synthesize", BillingFeatures: []string{"tts_char"}, PricePerTTSChar: &unitPrice}, map[string]Price{"price_per_tts_char": {SellingUSD: "0.1"}}, map[string]any{"character_count": 26}, 2.6, "dflop-tts"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			item := Item{ModelID: tc.source.ID, Prices: tc.prices}
+			classifyTaskPricing(&item, tc.source)
+			assert.Equal(t, tc.plugin, item.TaskPlugin)
+			require.NotEmpty(t, item.TaskExpression)
+			plugin, ok := jsplugin.DefaultRegistry.Generation().Get(tc.plugin)
+			require.True(t, ok)
+			schema, _ := plugin.Meta.UsageForModel(tc.source.ID)
+			_, missing, reason := taskPricingCompatibility(item, schema)
+			assert.Empty(t, missing)
+			assert.Empty(t, reason)
+			cost, _, err := billingexpr.RunExprWithRequest(item.TaskExpression, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: tc.usage})
+			require.NoError(t, err)
+			assert.InDelta(t, tc.want, cost, 1e-12)
+		})
+	}
+}
+
+func TestDFLOPSeedanceFinalTokenTierAndLitePriceGate(t *testing.T) {
+	base := "60"
+	for _, tc := range []struct {
+		model      string
+		formula    string
+		rates      map[string]string
+		resolution string
+		mode       string
+		want       float64
+	}{
+		{"doubao-seedance-2.0", "video_token_formula_seedance_2_0", map[string]string{"default@480p": "1", "default@720p": "2", "default@1080p": "3", "with_video_input@480p": "4", "with_video_input@720p": "5", "with_video_input@1080p": "6"}, "720p", "default", 0.002},
+		{"doubao-seedance-2.0", "video_token_formula_seedance_2_0", map[string]string{"default@480p": "1", "default@720p": "2", "default@1080p": "3", "with_video_input@480p": "4", "with_video_input@720p": "5", "with_video_input@1080p": "6"}, "1080p", "with_video_input", 0.006},
+		{"doubao-seedance-2.5", "video_token_formula_seedance_2_5", map[string]string{"default": "1", "default@1080p": "2", "with_video_input": "3", "with_video_input@1080p": "4"}, "480p", "default", 0.001},
+		{"doubao-seedance-2.5", "video_token_formula_seedance_2_5", map[string]string{"default": "1", "default@1080p": "2", "with_video_input": "3", "with_video_input@1080p": "4"}, "720p", "with_video_input", 0.003},
+	} {
+		t.Run(tc.model+tc.resolution+tc.mode, func(t *testing.T) {
+			source := Model{ID: tc.model, Category: "video", EndpointType: "videos_generations", PricePerVideoSecond: &base, VideoPriceTiers: map[string]string{"480p": "60", "720p": "60", "1080p": "60"}, VideoTokenPricePer1M: tc.rates, BillingFeatures: []string{"video_second", "video_tiers", "video_token", tc.formula}}
+			item := Item{ModelID: source.ID, Prices: map[string]Price{"price_per_video_second": {SellingUSD: "99"}}}
+			for tier := range source.VideoPriceTiers {
+				item.Prices["video_tier:"+tier] = Price{SellingUSD: "99"}
+			}
+			for tier, rate := range tc.rates {
+				item.Prices["video_token_tier:"+tier] = Price{SellingUSD: rate}
+			}
+			classifyTaskPricing(&item, source)
+			require.Equal(t, "dflop-media", item.TaskPlugin)
+			plugin, _ := jsplugin.DefaultRegistry.Generation().Get("dflop-media")
+			schema, _ := plugin.Meta.UsageForModel(tc.model)
+			_, missing, reason := taskPricingCompatibility(item, schema)
+			require.Empty(t, missing)
+			require.Empty(t, reason)
+			cost, _, err := billingexpr.RunExprWithRequest(item.TaskExpression, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: map[string]any{"completion_tokens": 1000.0, "resolution": tc.resolution, "input_mode": tc.mode}})
+			require.NoError(t, err)
+			assert.InDelta(t, tc.want, cost, 1e-12)
+			assert.NotContains(t, item.TaskExpression, "duration_sec")
+		})
+	}
+	source := Model{ID: "doubao-seedance-2.0-lite", Category: "video", EndpointType: "videos_generations", PricePerVideoSecond: &base, VideoPriceTiers: map[string]string{"720p": "1", "1080p": "1"}, VideoTokenPricePer1M: map[string]string{"default@720p": "1", "default@1080p": "1", "with_video_input@720p": "1", "with_video_input@1080p": "1"}, BillingFeatures: []string{"video_second", "video_tiers", "video_token", "video_token_formula_seedance_2_0", "video_two_stage"}}
+	item := Item{ModelID: source.ID}
+	classifyTaskPricing(&item, source)
+	assert.Equal(t, "PROVIDER_CATALOG_MISSING_UPSCALE_RATE", item.ReasonCode)
+	assert.Empty(t, item.TaskExpression)
+	// Machine-readable authenticated add-on rates are a separate delivery leg.
+	for _, model := range []string{"doubao-seedance-2.0-lite", "doubao-seedance-2.0-fast-lite", "doubao-seedance-2.0-mini-lite", "doubao-seedance-2.5-lite"} {
+		source.ID = model
+		if model == "doubao-seedance-2.5-lite" {
+			source.BillingFeatures = []string{"video_second", "video_tiers", "video_token", "video_token_formula_seedance_2_5", "video_two_stage"}
+		}
+		source.VideoSecondStagePerSecond = map[string]string{"720p": "7.125", "1080p": "11.25"}
+		for _, tc := range []struct {
+			tier string
+			want float64
+		}{{"720p", 21.376}, {"1080p", 33.751}} {
+			t.Run(model+tc.tier, func(t *testing.T) {
+				item := Item{ModelID: model, Prices: map[string]Price{"price_per_video_second": {SellingUSD: "99"}}}
+				for tier := range source.VideoPriceTiers {
+					item.Prices["video_tier:"+tier] = Price{SellingUSD: "99"}
+				}
+				for tier := range source.VideoTokenPricePer1M {
+					item.Prices["video_token_tier:"+tier] = Price{SellingUSD: "1"}
+				}
+				for tier, rate := range source.VideoSecondStagePerSecond {
+					item.Prices["video_second_stage:"+tier] = Price{SellingUSD: rate}
+				}
+				classifyTaskPricing(&item, source)
+				require.NotEmpty(t, item.TaskExpression)
+				cost, _, err := billingexpr.RunExprWithRequest(item.TaskExpression, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: map[string]any{"completion_tokens": 1000.0, "duration_sec": 3.0, "resolution": tc.tier, "input_mode": "default"}})
+				require.NoError(t, err)
+				assert.InDelta(t, tc.want, cost, 1e-12)
+			})
+		}
+	}
+}
+
+func TestDFLOPH3InputDurationRequiresExplicitBillingBasis(t *testing.T) {
+	for _, tc := range []struct {
+		input  bool
+		reason string
+	}{{false, "NO_EXACT_VIDEO_PLUGIN_BINDING"}, {true, "MISSING_INPUT_VIDEO_DURATION"}} {
+		t.Run(tc.reason, func(t *testing.T) {
+			source := Model{ID: "minimax-h3", Category: "video", BillingFeatures: []string{"video_second", "video_tiers"}, VideoBillsInputSeconds: &tc.input}
+			if tc.input {
+				source.BillingFeatures = append(source.BillingFeatures, "video_input_seconds")
+			}
+			item := Item{}
+			classifyUnsupportedReason(&item, source)
+			assert.Equal(t, tc.reason, item.ReasonCode)
+			assert.Equal(t, tc.input, slices.Contains(item.RequiredFacts, "input_video_duration_sec"))
+		})
+	}
+}
+
+func TestDFLOPSubtitleOperationTiersCannotBecomeVideoResolutionPricing(t *testing.T) {
+	price := "0.1011"
+	source := Model{ID: "tvod-subtitle-soft", Category: "video", EndpointType: "videos_generations", BillingFeatures: []string{"video_second", "video_tiers"}, PricePerVideoSecond: &price, VideoPriceTiers: map[string]string{"asr": "0.06066", "translate": "0.04044"}}
+	item := Item{Prices: map[string]Price{"price_per_video_second": {SellingUSD: "0.1011"}, "video_tier:asr": {SellingUSD: "0.06066"}, "video_tier:translate": {SellingUSD: "0.04044"}}}
+	classifyTaskPricing(&item, source)
+	assert.Empty(t, item.TaskExpression)
+	classifyUnsupportedReason(&item, source)
+	assert.Equal(t, "MISSING_SUBTITLE_SOURCE_DURATION", item.ReasonCode)
+	assert.Equal(t, []string{"source_duration_sec", "asr_units", "translation_units"}, item.RequiredFacts)
+}
+
+func TestDFLOPAlreadyMappedTokenModelReceivesRouteAwarePreviewExpression(t *testing.T) {
+	catalog := []byte(`{"schema_version":"1.0","currency":"points","aliases":{},"models":[{"id":"grok-3-mini","pricing":{"category":"text","callable":true,"endpoint_type":"chat","supported_protocols":["openai_chat","openai_responses"],"input_per_1m":"60","output_per_1m":"120","cached_input_per_1m":"6"},"billing":{"features":["token"]},"caps":{"surfaces":["chat"]}}]}`)
+	items, _, _, err := BuildEffective(catalog, []byte(`{"points_per_cny":60}`), "1", "1")
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	assert.Equal(t, SupportedAuto, items[0].Status)
+	assert.True(t, HasResponsesEndpointBillingProfile(items[0].Expression))
+	assert.NoError(t, DFLOPEndpointRequestContract("https://api.dflop.top", items[0].Expression, "/v1/responses", billingexpr.RequestInput{Body: []byte(`{"model":"grok-3-mini","input":"hello"}`)}))
+}
+
+// These cases prevent catalog changes from silently authorizing billing.
+func TestProviderContractAuditFailClosed(t *testing.T) {
+	models := []string{"doubao-seedance-2.0-lite", "doubao-seedance-2.0-fast-lite", "doubao-seedance-2.0-mini-lite", "doubao-seedance-2.5-lite"}
+	catalog := func(component string, extra string) []byte {
+		entries := make([]string, 0, len(models))
+		for _, id := range models {
+			entries = append(entries, fmt.Sprintf(`{"id":%q,"pricing":{"category":"video","endpoint_type":"videos_generations","callable":true,"supported_protocols":["openai_video"],"video_second_stage_per_second":%s%s},"billing":{"features":["video_token","video_two_stage"]},"caps":{"surfaces":["video"]}}`, id, component, extra))
+		}
+		return []byte(`{"schema_version":"1.0","currency":"points","aliases":{},"models":[` + strings.Join(entries, ",") + `]}`)
+	}
+	previous := catalog("null", "")
+	for _, tc := range []struct{ name, component, extra, status string }{
+		{"missing", "null", "", "UNCHANGED"},
+		{"effective rates added", `{"720p":"1.5","1080p":"2"}`, "", "RESOLVED_BY_CATALOG"},
+		{"partial rate", `{"720p":"1.5"}`, "", "STILL_CONFLICTING"},
+		{"wrong decimal type", `{"720p":1.5,"1080p":"2"}`, "", "NEW_CONFLICT"},
+		{"negative rate", `{"720p":"-1","1080p":"2"}`, "", "NEW_CONFLICT"},
+		{"zero rate", `{"720p":"0","1080p":"2"}`, "", "NEW_CONFLICT"},
+		{"oversized rate", `{"720p":"1e1000000000","1080p":"2"}`, "", "NEW_CONFLICT"},
+		{"unknown component", `{"720p":"1.5","1080p":"2"}`, `,"new_billable_component":"3"`, "NEW_CONFLICT"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			report, err := EvaluateProviderContracts(catalog(tc.component, tc.extra), previous)
+			require.NoError(t, err)
+			require.NotEmpty(t, report.Blockers)
+			assert.Equal(t, tc.status, report.Blockers[0].Status)
+			assert.True(t, report.FreshPreviewRequired)
+			assert.False(t, report.AutoPromotes)
+			assert.False(t, report.PricingApplied)
+			assert.False(t, report.AutoApply)
+			assert.Equal(t, 4, report.CallableCount)
+			assert.Len(t, report.CatalogHash, 64)
+			assert.Len(t, report.Models, 4)
+		})
+	}
+}
+
+func TestProviderContractAuditDoesNotTrustGuessedProviderFields(t *testing.T) {
+	catalog := []byte(`{"schema_version":"1.0","currency":"points","aliases":{},"models":[{"id":"minimax-h3","pricing":{"callable":true,"video_bills_input_seconds":true},"billing":{"features":["video_input_seconds"],"billing_basis":"output_seconds","terminal_quantity":"duration_sec"},"caps":{}},{"id":"qwen-image-3.0-pro","pricing":{"callable":true,"large_pixel_threshold":2097152},"billing":{"features":["per_image","image_size_bands"]},"caps":{}}]}`)
+	report, err := EvaluateProviderContracts(catalog, nil)
+	require.NoError(t, err)
+	for _, blocker := range report.Blockers {
+		assert.NotEqual(t, "RESOLVED_BY_CATALOG", blocker.Status)
+		require.NotEmpty(t, blocker.MissingFacts)
+		require.NotEmpty(t, blocker.UnblockPredicates)
+		if blocker.ID == "minimax_h3" {
+			assert.Equal(t, "NEW_CONFLICT", blocker.Status)
+		}
+		if blocker.ID == "qwen_threshold_domain" {
+			assert.Equal(t, "STILL_CONFLICTING", blocker.Status)
+		}
+	}
+}
+
+func TestProviderContractAuditRetainsDisappearingProfileBlockers(t *testing.T) {
+	previous := []byte(`{"schema_version":"1.0","currency":"points","aliases":{},"models":[{"id":"gpt-6-sol","pricing":{"callable":true,"price_per_image":"2"},"billing":{"features":["token","fast_mode"]},"caps":{}}]}`)
+	current := []byte(`{"schema_version":"1.0","currency":"points","aliases":{},"models":[{"id":"gpt-6-sol","pricing":{"callable":true},"billing":{"features":["token"]},"caps":{}}]}`)
+	report, err := EvaluateProviderContracts(current, previous)
+	require.NoError(t, err)
+	for _, blocker := range report.Blockers {
+		if blocker.ID == "gpt_fast" || blocker.ID == "dedicated_image" {
+			assert.Equal(t, []string{"gpt-6-sol"}, blocker.Models)
+			assert.Equal(t, "STILL_CONFLICTING", blocker.Status)
+		}
+	}
+}
+
+func TestProviderContractAuditRejectsSemanticTypeChanges(t *testing.T) {
+	for _, field := range []string{`"video_bills_input_seconds":"true"`, `"video_max_input_seconds":"100"`, `"large_pixel_threshold":2.5`} {
+		catalog := []byte(`{"schema_version":"1.0","currency":"points","aliases":{},"models":[{"id":"minimax-h3","pricing":{"callable":true,` + field + `},"billing":{"features":["video_input_seconds"]},"caps":{}}]}`)
+		report, err := EvaluateProviderContracts(catalog, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "NEW_CONFLICT", report.Blockers[1].Status)
+	}
+}
+
+func TestProviderContractAuditRequiresLiteBindingAndIgnoresNullProfilePrices(t *testing.T) {
+	models := []string{"doubao-seedance-2.0-lite", "doubao-seedance-2.0-fast-lite", "doubao-seedance-2.0-mini-lite", "doubao-seedance-2.5-lite"}
+	entries := []string{`{"id":"grok-3-mini","pricing":{"callable":true,"price_per_server_tool_call":null},"billing":{"features":["token"]},"caps":{}}`, `{"id":"gpt-6-sol","pricing":{"callable":true,"price_per_image":null},"billing":{"features":["token"]},"caps":{}}`}
+	for _, id := range models {
+		entries = append(entries, fmt.Sprintf(`{"id":%q,"pricing":{"callable":true,"endpoint_type":"chat","video_second_stage_per_second":{"720p":"1","1080p":"2"}},"billing":{"features":["video_token","video_two_stage"]},"caps":{}}`, id))
+	}
+	report, err := EvaluateProviderContracts([]byte(`{"schema_version":"1.0","currency":"points","aliases":{},"models":[`+strings.Join(entries, ",")+`]}`), nil)
+	require.NoError(t, err)
+	assert.NotEqual(t, "RESOLVED_BY_CATALOG", report.Blockers[0].Status)
+	assert.Empty(t, report.Blockers[5].Models)
+	assert.Empty(t, report.Blockers[6].Models)
 }

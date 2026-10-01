@@ -57,6 +57,12 @@ describe('log cost display', () => {
     localStorage.clear()
   })
 
+  test('shows quarantined billing as pending review instead of zero cost', () => {
+    renderCost({quota: 0, other: {billing_state: 'QUARANTINED'}})
+    expect(screen.getByText('Billing quarantined')).toBeVisible()
+    expect(screen.queryByText('$0')).not.toBeInTheDocument()
+  })
+
   test.each([
     { consumed: 12500, expected: '$0.025' },
     { consumed: 0, expected: '$0' },

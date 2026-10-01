@@ -106,18 +106,27 @@ type RelayInfo struct {
 	// aliases never participate in channel selection or upstream routing.
 	BillingModelName string
 
-	RequestURLPath     string
-	RequestHeaders     map[string]string
-	ShouldIncludeUsage bool
-	DisablePing        bool // 是否禁止向下游发送自定义 Ping
-	ClientWs           *websocket.Conn
-	TargetWs           *websocket.Conn
-	InputAudioFormat   string
-	OutputAudioFormat  string
-	RealtimeTools      []dto.RealTimeTool
-	IsFirstRequest     bool
-	AudioUsage         bool
-	ReasoningEffort    string
+	DFLOPTaskPlugin            string
+	DFLOPTaskOutbound          bool
+	DFLOPTaskUpstreamTaskID    string
+	DFLOPTaskAccepted          bool
+	DFLOPTaskHTTPStatus        int
+	DFLOPTaskReservationLogID  int
+	EndpointBillingUsageSeen   bool
+	EndpointBillingActualUsage *dto.Usage
+	EndpointBillingAnomaly     string
+	RequestURLPath             string
+	RequestHeaders             map[string]string
+	ShouldIncludeUsage         bool
+	DisablePing                bool // 是否禁止向下游发送自定义 Ping
+	ClientWs                   *websocket.Conn
+	TargetWs                   *websocket.Conn
+	InputAudioFormat           string
+	OutputAudioFormat          string
+	RealtimeTools              []dto.RealTimeTool
+	IsFirstRequest             bool
+	AudioUsage                 bool
+	ReasoningEffort            string
 	// ReasoningConversion is the suffix-derived reasoning intent attached
 	// after model mapping. Converters read it via ReasoningState().
 	ReasoningConversion *dto.ReasoningConversionState
@@ -248,6 +257,9 @@ func (info *RelayInfo) RequestedImageCount() int {
 
 func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 	info.ResponseModel = nil
+	info.EndpointBillingUsageSeen = false
+	info.EndpointBillingActualUsage = nil
+	info.EndpointBillingAnomaly = ""
 	info.FinalRequestRelayFormat = ""
 	info.RequestConversionChain = nil
 	info.InitRequestConversionChain()

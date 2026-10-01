@@ -2,6 +2,7 @@ package openai
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,8 +11,10 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -353,4 +356,62 @@ func TestOaiResponsesStreamHandlerKeepsNonSGLangCreatedAt(t *testing.T) {
 	_, apiErr := OaiResponsesStreamHandler(c, info, resp)
 	require.Nil(t, apiErr)
 	assert.Contains(t, w.Body.String(), `1786588600.0`)
+}
+
+func TestDFLOPResponsesHandlersPreserveActualZeroAndQuarantineMissingUsage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	previousTimeout := constant.StreamingTimeout
+	constant.StreamingTimeout = 30
+	t.Cleanup(func() { constant.StreamingTimeout = previousTimeout })
+	for _, stream := range []bool{false, true} {
+		for _, tc := range []struct {
+			name, usage, anomaly string
+			prompt, completion   int
+		}{
+			{"zero", `{"input_tokens":0,"output_tokens":0,"input_tokens_details":{"cached_tokens":0}}`, "", 0, 0},
+			{"measured", `{"input_tokens":12,"output_tokens":5,"input_tokens_details":{"cached_tokens":4},"output_tokens_details":{"reasoning_tokens":3}}`, "", 12, 5},
+			{"missing output", `{"input_tokens":12,"input_tokens_details":{"cached_tokens":0}}`, "MISSING_AUTHORITATIVE_TOKEN_USAGE", 0, 0},
+			{"missing cache", `{"input_tokens":12,"output_tokens":5}`, "MISSING_AUTHORITATIVE_CACHE_USAGE", 0, 0},
+			{"nonterminal zero", `{"input_tokens":0,"output_tokens":0,"input_tokens_details":{"cached_tokens":0}}`, "", 0, 0},
+		} {
+			if tc.name == "nonterminal zero" && !stream {
+				continue
+			}
+			t.Run(fmt.Sprintf("%s/stream=%t", tc.name, stream), func(t *testing.T) {
+				w := httptest.NewRecorder()
+				c, _ := gin.CreateTestContext(w)
+				c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+				info := &relaycommon.RelayInfo{OriginModelName: "gpt-6-sol", DisablePing: true, ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://api.dflop.top", UpstreamModelName: "gpt-6-sol"}, TieredBillingSnapshot: &billingexpr.BillingSnapshot{ExprString: `tier("dflop_chat_standard_responses", p * 2 + c * 10 + cr * 0.2)`}}
+				info.SetEstimatePromptTokens(90)
+				payload := `{"object":"response","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"generated content must not replace explicit zero usage"}]}],"usage":` + tc.usage + `}`
+				contentType := "application/json"
+				if stream {
+					payload = "data: {\"type\":\"response.output_text.delta\",\"delta\":\"estimated output\"}\n\n" + "data: {\"type\":\"response.completed\",\"response\":" + payload + "}\n\ndata: [DONE]\n\n"
+					if tc.name == "nonterminal zero" {
+						payload = strings.Replace(payload, "response.completed", "response.created", 1)
+					}
+					contentType = "text/event-stream"
+				}
+				resp := &http.Response{StatusCode: http.StatusOK, Header: http.Header{"Content-Type": {contentType}}, Body: io.NopCloser(strings.NewReader(payload))}
+				var usage *dto.Usage
+				var apiErr *types.NewAPIError
+				if stream {
+					usage, apiErr = OaiResponsesStreamHandler(c, info, resp)
+				} else {
+					usage, apiErr = OaiResponsesHandler(c, info, resp)
+				}
+				require.Nil(t, apiErr)
+				assert.Equal(t, tc.anomaly, info.EndpointBillingAnomaly)
+				assert.Equal(t, tc.anomaly == "" && tc.name != "nonterminal zero", info.EndpointBillingUsageSeen)
+				if tc.name == "nonterminal zero" {
+					assert.Nil(t, info.EndpointBillingActualUsage)
+				}
+				if tc.anomaly == "" {
+					require.NotNil(t, usage)
+					assert.Equal(t, tc.prompt, usage.PromptTokens)
+					assert.Equal(t, tc.completion, usage.CompletionTokens)
+				}
+			})
+		}
+	}
 }

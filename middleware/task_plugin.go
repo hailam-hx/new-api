@@ -37,8 +37,8 @@ const contextKeyTaskPluginEndpointModel = "task_plugin_endpoint_model_request"
 var errTaskPluginUnsupportedMediaType = errors.New("unsupported task plugin media type")
 
 // SelectAudioSpeechTaskPlugin runs after normal channel selection. A speech
-// model only enters the task bridge when the chosen channel explicitly binds
-// the DFLOP plugin; every other selected channel keeps the audio relay.
+// model only enters the task bridge when the chosen channel binds
+// the DFLOP plugin explicitly or through the exact provider origin; every other selected channel keeps the audio relay.
 func SelectAudioSpeechTaskPlugin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		value, found := c.Get(pluginruntime.ContextKeyPinnedEndpoint)
@@ -49,6 +49,16 @@ func SelectAudioSpeechTaskPlugin() gin.HandlerFunc {
 		}
 		setting, valid := common.GetContextKeyType[kitdto.ChannelSettings](c, constant.ContextKeyChannelSetting)
 		if valid && setting.BindsTaskPlugin(pinned.Plugin.Meta.Key) {
+			c.Next()
+			return
+		}
+		channelType := common.GetContextKeyInt(c, constant.ContextKeyChannelType)
+		baseURL := common.GetContextKeyString(c, constant.ContextKeyChannelBaseUrl)
+		selectedChannel := &model.Channel{Type: channelType, BaseURL: &baseURL}
+		if valid {
+			selectedChannel.SetSetting(setting)
+		}
+		if selectedChannel.BindsTaskPluginForModel(pinned.Plugin.Meta.Key, pinned.Model, pinned.Generation) {
 			c.Next()
 			return
 		}

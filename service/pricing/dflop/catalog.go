@@ -62,6 +62,7 @@ type Model struct {
 	CachedInputPer1MLong      *string           `json:"cached_input_per_1m_long"`
 	FastModeMultiplier        *string           `json:"fast_mode_multiplier"`
 	LargePixelThreshold       *int              `json:"large_pixel_threshold"`
+	ImagesPerRequest          *int              `json:"images_per_request"`
 	VideoBillsInputSeconds    *bool             `json:"video_bills_input_seconds"`
 }
 
@@ -399,6 +400,19 @@ func BuildEffective(catalogJSON, currencyJSON []byte, cnyToUSD, markup string) (
 		if err := common.Unmarshal(raw, &entry); err != nil || entry.ID == "" || len(entry.Pricing) == 0 || entry.Billing.Features == nil || len(entry.Caps) == 0 || string(entry.Caps) == "null" {
 			return nil, "", meta, errors.New("invalid authenticated DFLOP model contract")
 		}
+		var rawContract map[string]json.RawMessage
+		var billingFields map[string]json.RawMessage
+		if err := common.Unmarshal(raw, &rawContract); err != nil {
+			return nil, "", meta, fmt.Errorf("model %s: invalid contract", entry.ID)
+		}
+		if err := common.Unmarshal(rawContract["billing"], &billingFields); err != nil || billingFields == nil {
+			return nil, "", meta, fmt.Errorf("model %s: invalid billing contract", entry.ID)
+		}
+		for name := range billingFields {
+			if name != "features" {
+				entry.Billing.Features = append(entry.Billing.Features, "unmapped_billing_field:"+name)
+			}
+		}
 		var pricing map[string]any
 		if err := common.Unmarshal(entry.Pricing, &pricing); err != nil || pricing == nil {
 			return nil, "", meta, fmt.Errorf("model %s: invalid pricing", entry.ID)
@@ -409,6 +423,7 @@ func BuildEffective(catalogJSON, currencyJSON []byte, cnyToUSD, markup string) (
 				delete(pricing, name)
 			}
 		}
+		slices.Sort(entry.Billing.Features)
 		pricing["id"] = entry.ID
 		pricing["vendor_slug"] = entry.VendorSlug
 		pricing["official_model_id"] = entry.OfficialModelID
@@ -650,6 +665,15 @@ func build(catalogJSON, currencyJSON []byte, cnyToUSD, markup string, authentica
 		}
 		if authenticated && item.ReasonCode == "MISSING_SERVER_TOOL_USAGE" {
 			item.ReasonCode = "LIVE_CANARY_REQUIRED"
+		}
+		if authenticated {
+			profiles := BuildEndpointBillingProfiles(item)
+			if len(profiles) > 0 && profiles[0].Status == SupportedAuto {
+				profile := profiles[0]
+				item.Expression = profile.Expression
+				item.RequiredFacts = slices.Clone(profile.RequiredFacts)
+				item.Status, item.ReasonCode, item.Reason = SupportedAuto, "", ""
+			}
 		}
 		if authenticated {
 			for _, feature := range source.BillingFeatures {

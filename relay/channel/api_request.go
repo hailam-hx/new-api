@@ -16,6 +16,7 @@ import (
 	common2 "github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -543,6 +544,32 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 			return nil, err
 		}
 	}
+	if info.ChannelMeta != nil && dflop.DFLOPEndpointSourceApplies(info.ChannelBaseUrl) && (strings.Contains(req.Header.Get("Content-Type"), "application/json") || dflop.DFLOPEndpointModelApplies(info.ChannelBaseUrl, info.GetUpstreamModelName()) || info.TieredBillingSnapshot != nil && dflop.HasEndpointBillingProfile(info.TieredBillingSnapshot.ExprString)) {
+		expression := ""
+		if snapshot := info.TieredBillingSnapshot; snapshot != nil {
+			expression = snapshot.ExprString
+		}
+		var body []byte
+		if req.Body != nil {
+			var err error
+			body, err = io.ReadAll(req.Body)
+			_ = req.Body.Close()
+			req.Body = io.NopCloser(bytes.NewReader(body))
+			if err != nil {
+				return nil, err
+			}
+		}
+		input := billingexpr.RequestInput{Body: body, Headers: make(map[string]string)}
+		for key, values := range req.Header {
+			input.Headers[key] = strings.Join(values, ",")
+		}
+		if err := dflop.DFLOPEndpointModelRequestContract(info.ChannelBaseUrl, info.GetUpstreamModelName(), expression, req.URL.Path, input); err != nil {
+			return nil, err
+		}
+	}
+	if err := service.PrepareEndpointBillingReservation(c, info); err != nil {
+		return nil, err
+	}
 	if err := service.EnsureDFLOPCacheReservation(c, info); err != nil {
 		return nil, err
 	}
@@ -587,7 +614,30 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 		}
 	}
 
+	if service.DFLOPTaskReservationApplies(info) && req.Method != http.MethodPost {
+		return nil, errors.New("DFLOP billed task submit must use POST")
+	}
+	if service.DFLOPTaskReservationApplies(info) && req.Method == http.MethodPost {
+		if req.Body == nil || req.Body == http.NoBody {
+			return nil, errors.New("DFLOP billed task submit body is missing")
+		}
+		if req.Header.Get("Idempotency-Key") != info.RequestId {
+			return nil, errors.New("DFLOP task Idempotency-Key changed before submission")
+		}
+		if err := service.EnsureDFLOPTaskReservation(c, info); err != nil {
+			return nil, err
+		}
+		// Disabling GetBody prevents net/http from automatically replaying an
+		// ambiguous billed POST on a reused connection or HTTP/2 retry.
+		req.GetBody = nil
+		info.DFLOPTaskOutbound = true
+	}
 	resp, err := relayClient.Do(req)
+	if service.DFLOPTaskReservationApplies(info) && resp != nil {
+		info.DFLOPTaskHTTPStatus = resp.StatusCode
+		info.DFLOPTaskAccepted = resp.StatusCode/100 == 2
+	}
+
 	if err != nil {
 		logger.LogError(c, "do request failed: "+err.Error())
 		return nil, types.NewError(err, types.ErrorCodeDoRequestFailed, types.ErrOptionWithHideErrMsg("upstream error: do request failed"))

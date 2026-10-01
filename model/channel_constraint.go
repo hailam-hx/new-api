@@ -1,11 +1,44 @@
 package model
 
 import (
+	"net/url"
 	"slices"
 
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 )
+
+// BindsTaskPluginForModel preserves explicit bindings and permits exact DFLOP
+// models on the provider's canonical type-60 origin without changing settings.
+// A nil generation uses the currently published registry.
+func (ch *Channel) BindsTaskPluginForModel(pluginKey, modelName string, generation *jsplugin.RoutingGeneration) bool {
+	if ch == nil {
+		return false
+	}
+	setting := ch.GetSetting()
+	if setting.BindsTaskPlugin(pluginKey) {
+		return true
+	}
+	if ch.Type != constant.ChannelTypeNewAPI || len(setting.TaskPluginBindings()) != 0 {
+		return false
+	}
+	if pluginKey != "dflop-media" && pluginKey != "dflop-image" && pluginKey != "dflop-tts" {
+		return false
+	}
+	origin, err := url.Parse(ch.GetBaseURL())
+	if err != nil || origin.Scheme != "https" || origin.Host != "api.dflop.top" || origin.User != nil || (origin.Path != "" && origin.Path != "/") || origin.RawPath != "" || origin.RawQuery != "" || origin.ForceQuery || origin.Fragment != "" {
+		return false
+	}
+	if generation == nil {
+		generation = jsplugin.DefaultRegistry.Generation()
+	}
+	if generation == nil {
+		return false
+	}
+	plugin, ok := generation.Get(pluginKey)
+	return ok && plugin != nil && plugin.Meta.SupportsUpstream(jsplugin.UpstreamKindNewAPI) && slices.Contains(plugin.Meta.Models, modelName)
+}
 
 var filterEvalOrder = []dto.ChannelFilterKind{
 	dto.FilterRequestPath,
@@ -105,8 +138,7 @@ func channelMatchesFilter(ch *Channel, modelName string, filter dto.ChannelFilte
 		if ch.Type == constant.ChannelTypeTaskPlugin || ch.Type == constant.ChannelTypeNewAPI {
 			// A New API channel serves every plugin it is extended with; the
 			// pinned plugin or any shared-model candidate may execute there.
-			setting := ch.GetSetting()
-			return setting.BindsTaskPlugin(filter.TaskPluginKey) || slices.ContainsFunc(filter.TaskPluginKeys, setting.BindsTaskPlugin)
+			return ch.BindsTaskPluginForModel(filter.TaskPluginKey, modelName, nil) || slices.ContainsFunc(filter.TaskPluginKeys, func(key string) bool { return ch.BindsTaskPluginForModel(key, modelName, nil) })
 		}
 		if ch.Type == constant.ChannelTypeOpenAI && filter.TaskPluginKey == "dflop-tts" {
 			return ch.GetSetting().BindsTaskPlugin("dflop-tts")

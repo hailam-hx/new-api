@@ -1322,7 +1322,11 @@ func (a *TaskAdaptor) submitContext(c *gin.Context, info *relaycommon.RelayInfo)
 			}
 			requestHeaders["Content-Type"] = c.GetHeader("Content-Type")
 			requestHeaders["Accept"] = c.GetHeader("Accept")
-			if a.plugin.Meta.Key == "dflop-tts" {
+			if service.DFLOPTaskReservationApplies(info) {
+				// Bind provider deduplication to the same user/plugin identity as
+				// the durable journal; raw client keys can collide across users.
+				requestHeaders["Idempotency-Key"] = info.RequestId
+			} else if a.plugin.Meta.Key == "dflop-tts" {
 				requestHeaders["Idempotency-Key"] = c.GetString("task_audio_idempotency_key")
 			}
 			if strings.Contains(c.GetHeader("Content-Type"), "multipart/form-data") {

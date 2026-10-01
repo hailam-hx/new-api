@@ -15,6 +15,7 @@ import (
 	taskdto "github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -362,6 +363,7 @@ func updateBatchTasks(ctx context.Context, adaptor BatchTaskPollingAdaptor, chan
 			task.PrivateData.ResultURL = responseItem.TaskInfo.Url
 		}
 
+		prepareDFLOPTaskCompletion(ctx, task, &responseItem.TaskInfo)
 		model.CaptureTaskRuntime(task, resp.Header, task.Data)
 		model.CaptureTaskCompletionFacts(task, string(task.Status), responseItem.TaskInfo.UsageFacts)
 		isDone := task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure
@@ -600,6 +602,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		task.Progress = taskResult.Progress
 	}
 
+	prepareDFLOPTaskCompletion(ctx, task, taskResult)
 	isDone := task.Status == model.TaskStatusSuccess || task.Status == model.TaskStatusFailure
 	if isDone && snap.Status != task.Status {
 		won, err := task.UpdateWithStatus(snap.Status)
@@ -675,18 +678,26 @@ func truncateBase64(s string) string {
 //
 // 表达式求值失败会保留预扣额度，因此也视为已接管，避免错误全退。
 func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor, task *model.Task, taskResult *relaycommon.TaskInfo) bool {
+	if task.Status == model.TaskStatusSuccess && IsDFLOPTaskPlatform(task.Platform) && TaskBillingIsPending(task.PrivateData.PluginState) {
+		logger.LogWarn(ctx, fmt.Sprintf("DFLOP task %s billing quarantined; retaining reservation", task.TaskID))
+		if task.ID > 0 {
+			model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{UserId: task.UserId, LogType: model.LogTypeError, Content: "DFLOP task billing requires authoritative final usage", ChannelId: task.ChannelId, ModelName: taskModelName(task), Quota: 0, TokenId: task.PrivateData.TokenId, Group: task.Group, Other: taskBillingOther(task), NodeName: task.PrivateData.NodeName})
+		}
+		return true
+	}
 	if bc := task.PrivateData.BillingContext; bc != nil && bc.TieredSnapshot != nil {
 		// 用量表达式结算只适用于成功任务；失败任务由调用方全额退款。
 		if task.Status == model.TaskStatusFailure {
 			return false
 		}
-		if task.Platform == "dflop-tts" {
-			if _, present := taskResult.UsageFacts["characters"]; !present {
-				logger.LogWarn(ctx, fmt.Sprintf("DFLOP speech task %s succeeded without authoritative characters; retaining reservation", task.TaskID))
-				return true
-			}
+		var result billingexpr.TieredResult
+		var usageFacts map[string]any
+		var err error
+		if IsDFLOPTaskPlatform(task.Platform) {
+			result, usageFacts, err = EvaluateDFLOPTaskCompletionUsage(bc.TieredSnapshot, taskResult.UsageFacts, task.PrivateData.PluginState)
+		} else {
+			result, usageFacts, err = EvaluateTaskCompletionUsage(bc.TieredSnapshot, taskResult.UsageFacts)
 		}
-		result, usageFacts, err := EvaluateTaskCompletionUsage(bc.TieredSnapshot, taskResult.UsageFacts)
 		if err != nil {
 			logger.LogWarn(ctx, fmt.Sprintf("任务 %s 表达式结算失败，保留预扣额度: %v", task.TaskID, err))
 			return true
@@ -696,7 +707,9 @@ func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor
 		}
 		bc.TieredSnapshot.UsageFacts = usageFacts
 		bc.TieredSnapshot.EstimatedTier = result.MatchedTier
-		RecalculateTaskQuota(ctx, task, result.ActualQuotaAfterGroup, "任务用量表达式结算", result.Clamp)
+		if handled, _ := settleDFLOPTaskReservation(ctx, task, &result.ActualQuotaAfterGroup, "DFLOP authoritative task usage settlement"); !handled {
+			RecalculateTaskQuota(ctx, task, result.ActualQuotaAfterGroup, "任务用量表达式结算", result.Clamp)
+		}
 		return true
 	}
 	// 按次计费的成功任务保持预扣；失败任务由调用方全额退款。
@@ -842,4 +855,35 @@ func failTasksFromPoll(ctx context.Context, adaptor TaskPollingAdaptor, tasks []
 		}
 	}
 	return firstErr
+}
+
+// prepareDFLOPTaskCompletion freezes a quarantine marker before the terminal
+// status CAS, so restarts cannot turn missing metering into a timeout refund.
+func prepareDFLOPTaskCompletion(ctx context.Context, task *model.Task, result *relaycommon.TaskInfo) {
+	if task.Status != model.TaskStatusSuccess || !IsDFLOPTaskPlatform(task.Platform) {
+		return
+	}
+	bc := task.PrivateData.BillingContext
+	if bc == nil || bc.TieredSnapshot == nil {
+		return
+	}
+	if _, _, err := EvaluateDFLOPTaskCompletionUsage(bc.TieredSnapshot, result.UsageFacts, task.PrivateData.PluginState); err != nil {
+		state, stateErr := TaskBillingPendingState(task.PrivateData.PluginState, "MISSING_AUTHORITATIVE_FINAL_USAGE")
+		if stateErr != nil {
+			logger.LogError(ctx, fmt.Sprintf("DFLOP task %s terminal billing state invalid: %v", task.TaskID, stateErr))
+			state = []byte(`{"billingPending":true,"blocker":"INVALID_TERMINAL_BILLING_STATE"}`)
+		}
+		task.PrivateData.PluginState = state
+		result.PluginState = state
+		if task.PrivateData.Execution != nil {
+			journal, journalErr := model.FindBillingReservationLog(task.PrivateData.Execution.RequestID, task.UserId)
+			if journalErr == nil && journal != nil && journal.Content == "BILLING_RESERVATION_HELD" {
+				journalErr = model.TransitionBillingReservationLog(journal.Id, "HELD", "PENDING", taskBillingOther(task))
+			}
+			if journalErr != nil {
+				logger.LogError(ctx, fmt.Sprintf("DFLOP task %s pending journal failed: %v", task.TaskID, journalErr))
+			}
+		}
+		logger.LogWarn(ctx, fmt.Sprintf("DFLOP task %s authoritative settlement is pending: %v", task.TaskID, err))
+	}
 }

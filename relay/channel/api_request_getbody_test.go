@@ -596,12 +596,16 @@ func TestDFLOPRejectsFinalOneHourCacheRequestBeforeOutbound(t *testing.T) {
 	calls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls++; w.WriteHeader(http.StatusNoContent) }))
 	defer server.Close()
-	req, err := http.NewRequest(http.MethodPost, server.URL, strings.NewReader(`{"model":"claude-example","system":[{"cache_control":{"ttl":"1h"}}]}`))
-	require.NoError(t, err)
-	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
-	ctx.Request = req
-	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://api.dflop.top", UpstreamModelName: "claude-example"}}
-	_, err = DoRequest(ctx, req, info)
-	require.ErrorContains(t, err, "UNSUPPORTED_DFLOP_CACHE_TTL_1H")
-	assert.Zero(t, calls)
+	for _, stream := range []bool{false, true} {
+		t.Run(fmt.Sprintf("stream_%t", stream), func(t *testing.T) {
+			req, err := http.NewRequest(http.MethodPost, server.URL, strings.NewReader(fmt.Sprintf(`{"model":"claude-example","stream":%t,"system":[{"cache_control":{"ttl":"1h"}}]}`, stream)))
+			require.NoError(t, err)
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Request = req
+			info := &relaycommon.RelayInfo{IsStream: stream, ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://api.dflop.top", UpstreamModelName: "claude-example"}}
+			_, err = DoRequest(ctx, req, info)
+			require.ErrorContains(t, err, "UNSUPPORTED_DFLOP_CACHE_TTL_1H")
+			assert.Zero(t, calls)
+		})
+	}
 }

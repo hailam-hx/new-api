@@ -27,6 +27,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/pricing/dflop"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -596,15 +597,44 @@ func (s *responsesWSSession) restoreConnectionContext(c *gin.Context, model stri
 	return nil
 }
 
+func validateDFLOPResponsesWebSocketProfile(info *relaycommon.RelayInfo, model string) *types.NewAPIError {
+	if info == nil || info.ChannelMeta == nil {
+		return nil
+	}
+	expression := ""
+	if info.TieredBillingSnapshot != nil {
+		expression = info.TieredBillingSnapshot.ExprString
+	}
+	if dflop.DFLOPEndpointModelApplies(info.ChannelBaseUrl, model) || dflop.DFLOPEndpointModelApplies(info.ChannelBaseUrl, info.GetUpstreamModelName()) || dflop.DFLOPEndpointProfileApplies(info.ChannelBaseUrl, expression) {
+		return types.NewError(errors.New("DFLOP_RESPONSES_WEBSOCKET_PROFILE_UNVERIFIED"), types.ErrorCodeInvalidRequest, types.ErrOptionWithStatusCode(http.StatusBadRequest), types.ErrOptionWithSkipRetry())
+	}
+	return nil
+}
+
 func buildResponsesWSCreatePayload(c *gin.Context, info *relaycommon.RelayInfo, req dto.OpenAIResponsesRequest, generate common.RawMessage, streamID string) ([]byte, *types.NewAPIError) {
+	if apiErr := validateDFLOPResponsesWebSocketProfile(info, req.Model); apiErr != nil {
+		return nil, apiErr
+	}
 	_, body, closer, apiErr := PrepareResponsesRequest(c, info, &req)
 	if apiErr != nil {
 		return nil, apiErr
 	}
 	defer closer.Close()
+	if apiErr := validateDFLOPResponsesWebSocketProfile(info, req.Model); apiErr != nil {
+		return nil, apiErr
+	}
 	jsonData, err := io.ReadAll(body)
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
+	}
+	var finalRequest struct {
+		Model string `json:"model"`
+	}
+	if err := common.Unmarshal(jsonData, &finalRequest); err != nil {
+		return nil, types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+	}
+	if apiErr := validateDFLOPResponsesWebSocketProfile(info, finalRequest.Model); apiErr != nil {
+		return nil, apiErr
 	}
 	event, err := buildResponsesWSCreateEvent(jsonData, generate, streamID)
 	if err != nil {

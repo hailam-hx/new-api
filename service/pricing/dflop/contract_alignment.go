@@ -6,7 +6,9 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"slices"
 )
 
 // DFLOPCacheContract rejects a capability not priced by the verified 5m
@@ -133,7 +135,58 @@ func DFLOPCacheContractApplies(baseURL, model string) bool {
 func EndpointBillingMatrix(items []Item) []map[string]any {
 	matrix := []map[string]any{}
 	for _, item := range items {
+		profiles := BuildEndpointBillingProfiles(item)
+		if len(profiles) > 0 {
+			for _, profile := range profiles {
+				matrix = append(matrix, map[string]any{
+					"model": profile.Model, "canonical_model": profile.CanonicalModel,
+					"profile": profile.Profile, "protocol": profile.Protocol, "endpoint": profile.Endpoint,
+					"executing_adapter": profile.Adapter, "expression": profile.Expression,
+					"status": profile.Status, "reason_code": profile.ReasonCode,
+					"catalog_features": item.BillingFeatures, "applicable_features": profile.ApplicableFeatures, "price_components": item.Prices,
+					"runtime_facts": profile.RequiredFacts, "PRICE_VERIFIED": profile.PriceVerified,
+					"SEMANTICS_VERIFIED": profile.SemanticsVerified, "BINDING_VERIFIED": profile.BindingVerified,
+					"RUNTIME_USAGE_VERIFIED": profile.RuntimeUsageVerified, "SETTLEMENT_VERIFIED": profile.SettlementVerified,
+					"evidence_basis": profile.EvidenceBasis, "paid_runtime_verified": false,
+					"global_additive_billing_verified": false,
+				})
+			}
+			continue
+		}
 		if !strings.HasPrefix(item.ModelID, "gpt-") {
+			verified := item.Status == SupportedAuto && item.Expression != ""
+			binding := verified
+			if item.TaskExpression != "" {
+				for _, plugin := range jsplugin.DefaultRegistry.Generation().PluginsByModel(item.ModelID) {
+					if plugin.Meta.Key != item.TaskPlugin || !slices.Contains(plugin.Meta.Models, item.ModelID) {
+						continue
+					}
+					schema, _ := plugin.Meta.UsageForModel(item.ModelID)
+					_, _, reason := taskPricingCompatibility(item, schema)
+					binding, verified = reason == "", reason == ""
+				}
+			}
+			endpoint := map[string]string{"videos_generations": "/v1/videos/generations", "images_generations": "/v1/images/generations", "tts_synthesize": "/v1/audio/speech", "music_generations": "/v1/music/generations", "voice_clone": "/v1/audio/voices", "avatar_create": "/v1/videos/avatars", "chat_completions": "/v1/chat/completions"}[item.EndpointType]
+			expression := item.Expression
+			if item.TaskExpression != "" {
+				expression = item.TaskExpression
+			}
+			priceVerified := item.PriceSemantics.SourcePriceKind == "AUTHENTICATED_EFFECTIVE_PRICE" && item.PriceSemantics.EffectiveState == "VERIFIED"
+			status, reason := item.Status, item.ReasonCode
+			if verified && priceVerified {
+				status, reason = SupportedAuto, ""
+			}
+			matrix = append(matrix, map[string]any{
+				"model": item.ModelID, "canonical_model": item.CanonicalID, "endpoint": endpoint,
+				"protocols": item.Protocols, "executing_plugin": item.TaskPlugin,
+				"applicable_features": item.BillingFeatures, "runtime_facts": item.RequiredFacts,
+				"price_components": item.Prices, "expression": expression,
+				"PRICE_VERIFIED":     priceVerified,
+				"SEMANTICS_VERIFIED": verified, "BINDING_VERIFIED": binding,
+				"RUNTIME_USAGE_VERIFIED": verified, "SETTLEMENT_VERIFIED": verified,
+				"paid_runtime_verified": false, "evidence_basis": "SOURCE_CONTRACT_AND_PRODUCTION_SCHEMA",
+				"status": status, "reason_code": reason,
+			})
 			continue
 		}
 		protocols := []string{"openai_chat", "openai_responses"}
@@ -152,7 +205,7 @@ func EndpointBillingMatrix(items []Item) []map[string]any {
 				unverified = []string{"selected_quality", "selected_size"}
 				fields = []string{"images", "usage", "quality", "size"}
 			}
-			matrix = append(matrix, map[string]any{"model": item.ModelID, "protocol": protocol, "endpoint": endpoint, "catalog_features": item.BillingFeatures, "applicable_features": applicable, "unverified_selectors": unverified, "runtime_selector": "UNVERIFIED", "usage_fields": fields, "global_additive_billing_verified": false})
+			matrix = append(matrix, map[string]any{"model": item.ModelID, "protocol": protocol, "endpoint": endpoint, "catalog_features": item.BillingFeatures, "applicable_features": applicable, "unverified_selectors": unverified, "runtime_selector": "UNVERIFIED", "usage_fields": fields, "global_additive_billing_verified": false, "PRICE_VERIFIED": item.PriceSemantics.SourcePriceKind == "AUTHENTICATED_EFFECTIVE_PRICE" && item.PriceSemantics.EffectiveState == "VERIFIED", "SEMANTICS_VERIFIED": item.Status == SupportedAuto && item.Expression != "", "BINDING_VERIFIED": item.Status == SupportedAuto && item.Expression != "", "RUNTIME_USAGE_VERIFIED": item.Status == SupportedAuto && item.Expression != "", "SETTLEMENT_VERIFIED": item.Status == SupportedAuto && item.Expression != "", "expression": item.Expression, "price_components": item.Prices, "canonical_model": item.CanonicalID, "executing_adapter": "openai", "status": item.Status, "evidence_basis": "EXISTING_PRODUCTION_BILLING_CONTRACT"})
 		}
 	}
 	return matrix

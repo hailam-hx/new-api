@@ -264,3 +264,24 @@ func isFixedPriceSettlement(info *relaycommon.RelayInfo, result *billingexpr.Tie
 	snap := info.TieredBillingSnapshot
 	return snap != nil && snap.BillingMode == "tiered_expr" && snap.EstimatedBillingUnit == billingexpr.BillingUnitRequest
 }
+
+// PrepareEndpointBillingReservation ensures channel retries cannot retain a
+// wallet trust bypass after switching into a scoped DFLOP billing contract.
+func PrepareEndpointBillingReservation(c *gin.Context, info *relaycommon.RelayInfo) error {
+	if info == nil || info.ChannelMeta == nil {
+		return nil
+	}
+	expression := ""
+	if info.TieredBillingSnapshot != nil {
+		expression = info.TieredBillingSnapshot.ExprString
+	}
+	if !dflop.DFLOPEndpointModelApplies(info.ChannelBaseUrl, info.GetUpstreamModelName()) && !dflop.DFLOPEndpointProfileApplies(info.ChannelBaseUrl, expression) {
+		return nil
+	}
+	info.ForcePreConsume = true
+	if err := ensureBillingReservation(c, info); err != nil {
+		return err
+	}
+	info.FinalPreConsumedQuota = info.Billing.GetPreConsumedQuota()
+	return nil
+}

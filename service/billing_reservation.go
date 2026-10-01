@@ -1,7 +1,12 @@
 package service
 
 import (
+	"crypto/sha256"
 	"errors"
+	"fmt"
+	"net/url"
+	"strings"
+
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -15,10 +20,24 @@ func EnsureDFLOPCacheReservation(c *gin.Context, info *relaycommon.RelayInfo) er
 	if info == nil || info.ChannelMeta == nil || !dflop.DFLOPCacheContractApplies(info.ChannelBaseUrl, info.UpstreamModelName) {
 		return nil
 	}
+	return ensureBillingReservation(c, info)
+}
+
+func EnsureDFLOPTaskReservation(c *gin.Context, info *relaycommon.RelayInfo) error {
+	if !DFLOPTaskReservationApplies(info) {
+		return nil
+	}
+	return ensureBillingReservation(c, info)
+}
+
+func ensureBillingReservation(c *gin.Context, info *relaycommon.RelayInfo) error {
 	if common.BatchUpdateEnabled {
 		return errors.New("BILLING_JOURNAL_BATCH_UNSUPPORTED")
 	}
 	target := info.PriceData.QuotaToPreConsume
+	if DFLOPTaskReservationApplies(info) {
+		target = info.PriceData.Quota
+	}
 	if info.TieredBillingSnapshot != nil {
 		target = info.TieredBillingSnapshot.EstimatedQuotaAfterGroup
 	}
@@ -109,4 +128,82 @@ func (s *BillingSession) Closed() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.settled || s.refunded || s.quarantined
+}
+
+func DFLOPTaskReservationApplies(info *relaycommon.RelayInfo) bool {
+	if info == nil || info.ChannelMeta == nil {
+		return false
+	}
+	if info.DFLOPTaskPlugin != "dflop-media" && info.DFLOPTaskPlugin != "dflop-image" && info.DFLOPTaskPlugin != "dflop-tts" {
+		return false
+	}
+	base, err := url.Parse(info.ChannelBaseUrl)
+	return err == nil && base.Scheme == "https" && base.Host == "api.dflop.top" && base.User == nil && base.RawQuery == "" && base.Fragment == "" && (base.Path == "" || base.Path == "/")
+}
+
+// PrepareDFLOPTaskBillingIdentity binds one billed operation to the caller's
+// idempotency key. The key itself never enters the journal or usage logs.
+func PrepareDFLOPTaskBillingIdentity(c *gin.Context, info *relaycommon.RelayInfo, plugin string) error {
+	info.DFLOPTaskPlugin = plugin
+	if plugin != "dflop-media" && plugin != "dflop-image" && plugin != "dflop-tts" {
+		return nil
+	}
+	if !DFLOPTaskReservationApplies(info) {
+		return errors.New("UNVERIFIED_DFLOP_TASK_ORIGIN")
+	}
+	key := c.Request.Header.Get("Idempotency-Key")
+	if len(key) == 0 || len(key) > 200 || strings.TrimSpace(key) != key {
+		return errors.New("a valid Idempotency-Key is required")
+	}
+	for _, char := range key {
+		if char < 32 || char > 126 {
+			return errors.New("a valid Idempotency-Key is required")
+		}
+	}
+	identity := sha256.Sum256([]byte(fmt.Sprintf("%d\x00%s\x00%s", info.UserId, plugin, key)))
+	info.RequestId = fmt.Sprintf("%x", identity)
+	c.Set(common.RequestIdKey, info.RequestId)
+	info.ForcePreConsume = true
+	return nil
+}
+
+// HoldDFLOPTaskReservation records uncertain provider acceptance without
+// converting an estimate to final usage or automatically refunding a paid POST.
+func HoldDFLOPTaskReservation(info *relaycommon.RelayInfo, reason string) error {
+	if !DFLOPTaskReservationApplies(info) || !info.DFLOPTaskOutbound {
+		return nil
+	}
+	session, ok := info.Billing.(*BillingSession)
+	if !ok || session == nil {
+		return errors.New("task billing reservation unavailable")
+	}
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	if session.settled || session.refunded {
+		return nil
+	}
+	session.quarantined = true
+	if session.reservationLogID == 0 {
+		return errors.New("task billing journal unavailable")
+	}
+	taskID := ""
+	if info.TaskRelayInfo != nil {
+		taskID = info.PublicTaskID
+	}
+	return session.transitionReservation("PENDING", map[string]any{"reason": reason, "accepted": info.DFLOPTaskAccepted, "http_status": info.DFLOPTaskHTTPStatus, "upstream_task_id": info.DFLOPTaskUpstreamTaskID, "task_id": taskID})
+}
+
+// LinkDFLOPTaskReservation preserves the accepted provider task identity in the
+// reservation journal before the HTTP request can finish or its session vanish.
+func LinkDFLOPTaskReservation(info *relaycommon.RelayInfo, task *model.Task) error {
+	if !DFLOPTaskReservationApplies(info) {
+		return nil
+	}
+	session, ok := info.Billing.(*BillingSession)
+	if !ok || session == nil {
+		return errors.New("task billing reservation unavailable")
+	}
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	return session.transitionReservation("HELD", map[string]any{"task_record": task.ID, "task_id": task.TaskID, "upstream_task_id": task.PrivateData.UpstreamTaskID})
 }

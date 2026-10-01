@@ -8,6 +8,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert"
+	"github.com/QuantumNous/new-api/service/pricing/dflop"
 )
 
 // ResponsesUsageAccumulator owns the accounting facts for one Responses stream.
@@ -84,6 +85,13 @@ func (a *ResponsesUsageAccumulator) Finish() *dto.Usage {
 		return a.usage
 	}
 	a.finished = true
+	if snapshot := a.info.TieredBillingSnapshot; snapshot != nil && a.info.ChannelMeta != nil && dflop.DFLOPEndpointProfileApplies(a.info.ChannelBaseUrl, snapshot.ExprString) {
+		if a.info.EndpointBillingActualUsage != nil {
+			return a.info.EndpointBillingActualUsage
+		}
+		// Missing raw usage remains pending; estimates cannot become final facts.
+		return a.usage
+	}
 	// A final image item can already have reached the client before the stream
 	// disconnects. Explicit failed/incomplete terminals reset and commit zero in
 	// Observe; otherwise retain completed tool usage even without a terminal.

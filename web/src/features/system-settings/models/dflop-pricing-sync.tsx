@@ -165,7 +165,7 @@ export function DflopPricingSync() {
   const statusLabels: Record<string, string> = {
     SUPPORTED_AUTO: t('Ready'),
     SUPPORTED_MANUAL: t('Needs review'),
-    MANUAL_OVERRIDE: t('Manual override'),
+    MANUAL_OVERRIDE: t('Manual adoption required'),
     MANUAL_DRIFT: t('Manual drift'),
     UNSUPPORTED_MAPPING: t('Unsupported mapping'),
     SKIPPED_NON_CALLABLE: t('Not callable'),
@@ -188,6 +188,7 @@ export function DflopPricingSync() {
     MULTIMODAL_PROMOTION_MAPPING_REQUIRED: t('Other promoted billing features need mapping'),
     IMAGE_TIER_THRESHOLD_MISMATCH: t('Image size tier does not match plugin usage'),
     MISSING_SERVER_TOOL_USAGE: t('Server tool call usage is unavailable'),
+    MANUAL_ADOPTION_REQUIRED: t('Manual adoption required'),
     NO_PLUGIN_USAGE_PROFILE: t('No exact plugin usage profile'),
     UNKNOWN_CHARACTER_COUNT_SEMANTICS: t('Character counting rules are unverified'),
     UNVERIFIED_OUTPUT_COUNT: t('Successful image count is unverified'),
@@ -209,6 +210,19 @@ export function DflopPricingSync() {
     NO_EXACT_VIDEO_PLUGIN_BINDING: t('No exact video task binding'),
     NO_EXACT_VOICE_CLONE_BINDING: t('No exact voice clone task binding'),
     NO_EXACT_IMAGE_PLUGIN_BINDING: t('No exact image task binding'),
+    MISSING_UPSCALE_PRICE: t('Missing authenticated upscale price'),
+    PROVIDER_CATALOG_MISSING_UPSCALE_RATE: t('Missing authenticated upscale price'),
+    MISSING_FAST_SELECTOR: t('Fast mode selector is unverified'),
+    SERVER_TOOL_CALLS_UNBOUNDED: t('Server tool calls have no enforced limit'),
+    DEDICATED_IMAGE_BINDING_MISSING: t('No exact image endpoint binding'),
+    MISSING_SUBTITLE_SOURCE_DURATION: t('Source video duration is unavailable'),
+    PROVIDER_CONTRACT_IMAGE_THRESHOLD_CONFLICT: t('Provider billing contract conflict'),
+    PROVIDER_CONTRACT_CONFLICT: t('Provider billing contract conflict'),
+    MISSING_SELECTED_TIER: t('Actual selected tier is unavailable'),
+    MISSING_FINAL_DURATION: t('Final delivered duration is unavailable'),
+    MISSING_INPUT_VIDEO_DURATION: t('Input video duration is unavailable'),
+    MISSING_SUBTITLE_OPERATION_USAGE: t('Subtitle operation usage is unavailable'),
+    PROVIDER_CONTRACT_REQUIRED: t('Provider contract clarification is required'),
   }
   const queryClient = useQueryClient()
   const configQuery = useQuery({ queryKey: ['dflop-sync-config'], queryFn: () => read<Config>(`${endpoint}/config`) })
@@ -381,7 +395,7 @@ export function DflopPricingSync() {
         <dt>{t('Available usage facts')}</dt><dd>{factList(detail.available_facts)}</dd>
         <dt>{t('Missing usage facts')}</dt><dd>{factList(detail.missing_facts)}</dd>
         <dt>{t('Usage source')}</dt><dd>{detailUsageSource}</dd>
-        <dt>{t('Evidence status')}</dt><dd>{detail.status === 'SUPPORTED_AUTO' ? t('Price, semantics, quantity and settlement verified') : t('Automatic settlement is not verified')}</dd>
+        <dt>{t('Evidence status')}</dt><dd>{detail.status === 'SUPPORTED_AUTO' ? t('Pricing contract mapped; runtime evidence is reviewed separately') : t('Automatic settlement is not verified')}</dd>
         <dt>{t('Reason code')}</dt><dd className='font-mono'>{detail.reason_code || '—'}</dd>
         <dt>{t('Reason')}</dt><dd>{reasonLabels[detail.reason_code ?? ''] || (detail.reason ? t(detail.reason) : '—')}</dd>
         <dt>{t('Proposed expression')}</dt><dd className='break-all font-mono'>{detail.expression || '—'}</dd>

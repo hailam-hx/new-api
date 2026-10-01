@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/pricing/dflop"
 
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
@@ -26,10 +27,26 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 	var responsesResponse dto.OpenAIResponsesResponse
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
+		if resp.StatusCode/100 == 2 && service.HoldEndpointBillingReservation(c, info, "DFLOP_ACCEPTED_RESPONSE_UNPARSEABLE") {
+			return nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError, types.ErrOptionWithSkipRetry())
+		}
 		return nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
+	}
+	if snapshot := info.TieredBillingSnapshot; snapshot != nil && info.ChannelMeta != nil {
+		seen, contractErr := dflop.DFLOPEndpointResponseContract(info.ChannelBaseUrl, snapshot.ExprString, responseBody)
+		info.EndpointBillingUsageSeen = seen
+		if contractErr != nil {
+			info.EndpointBillingAnomaly = contractErr.Error()
+			if resp.StatusCode/100 == 2 {
+				service.HoldEndpointBillingReservation(c, info, contractErr.Error())
+			}
+		}
 	}
 	err = common.Unmarshal(responseBody, &responsesResponse)
 	if err != nil {
+		if resp.StatusCode/100 == 2 && service.HoldEndpointBillingReservation(c, info, "DFLOP_ACCEPTED_RESPONSE_UNPARSEABLE") {
+			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError, types.ErrOptionWithSkipRetry())
+		}
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
 	if oaiError := responsesResponse.GetOpenAIError(); oaiError != nil && oaiError.Type != "" {
@@ -81,12 +98,29 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 
+		authoritativeUsage := false
+		eventType := gjson.Get(data, "type").String()
+		terminal := eventType == "response.completed" || eventType == "response.done"
+		if snapshot := info.TieredBillingSnapshot; snapshot != nil && info.ChannelMeta != nil {
+			seen, contractErr := dflop.DFLOPEndpointResponseContract(info.ChannelBaseUrl, snapshot.ExprString, []byte(data))
+			authoritativeUsage = terminal && seen && contractErr == nil
+			info.EndpointBillingUsageSeen = info.EndpointBillingUsageSeen || authoritativeUsage
+			if contractErr != nil {
+				info.EndpointBillingAnomaly = contractErr.Error()
+				service.HoldEndpointBillingReservation(c, info, contractErr.Error())
+			}
+		}
 		// 检查当前数据是否包含 completed 状态和 usage 信息
 		var streamResponse dto.ResponsesStreamResponse
 		if err := common.UnmarshalJsonStr(data, &streamResponse); err != nil {
 			logger.LogError(c, "failed to unmarshal stream response: "+err.Error())
 			sr.Error(err)
 			return
+		}
+		if streamResponse.Response != nil && authoritativeUsage && streamResponse.Response.Usage != nil {
+			actual := &dto.Usage{}
+			service.ApplyResponsesUsage(actual, streamResponse.Response.Usage)
+			info.EndpointBillingActualUsage = actual
 		}
 		if streamResponse.Response != nil {
 			data = string(rewriteSGLangResponsesCreatedAt(info, []byte(data), "response.created_at", streamResponse.Response.CreatedAt))

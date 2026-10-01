@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/reasoning"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service/pricing/dflop"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -357,6 +358,14 @@ func modelPriceHelperTiered(c *gin.Context, info *relaycommon.RelayInfo, billing
 	requestInput, err := ResolveIncomingBillingExprRequestInput(c, info)
 	if err != nil {
 		return hosttypes.PriceData{}, err
+	}
+	if info.ChannelMeta != nil {
+		if err := dflop.DFLOPEndpointModelRequestContract(info.ChannelBaseUrl, info.GetOriginModelName(), exprStr, info.RequestURLPath, requestInput); err != nil {
+			return hosttypes.PriceData{}, err
+		}
+		if dflop.DFLOPEndpointProfileApplies(info.ChannelBaseUrl, exprStr) {
+			info.ForcePreConsume = true
+		}
 	}
 	if billingexpr.UsedVarsByHash(exprStr, exprHash)["image_count"] {
 		requestInput, err = ResolveImageBillingRequestInput(c, info, requestInput)

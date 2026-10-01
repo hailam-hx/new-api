@@ -232,3 +232,11 @@ describe('usage facts billing details', () => {
     expect(screen.getByText('Total Cost')).toBeInTheDocument()
   })
 })
+
+test('shows quarantine without presenting the retained reserve as a settled charge', () => {
+  const client = renderDetails({billing_state: 'QUARANTINED', settlement_verified: false})
+  expect(screen.getByText('Billing quarantined')).toBeVisible()
+  expect(screen.getByText('Reservation retained; settlement requires manual review')).toBeVisible()
+  expect(screen.queryByText('Total Cost')).not.toBeInTheDocument()
+  client.clear()
+})

@@ -209,6 +209,9 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		code, message := TaskPlatformUnavailableError(platform)
 		return nil, service.TaskErrorWrapperLocal(errors.New(message), code, http.StatusBadRequest)
 	}
+	if err := service.PrepareDFLOPTaskBillingIdentity(c, info, string(platform)); err != nil {
+		return nil, service.TaskErrorWrapperLocal(err, "invalid_idempotency_key", http.StatusBadRequest)
+	}
 	// buildSubmitRequest runs during validation and the unreleased plugin
 	// contract exposes this host-generated id to that hook.
 	if info.PublicTaskID == "" {
@@ -257,8 +260,14 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		pluginKey = pinnedPlugin.Plugin.Meta.Key
 	}
 	exprStr, exists := billing_setting.ResolveTaskBillingExpr(pluginKey, modelName, info.UpstreamModelName)
-	if pluginKey == "dflop-tts" && !exists {
-		return nil, service.TaskErrorWrapperLocal(errors.New("DFLOP speech requires a validated character billing expression"), "model_price_error", http.StatusBadRequest)
+	if service.IsDFLOPTaskPlatform(platform) {
+		if !exists || strings.TrimSpace(exprStr) == "" || pinnedPlugin.Plugin == nil {
+			return nil, service.TaskErrorWrapperLocal(errors.New("DFLOP tasks require a configured quantity billing expression"), "model_price_error", http.StatusBadRequest)
+		}
+		schema, _ := pinnedPlugin.Plugin.Meta.UsageForModels(info.UpstreamModelName, modelName)
+		if !billing_setting.TaskExprCompatible(exprStr, schema) || len(billingexpr.UsedUsageKeys(exprStr)) == 0 {
+			return nil, service.TaskErrorWrapperLocal(errors.New("DFLOP task pricing must use the executing plugin's authoritative quantity schema"), "model_price_error", http.StatusBadRequest)
+		}
 	}
 	useTiered := exists || billing_setting.GetBillingMode(modelName) == billing_setting.BillingModeTieredExpr
 	if useTiered {
@@ -378,10 +387,25 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	if parsed.Immediate != nil && parsed.Immediate.Status == model.TaskStatusFailure {
 		finalQuota = 0
 	} else if snap := info.TieredBillingSnapshot; snap != nil {
-		if parsed.Immediate != nil && parsed.Immediate.Status == model.TaskStatusSuccess && len(parsed.Immediate.UsageFacts) > 0 {
-			settlement, facts, err := service.EvaluateTaskCompletionUsage(snap, parsed.Immediate.UsageFacts)
+		if parsed.Immediate != nil && parsed.Immediate.Status == model.TaskStatusSuccess && (len(parsed.Immediate.UsageFacts) > 0 || service.IsDFLOPTaskPlatform(platform)) {
+			var settlement billingexpr.TieredResult
+			var facts map[string]any
+			var err error
+			if service.IsDFLOPTaskPlatform(platform) {
+				settlement, facts, err = service.EvaluateDFLOPTaskCompletionUsage(snap, parsed.Immediate.UsageFacts, parsed.PluginState)
+			} else {
+				settlement, facts, err = service.EvaluateTaskCompletionUsage(snap, parsed.Immediate.UsageFacts)
+			}
 			if err != nil {
 				logger.LogWarn(c, fmt.Sprintf("task immediate usage settlement failed; retaining reserved quota: %v", err))
+				if service.IsDFLOPTaskPlatform(platform) {
+					state, stateErr := service.TaskBillingPendingState(parsed.PluginState, "MISSING_AUTHORITATIVE_FINAL_USAGE")
+					if stateErr != nil {
+						state = []byte(`{"billingPending":true,"blocker":"INVALID_TERMINAL_BILLING_STATE"}`)
+					}
+					parsed.PluginState = state
+					parsed.Immediate.PluginState = state
+				}
 			} else {
 				finalQuota = settlement.ActualQuotaAfterGroup
 				snap.UsageFacts = facts

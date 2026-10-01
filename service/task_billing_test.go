@@ -1857,3 +1857,42 @@ func TestSettle_TokenRecalcFallsBackToCompletionTokens(t *testing.T) {
 		})
 	}
 }
+
+func TestDFLOPCompletionRequiresActualExpressionFacts(t *testing.T) {
+	expression := `u("resolution") == "1080P" ? tier("high", u("seconds") * 2) : tier("low", u("seconds"))`
+	snap := &billingexpr.BillingSnapshot{ExprString: expression, ExprHash: billingexpr.ExprHashString(expression), GroupRatio: 1, QuotaPerUnit: 1, ExprVersion: 1, TaskUsageBilling: true, UsageFacts: map[string]any{"resolution": "1080P", "seconds": float64(10)}}
+	for _, tc := range []struct {
+		name    string
+		facts   map[string]any
+		state   []byte
+		invalid bool
+		quota   int
+	}{
+		{"missing duration", map[string]any{"resolution": "1080P"}, nil, true, 0},
+		{"missing selector", map[string]any{"seconds": float64(5)}, nil, true, 0},
+		{"empty terminal facts", nil, nil, true, 0},
+		{"null duration", map[string]any{"resolution": "1080P", "seconds": nil}, nil, true, 0},
+		{"explicit zero", map[string]any{"resolution": "1080P", "seconds": float64(0)}, nil, false, 0},
+		{"actual duration", map[string]any{"resolution": "1080P", "seconds": float64(5)}, nil, false, 10},
+		{"plugin pending blocks complete facts", map[string]any{"resolution": "1080P", "seconds": float64(5)}, []byte(`{"billingPending":true,"blocker":"MISSING_TOKENS"}`), true, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result, usage, err := EvaluateDFLOPTaskCompletionUsage(snap, tc.facts, tc.state)
+			if tc.invalid {
+				require.Error(t, err)
+				assert.Nil(t, usage)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tc.quota, result.ActualQuotaAfterGroup)
+				assert.Equal(t, tc.facts, usage)
+			}
+			assert.Equal(t, float64(10), snap.UsageFacts["seconds"])
+		})
+	}
+	state, err := TaskBillingPendingState([]byte(`{"input_image_count":2}`), "MISSING_AUTHORITATIVE_FINAL_USAGE")
+	require.NoError(t, err)
+	var parsed map[string]any
+	require.NoError(t, common.Unmarshal(state, &parsed))
+	assert.Equal(t, float64(2), parsed["input_image_count"])
+	assert.Equal(t, true, parsed["billingPending"])
+}

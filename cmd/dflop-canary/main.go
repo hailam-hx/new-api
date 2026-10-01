@@ -60,10 +60,14 @@ func run(args []string) error {
 		mode, args = strings.ToLower(args[0]), args[1:]
 	}
 	flags := flag.NewFlagSet("dflop-canary", flag.ContinueOnError)
+	defaultOutput := filepath.Join(os.TempDir(), "new-api-dflop-canary", "dflop-canary-plan.json")
+	if mode == "provider-contract-audit" {
+		defaultOutput = filepath.Join(os.TempDir(), "new-api-dflop-canary", "provider-contract-audit.json")
+	}
 	channelID := flags.Int("channel-id", 0, "existing DFLOP channel ID")
 	manualRate := flags.String("cny-to-usd", "", "current CNY-to-USD reporting rate when pricing sync has no configured rate")
 	dbPath := flags.String("sqlite-db", "one-api.db", "local SQLite database path")
-	output := flags.String("output", filepath.Join(os.TempDir(), "new-api-dflop-canary", "dflop-canary-plan.json"), "plan output path")
+	output := flags.String("output", defaultOutput, "local report output path")
 	auditOutput := flags.String("audit-output", filepath.Join(os.TempDir(), "new-api-dflop-canary", "dflop-canary-audit.json"), "non-secret audit proposal path")
 	caseID := flags.String("case", "", "single canary case")
 	maxUSD := flags.String("max-cost-usd", "", "single invocation USD ceiling")
@@ -80,11 +84,15 @@ func run(args []string) error {
 	historyModel := flags.String("model", "", "exact historical model filter")
 	evidenceOutput := flags.String("evidence-output", filepath.Join(os.TempDir(), "new-api-dflop-canary", "dflop-historical-evidence-2026-09-30.json"), "private historical evidence report")
 	invocation := flags.String("invocation-id", "", "single invocation ID")
+	baselineCatalog := flags.String("baseline-catalog", "", "previous authenticated catalog for provider-contract change detection")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 {
 		return errors.New("unexpected positional arguments")
+	}
+	if mode == "provider-contract-audit" && (*execute || *confirm != "") {
+		return errors.New("PROVIDER_CONTRACT_GET_ONLY")
 	}
 	if mode == "verify" {
 		if *input == "" || *caseID == "" {
@@ -169,8 +177,8 @@ func run(args []string) error {
 		fmt.Println(path)
 		return nil
 	}
-	if mode != "plan" && mode != "audit" && mode != "execute" && mode != "evidence-recover" {
-		return errors.New("mode must be plan, audit, execute, capture, verify, or evidence-recover")
+	if mode != "plan" && mode != "audit" && mode != "execute" && mode != "evidence-recover" && mode != "provider-contract-audit" {
+		return errors.New("mode must be plan, audit, execute, capture, verify, evidence-recover, or provider-contract-audit")
 	}
 	if *channelID <= 0 {
 		return errors.New("select an existing channel with --channel-id; implicit selection is disabled")
@@ -180,6 +188,15 @@ func run(args []string) error {
 		return err
 	}
 	model.DB = db
+	if mode == "provider-contract-audit" {
+		_, key, err := dflop.LoadSourceChannel(*channelID)
+		if err != nil {
+			return err
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		return runProviderContractAudit(ctx, dflop.Client{}, *channelID, key, *baselineCatalog, *output)
+	}
 	var option model.Option
 	result := db.Where(map[string]any{"key": model.DFLOPConfigOption}).Limit(1).Find(&option)
 	if result.Error != nil {

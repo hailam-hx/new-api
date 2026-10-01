@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/pricing/dflop"
 
 	"github.com/gin-gonic/gin"
 )
@@ -128,6 +129,26 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 				sr.Error(err)
 			}
 		}
+		if info.ChannelMeta != nil {
+			expression := ""
+			if info.TieredBillingSnapshot != nil {
+				expression = info.TieredBillingSnapshot.ExprString
+			}
+			seen, err := dflop.DFLOPEndpointModelResponseContract(info.ChannelBaseUrl, info.GetUpstreamModelName(), expression, []byte(data))
+			info.EndpointBillingUsageSeen = info.EndpointBillingUsageSeen || seen
+			if seen && err == nil {
+				var payload struct {
+					Usage *dto.Usage `json:"usage"`
+				}
+				if common.UnmarshalJsonStr(data, &payload) == nil {
+					info.EndpointBillingActualUsage = payload.Usage
+				}
+			}
+			if err != nil {
+				info.EndpointBillingAnomaly = err.Error()
+				service.HoldEndpointBillingReservation(c, info, err.Error())
+			}
+		}
 		if len(data) > 0 {
 			if lastStreamData != "" {
 				secondLastStreamData = lastStreamData
@@ -180,6 +201,10 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		}
 	}
 
+	if info.EndpointBillingActualUsage != nil {
+		usage = info.EndpointBillingActualUsage
+		containStreamUsage = true
+	}
 	if !containStreamUsage {
 		usage = service.ResponseText2Usage(c, responseTextBuilder.String(), info.UpstreamModelName, info.GetEstimatePromptTokens())
 		usage.CompletionTokens += toolCount * 7
@@ -254,7 +279,24 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	var simpleResponse dto.OpenAITextResponse
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
+		if resp.StatusCode/100 == 2 && service.HoldEndpointBillingReservation(c, info, "DFLOP_ACCEPTED_RESPONSE_UNPARSEABLE") {
+			return nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError, types.ErrOptionWithSkipRetry())
+		}
 		return nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
+	}
+	if info.ChannelMeta != nil {
+		expression := ""
+		if info.TieredBillingSnapshot != nil {
+			expression = info.TieredBillingSnapshot.ExprString
+		}
+		seen, err := dflop.DFLOPEndpointModelResponseContract(info.ChannelBaseUrl, info.GetUpstreamModelName(), expression, responseBody)
+		info.EndpointBillingUsageSeen = seen
+		if err != nil {
+			info.EndpointBillingAnomaly = err.Error()
+			if resp.StatusCode/100 == 2 {
+				service.HoldEndpointBillingReservation(c, info, err.Error())
+			}
+		}
 	}
 	logger.LogDebug(c, "upstream response body: %s", responseBody)
 	// Unmarshal to simpleResponse
@@ -263,6 +305,9 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 		var enterpriseResponse openrouter.OpenRouterEnterpriseResponse
 		err = common.Unmarshal(responseBody, &enterpriseResponse)
 		if err != nil {
+			if resp.StatusCode/100 == 2 && service.HoldEndpointBillingReservation(c, info, "DFLOP_ACCEPTED_RESPONSE_UNPARSEABLE") {
+				return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError, types.ErrOptionWithSkipRetry())
+			}
 			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 		}
 		if enterpriseResponse.Success {
@@ -275,6 +320,9 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 
 	err = common.Unmarshal(responseBody, &simpleResponse)
 	if err != nil {
+		if resp.StatusCode/100 == 2 && service.HoldEndpointBillingReservation(c, info, "DFLOP_ACCEPTED_RESPONSE_UNPARSEABLE") {
+			return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError, types.ErrOptionWithSkipRetry())
+		}
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
 
@@ -303,7 +351,7 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	}
 
 	usageModified := false
-	if simpleResponse.Usage.PromptTokens == 0 {
+	if simpleResponse.Usage.PromptTokens == 0 && !info.EndpointBillingUsageSeen {
 		completionTokens := simpleResponse.Usage.CompletionTokens
 		if completionTokens == 0 {
 			for _, choice := range simpleResponse.Choices {
@@ -329,6 +377,9 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 			var bodyMap map[string]any
 			err = common.Unmarshal(responseBody, &bodyMap)
 			if err != nil {
+				if resp.StatusCode/100 == 2 && service.HoldEndpointBillingReservation(c, info, "DFLOP_ACCEPTED_RESPONSE_UNPARSEABLE") {
+					return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError, types.ErrOptionWithSkipRetry())
+				}
 				return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 			}
 			bodyMap["usage"] = simpleResponse.Usage

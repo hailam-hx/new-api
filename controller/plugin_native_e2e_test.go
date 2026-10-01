@@ -3,11 +3,16 @@ package controller
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/iotest"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -16,18 +21,40 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relay"
+	"github.com/QuantumNous/new-api/relay/channel/openai"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	hosttypes "github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
+
+// nativeDFLOPTransport keeps production origin validation while routing every
+// outbound test request exclusively to the local fixture.
+type nativeDFLOPTransport struct {
+	target    *url.URL
+	transport http.RoundTripper
+}
+
+func (r nativeDFLOPTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	if request.URL.Scheme != "https" || request.URL.Host != "api.dflop.top" {
+		return nil, fmt.Errorf("unexpected fixture origin: %s", request.URL)
+	}
+	clone := request.Clone(request.Context())
+	target := *request.URL
+	target.Scheme, target.Host = r.target.Scheme, r.target.Host
+	clone.URL = &target
+	clone.Host = r.target.Host
+	return r.transport.RoundTrip(clone)
+}
 
 type nativeRouteBilling struct {
 	events      []string
@@ -59,7 +86,7 @@ func TestDFLOPAudioSpeechProductionTaskSubmissionAndPolling(t *testing.T) {
 			previousDB, previousLogDB := model.DB, model.LOG_DB
 			previousMemoryCache, previousBatchUpdate := common.MemoryCacheEnabled, common.BatchUpdateEnabled
 			previousLogConsume, previousRedis := common.LogConsumeEnabled, common.RedisEnabled
-			database, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+			database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "billing.db")), &gorm.Config{})
 			require.NoError(t, err)
 			require.NoError(t, database.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Task{}, &model.Log{}))
 			model.DB, model.LOG_DB = database, database
@@ -92,7 +119,7 @@ func TestDFLOPAudioSpeechProductionTaskSubmissionAndPolling(t *testing.T) {
 				case r.Method == http.MethodPost && r.URL.Path == "/v1/audio/speech":
 					attempt := submitCalls.Add(1)
 					key := r.Header.Get("Idempotency-Key")
-					assert.NotEmpty(t, key)
+					assert.Len(t, key, 64)
 					if attempt == 1 {
 						firstIdempotencyKey = key
 					} else {
@@ -119,7 +146,14 @@ func TestDFLOPAudioSpeechProductionTaskSubmissionAndPolling(t *testing.T) {
 				}
 			}))
 			defer upstream.Close()
-			channel := model.Channel{Type: constant.ChannelTypeOpenAI, Name: "fake-dflop", Key: "sk-fake", BaseURL: &upstream.URL, Status: common.ChannelStatusEnabled, Models: "voice-tts-pro", Group: "default"}
+			fixtureURL, parseErr := url.Parse(upstream.URL)
+			require.NoError(t, parseErr)
+			client := service.GetHttpClient()
+			originalTransport := client.Transport
+			client.Transport = nativeDFLOPTransport{target: fixtureURL, transport: upstream.Client().Transport}
+			t.Cleanup(func() { client.Transport = originalTransport })
+			canonicalOrigin := "https://api.dflop.top"
+			channel := model.Channel{Type: constant.ChannelTypeNewAPI, Name: "fake-dflop", Key: "sk-fake", BaseURL: &canonicalOrigin, Status: common.ChannelStatusEnabled, Models: "voice-tts-pro", Group: "default"}
 			channel.SetSetting(dto.ChannelSettings{TaskPluginKey: "dflop-tts"})
 			require.NoError(t, database.Create(&channel).Error)
 
@@ -142,10 +176,12 @@ func TestDFLOPAudioSpeechProductionTaskSubmissionAndPolling(t *testing.T) {
 			require.False(t, c.IsAborted(), recorder.Body.String())
 			require.Nil(t, middleware.SetupContextForSelectedChannel(c, &channel, "voice-tts-pro"))
 
+			var submittedInfo *relaycommon.RelayInfo
 			var outcome *taskSubmissionOutcome
 			var taskErr *taskdto.TaskError
 			deps := defaultPluginProtocolBridgeDeps()
 			deps.submit = func(c *gin.Context, info *relaycommon.RelayInfo) (*taskSubmissionOutcome, *taskdto.TaskError) {
+				submittedInfo = info
 				require.NotNil(t, info.TaskRelayInfo)
 				assert.Equal(t, channel.Id, info.LockedChannel.(*model.Channel).Id)
 				info.PublicTaskID = "task_speech_public"
@@ -163,14 +199,40 @@ func TestDFLOPAudioSpeechProductionTaskSubmissionAndPolling(t *testing.T) {
 				cancelClient()
 			}
 			serveTaskPluginAudioSpeech(c, pinned, deps)
+			if tc.lostResponse {
+				require.NotNil(t, taskErr)
+				assert.Equal(t, int32(1), submitCalls.Load())
+				var journal model.Log
+				require.NoError(t, database.Where("content = ?", "BILLING_RESERVATION_PENDING").First(&journal).Error)
+				assert.Contains(t, journal.Other, `"settlement_verified":false`)
+				var heldUser model.User
+				require.NoError(t, database.First(&heldUser, 17).Error)
+				assert.Less(t, heldUser.Quota, 1_000_000)
+				heldQuota := heldUser.Quota
+				replayContext := c.Copy()
+				replayContext.Request = c.Request.Clone(context.Background())
+				replayInfo := *submittedInfo
+				replayInfo.Billing = nil
+				replayInfo.DFLOPTaskOutbound = false
+				replayInfo.DFLOPTaskReservationLogID = 0
+				_, replayErr := relay.RelayTaskSubmit(replayContext, &replayInfo)
+				require.NotNil(t, replayErr)
+				assert.Contains(t, replayErr.Message, "BILLING_RESERVATION_REPLAY")
+				otherUserInfo := &relaycommon.RelayInfo{UserId: 18, ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: canonicalOrigin}}
+				require.NoError(t, service.PrepareDFLOPTaskBillingIdentity(replayContext, otherUserInfo, "dflop-tts"))
+				assert.NotEqual(t, firstIdempotencyKey, otherUserInfo.RequestId)
+
+				require.NoError(t, database.First(&heldUser, 17).Error)
+				assert.Equal(t, heldQuota, heldUser.Quota)
+				assert.Equal(t, int32(1), submitCalls.Load())
+				return
+			}
 			require.Nil(t, taskErr, "%+v", taskErr)
 			require.NotNil(t, outcome)
 			require.NotNil(t, outcome.RelayInfo.Billing)
 			assert.Equal(t, service.BillingSourceWallet, outcome.RelayInfo.BillingSource)
 			expectedSubmitCalls := int32(1)
-			if tc.lostResponse {
-				expectedSubmitCalls = 2
-			}
+
 			assert.Equal(t, expectedSubmitCalls, submitCalls.Load())
 			if tc.clientGone {
 				assert.Empty(t, recorder.Body.String())
@@ -183,6 +245,9 @@ func TestDFLOPAudioSpeechProductionTaskSubmissionAndPolling(t *testing.T) {
 			require.NoError(t, database.Where("task_id = ?", "task_speech_public").First(&persisted).Error)
 			assert.Equal(t, "fake-task-1", persisted.PrivateData.UpstreamTaskID)
 			assert.Equal(t, "dflop-tts", string(persisted.Platform))
+			var submissionConsumeCount int64
+			require.NoError(t, database.Model(&model.Log{}).Where("user_id = ? AND type = ?", 17, model.LogTypeConsume).Count(&submissionConsumeCount).Error)
+			assert.Zero(t, submissionConsumeCount, "async acceptance does not record final consumption")
 			previousAdaptorFactory := service.GetTaskAdaptorFunc
 			service.GetTaskAdaptorFunc = func(platform constant.TaskPlatform) service.TaskPollingAdaptor { return relay.GetTaskAdaptor(platform) }
 			defer func() { service.GetTaskAdaptorFunc = previousAdaptorFactory }()
@@ -199,8 +264,15 @@ func TestDFLOPAudioSpeechProductionTaskSubmissionAndPolling(t *testing.T) {
 				assert.Equal(t, outcome.Task.Quota, persisted.Quota)
 			}
 			assert.Equal(t, int32(2), queryCalls.Load())
-			assert.Equal(t, tc.wantCharacters, completionCharacters)
-			assert.Equal(t, float64(6), persisted.PrivateData.BillingContext.TieredSnapshot.UsageFacts["characters"], "the persisted snapshot retains the submission estimate")
+			if tc.name == "missing characters" {
+				assert.True(t, service.TaskBillingIsPending(persisted.PrivateData.PluginState))
+				assert.Equal(t, outcome.Task.Quota, persisted.Quota, "missing authoritative usage retains the reservation")
+			} else if tc.status != model.TaskStatusFailure {
+				assert.Equal(t, tc.wantCharacters, completionCharacters)
+			}
+			if tc.status == model.TaskStatusSuccess && tc.name != "missing characters" {
+				assert.Equal(t, tc.wantCharacters, persisted.PrivateData.BillingContext.TieredSnapshot.UsageFacts["characters"], "settled snapshot contains authoritative final usage")
+			}
 			assert.Equal(t, expectedSubmitCalls, submitCalls.Load())
 			var chargedUser model.User
 			require.NoError(t, database.First(&chargedUser, 17).Error)
@@ -210,10 +282,18 @@ func TestDFLOPAudioSpeechProductionTaskSubmissionAndPolling(t *testing.T) {
 			assert.Equal(t, 1_000_000-persisted.Quota, chargedToken.RemainQuota)
 			var consumeLogs []model.Log
 			require.NoError(t, database.Where("user_id = ? AND type = ?", 17, model.LogTypeConsume).Find(&consumeLogs).Error)
-			require.NotEmpty(t, consumeLogs)
-			assert.Equal(t, "voice-tts-pro", consumeLogs[0].ModelName)
-			assert.Equal(t, channel.Id, consumeLogs[0].ChannelId)
-			assert.Contains(t, consumeLogs[0].Other, "task_speech_public")
+			if tc.status == model.TaskStatusFailure || tc.name == "missing characters" {
+				assert.Empty(t, consumeLogs)
+			} else {
+				require.NotEmpty(t, consumeLogs)
+				assert.Equal(t, "voice-tts-pro", consumeLogs[0].ModelName)
+				assert.Equal(t, channel.Id, consumeLogs[0].ChannelId)
+				assert.Contains(t, consumeLogs[0].Other, "task_speech_public")
+			}
+			var initialLogs []model.Log
+			require.NoError(t, database.Where("user_id = ? AND type = ? AND content NOT LIKE ?", 17, model.LogTypeSystem, "BILLING_RESERVATION_%").Find(&initialLogs).Error)
+			require.NotEmpty(t, initialLogs)
+			assert.Zero(t, initialLogs[0].Quota)
 			if tc.name == "success" {
 				for _, ownership := range []struct {
 					userID int
@@ -444,4 +524,56 @@ func TestKlingNativeRouteSubmitPollSettleAndQuery(t *testing.T) {
 	assert.Contains(t, queryRecorder.Body.String(), `"task_status":"succeed"`)
 	assert.NotContains(t, queryRecorder.Body.String(), "kling-private-1")
 	assert.NotContains(t, queryRecorder.Body.String(), upstream.URL)
+}
+
+func TestDFLOPAcceptedMalformedUsageHoldsAcrossControllerRefund(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body io.Reader
+	}{
+		{"malformed usage", strings.NewReader(`{"choices":[{"message":{"content":"generated"}}],"usage":{"prompt_tokens":"100","completion_tokens":5}}`)},
+		{"accepted body read failure", iotest.ErrReader(fmt.Errorf("fixture accepted-body read failure"))},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			previousDB, previousLogDB := model.DB, model.LOG_DB
+			previousRedis, previousBatch, previousMemory, previousConsume := common.RedisEnabled, common.BatchUpdateEnabled, common.MemoryCacheEnabled, common.LogConsumeEnabled
+			db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "accepted.db")), &gorm.Config{})
+			require.NoError(t, err)
+			require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Log{}))
+			model.DB, model.LOG_DB = db, db
+			common.RedisEnabled, common.BatchUpdateEnabled, common.MemoryCacheEnabled, common.LogConsumeEnabled = false, false, false, true
+			t.Cleanup(func() {
+				model.DB, model.LOG_DB = previousDB, previousLogDB
+				common.RedisEnabled, common.BatchUpdateEnabled, common.MemoryCacheEnabled, common.LogConsumeEnabled = previousRedis, previousBatch, previousMemory, previousConsume
+			})
+			user := model.User{Username: "accepted-response", Quota: 2_000_000, Status: common.UserStatusEnabled}
+			require.NoError(t, db.Create(&user).Error)
+			token := model.Token{UserId: user.Id, Key: "accepted-response-token", RemainQuota: 2_000_000, Status: common.TokenStatusEnabled}
+			require.NoError(t, db.Create(&token).Error)
+			channel := model.Channel{Name: "accepted-response", Key: "unused", Status: common.ChannelStatusEnabled}
+			require.NoError(t, db.Create(&channel).Error)
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+			info := &relaycommon.RelayInfo{RequestId: common.NewRequestId(), UserId: user.Id, TokenId: token.Id, TokenKey: token.Key, OriginModelName: "grok-4.7", UsingGroup: "default", UserSetting: dto.UserSetting{BillingPreference: "wallet_only"}, ChannelMeta: &relaycommon.ChannelMeta{ChannelId: channel.Id, ChannelBaseUrl: "https://api.dflop.top", UpstreamModelName: "grok-4.7"}, PriceData: hosttypes.PriceData{QuotaToPreConsume: 10000}}
+			require.Nil(t, info.TieredBillingSnapshot)
+			require.NoError(t, service.PrepareEndpointBillingReservation(c, info))
+			_, apiErr := openai.OpenaiHandler(c, info, &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(tc.body), Header: http.Header{"Content-Type": {"application/json"}}})
+			require.NotNil(t, apiErr)
+			assert.True(t, types.IsSkipRetryError(apiErr))
+			require.NotNil(t, relay.RefundFailedRequestBilling(c, info, apiErr))
+			journal, err := model.FindBillingReservationLog(info.RequestId, user.Id)
+			require.NoError(t, err)
+			require.NotNil(t, journal)
+			assert.Equal(t, "BILLING_RESERVATION_PENDING", journal.Content)
+			held, err := model.GetUserQuota(user.Id, true)
+			require.NoError(t, err)
+			assert.Equal(t, 1_990_000, held)
+			var freshToken model.Token
+			require.NoError(t, db.First(&freshToken, token.Id).Error)
+			assert.Equal(t, 1_990_000, freshToken.RemainQuota)
+			var consumes int64
+			require.NoError(t, db.Model(&model.Log{}).Where("user_id = ? AND type = ?", user.Id, model.LogTypeConsume).Count(&consumes).Error)
+			assert.Zero(t, consumes)
+		})
+	}
 }

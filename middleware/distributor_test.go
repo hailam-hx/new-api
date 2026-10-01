@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -340,4 +341,54 @@ func TestSharedEndpointRebindsToBoundNewAPIExtension(t *testing.T) {
 	require.Nil(t, SetupContextForSelectedChannel(c, channel, "task-model"))
 	assert.Equal(t, "alpha", c.GetString("task_plugin_key"), "the first bound candidate executes regardless of the earlier pin")
 	assert.Equal(t, "alpha", c.MustGet(jsplugin.ContextKeyPinnedEndpoint).(jsplugin.PinnedEndpoint).Plugin.Meta.Key)
+}
+
+func TestDFLOPExactOriginBindingSelectsDeclaredPlugin(t *testing.T) {
+	registry := jsplugin.NewRegistry()
+	for _, key := range []string{"dflop-media", "dflop-image", "dflop-tts"} {
+		source, err := os.ReadFile("../plugins/tasks/" + key + "/plugin.js")
+		require.NoError(t, err)
+		_, err = registry.RegisterFactory(string(source), jsplugin.Options{Key: key})
+		require.NoError(t, err)
+	}
+	generation := registry.Generation()
+	for _, tc := range []struct{ key, model, clientPath, providerPath string }{
+		{"dflop-media", "grok-imagine-video", "/v1/videos", "/v1/videos/generations"},
+		{"dflop-image", "tvod-midjourney-v7", "/v1/images/generations", "/v1/images/generations"},
+		{"dflop-tts", "voice-tts-pro", "/v1/audio/speech", "/v1/audio/speech"},
+	} {
+		t.Run(tc.key, func(t *testing.T) {
+			plugin, ok := generation.Get(tc.key)
+			require.True(t, ok)
+			baseURL := "https://api.dflop.top"
+			channel := &model.Channel{Type: constant.ChannelTypeNewAPI, BaseURL: &baseURL}
+			require.True(t, channel.BindsTaskPluginForModel(tc.key, tc.model, generation))
+			candidates := generation.LookupEndpointCandidates("POST", tc.clientPath, tc.model)
+			require.NotEmpty(t, candidates)
+			c, _ := gin.CreateTestContext(nil)
+			c.Set(jsplugin.ContextKeyPinnedEndpoint, jsplugin.PinnedEndpoint{Generation: generation, Plugin: plugin, Protocol: candidates[0].Protocol, Operation: candidates[0].Operation, Model: tc.model, Candidates: candidates})
+			selected, ok := pinnedEndpointCandidateForChannel(c, channel, tc.key)
+			require.True(t, ok)
+			assert.Same(t, plugin, selected.Plugin)
+			assert.Equal(t, tc.model, selected.Model)
+			ctx := map[string]any{"model": tc.model, "upstreamModel": selected.Model, "baseUrl": baseURL, "apiKey": "test", "upstream": map[string]any{"kind": "new_api"}, "requestHeaders": map[string]any{"Idempotency-Key": "intent"}, "requestBody": map[string]any{"model": tc.model, "prompt": "Example", "duration": 5, "input": "hello", "async": true}}
+			requestValue, err := plugin.Engine.Call(t.Context(), "buildSubmitRequest", ctx)
+			require.NoError(t, err)
+			request := requestValue.(map[string]any)
+			assert.Equal(t, baseURL+tc.providerPath, request["url"])
+			assert.Equal(t, tc.model, request["body"].(map[string]any)["model"])
+			for _, rejectedOrigin := range []string{"http://api.dflop.top", "https://api.dflop.top.example", "https://api.dflop.top:443", "https://user@api.dflop.top", "https://api.dflop.top/v1", "https://api.dflop.top?x=1", "https://api.dflop.top#x", "https://api.dflop.top?"} {
+				channel.BaseURL = &rejectedOrigin
+				assert.False(t, channel.BindsTaskPluginForModel(tc.key, tc.model, generation), rejectedOrigin)
+			}
+			channel.BaseURL = &baseURL
+			assert.False(t, channel.BindsTaskPluginForModel(tc.key, strings.ToUpper(tc.model), generation))
+			assert.False(t, channel.BindsTaskPluginForModel(tc.key, "unknown", generation))
+			channel.SetSetting(dto.ChannelSettings{TaskPluginKey: "admin-choice"})
+			assert.False(t, channel.BindsTaskPluginForModel(tc.key, tc.model, generation))
+			channel.SetSetting(dto.ChannelSettings{})
+			channel.Type = constant.ChannelTypeOpenAI
+			assert.False(t, channel.BindsTaskPluginForModel(tc.key, tc.model, generation))
+		})
+	}
 }

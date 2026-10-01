@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var expectedKeys = []string{"alibaba", "dflop-tts", "doubao", "google", "hailuo", "jimeng", "kling", "sora", "sunoapi", "vertex-ai", "vidu"}
+var expectedKeys = []string{"alibaba", "dflop-image", "dflop-media", "dflop-tts", "doubao", "google", "hailuo", "jimeng", "kling", "sora", "sunoapi", "vertex-ai", "vidu"}
 
 func TestBuiltInVendorPluginsDeclareNativeRoutesAndLegacyChannelTypes(t *testing.T) {
 	generation := jsplugin.DefaultRegistry.Generation()
@@ -98,6 +98,11 @@ func TestBuiltInTaskPluginResponsesAndUsageContracts(t *testing.T) {
 			registry := jsplugin.NewRegistry()
 			plugin, registerErr := registry.RegisterFactory(source, jsplugin.Options{Key: key})
 			require.NoError(t, registerErr)
+			if key == "dflop-media" || key == "dflop-image" {
+				require.NotEmpty(t, plugin.Meta.Models)
+				require.NotEmpty(t, plugin.Meta.UsageProfiles)
+				return
+			}
 			if key == "dflop-tts" {
 				binding, claimed := registry.Generation().LookupEndpoint("POST", "/v1/audio/speech", "voice-tts-pro")
 				require.True(t, claimed)
@@ -156,7 +161,7 @@ func TestDFLOPSpeechTaskUsageIsAuthoritativeAtCompletion(t *testing.T) {
 	assert.Equal(t, "voice-tts-pro", intent["model"])
 	usage, err := plugin.Engine.Call(t.Context(), "extractUsage", map[string]any{"requestBody": request, "usagePurpose": "facts"})
 	require.NoError(t, err)
-	assert.Equal(t, map[string]any{"characters": int64(6)}, usage)
+	assert.Equal(t, map[string]any{"characters": int64(6), "character_count": int64(6)}, usage)
 	for _, input := range []string{strings.Repeat("a", 129), strings.Repeat("语", 43)} {
 		_, decodeErr := plugin.Engine.CallPath(t.Context(), "protocols", []string{"openai_audio_speech", "decodeRequest"}, map[string]any{
 			"body": map[string]any{"kind": "json", "value": map[string]any{"model": "voice-tts-pro", "input": input, "async": true}},
@@ -176,12 +181,16 @@ func TestDFLOPSpeechTaskUsageIsAuthoritativeAtCompletion(t *testing.T) {
 		body map[string]any
 		want any
 	}{
-		{"authoritative six", map[string]any{"characters": 6}, map[string]any{"characters": int64(6)}},
-		{"explicit zero", map[string]any{"characters": 0}, map[string]any{"characters": int64(0)}},
+		{"authoritative six", map[string]any{"characters": 6}, map[string]any{"characters": int64(6), "character_count": int64(6)}},
+		{"explicit zero", map[string]any{"characters": 0}, map[string]any{"characters": int64(0), "character_count": int64(0)}},
 		{"missing", map[string]any{}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			facts, callErr := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", map[string]any{}, result, tc.body)
+			if tc.name == "missing" {
+				require.ErrorContains(t, callErr, "MISSING_CHARACTER_COUNT")
+				return
+			}
 			require.NoError(t, callErr)
 			assert.Equal(t, tc.want, facts)
 		})
@@ -191,7 +200,7 @@ func TestDFLOPSpeechTaskUsageIsAuthoritativeAtCompletion(t *testing.T) {
 func TestBuiltInResponsesDecodersEchoChannelMappedAlias(t *testing.T) {
 	bodyOverrides := map[string]map[string]any{}
 	for _, key := range expectedKeys {
-		if key == "dflop-tts" {
+		if key == "dflop-tts" || key == "dflop-media" || key == "dflop-image" {
 			continue
 		}
 		t.Run(key, func(t *testing.T) {

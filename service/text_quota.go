@@ -146,6 +146,11 @@ func mergeToolSurchargeItems(items []ToolSurchargeItem) []ToolSurchargeItem {
 }
 
 func calculateTextToolCallSurcharge(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, summary *textQuotaSummary) decimal.Decimal {
+	if relayInfo.ChannelMeta != nil && (dflop.DFLOPEndpointModelApplies(relayInfo.ChannelBaseUrl, relayInfo.GetUpstreamModelName()) || relayInfo.TieredBillingSnapshot != nil && dflop.DFLOPEndpointProfileApplies(relayInfo.ChannelBaseUrl, relayInfo.TieredBillingSnapshot.ExprString)) {
+		// Conversational image generation and client functions are included in
+		// authenticated token prices. Generic tool defaults are another tariff.
+		return decimal.Zero
+	}
 	dGroupRatio := decimal.NewFromFloat(summary.GroupRatio)
 	dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
 
@@ -391,7 +396,68 @@ func usageSemanticFromUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) 
 	return "openai"
 }
 
+// HoldEndpointBillingReservation closes the accepted-response failure path
+// before a handler can return an error that would normally retry or refund.
+func HoldEndpointBillingReservation(ctx *gin.Context, info *relaycommon.RelayInfo, reason string) bool {
+	if info == nil || info.ChannelMeta == nil {
+		return false
+	}
+	expression, hash := "", ""
+	if snapshot := info.TieredBillingSnapshot; snapshot != nil {
+		expression, hash = snapshot.ExprString, snapshot.ExprHash
+	}
+	if !dflop.DFLOPEndpointModelApplies(info.ChannelBaseUrl, info.GetUpstreamModelName()) && !dflop.DFLOPEndpointProfileApplies(info.ChannelBaseUrl, expression) {
+		return false
+	}
+	info.EndpointBillingAnomaly = reason
+	session, ok := info.Billing.(*BillingSession)
+	if !ok || session == nil {
+		return true
+	}
+	session.mu.Lock()
+	alreadyHeld := session.quarantined
+	session.quarantined = true
+	if !alreadyHeld && session.reservationLogID != 0 {
+		if err := session.transitionReservation("PENDING", map[string]any{"reason": reason}); err != nil {
+			logger.LogError(ctx, "endpoint journal quarantine failed: "+err.Error())
+		}
+	}
+	session.mu.Unlock()
+	if alreadyHeld {
+		return true
+	}
+	other := model.NewLogOther()
+	other.SetPublic("billing_state", "PENDING")
+	other.SetPublic("settlement_verified", false)
+	other.SetAdmin("billing_anomaly", map[string]any{"reason": reason, "reserved_quota": info.FinalPreConsumedQuota, "expression_hash": hash, "endpoint": info.PassiveEndpoint})
+	model.RecordErrorLog(ctx, info.UserId, info.ChannelId, info.OriginModelName, ctx.GetString("token_name"), reason, info.TokenId, 0, info.IsStream, info.UsingGroup, other)
+	logger.LogError(ctx, reason+": endpoint billing pending reconciliation")
+	return true
+}
+
 func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent []string) {
+	expression, expressionHash := "", ""
+	if snapshot := relayInfo.TieredBillingSnapshot; snapshot != nil {
+		expression, expressionHash = snapshot.ExprString, snapshot.ExprHash
+	}
+	endpointBilling := relayInfo.ChannelMeta != nil && (dflop.DFLOPEndpointModelApplies(relayInfo.ChannelBaseUrl, relayInfo.GetUpstreamModelName()) || dflop.DFLOPEndpointProfileApplies(relayInfo.ChannelBaseUrl, expression))
+	if endpointBilling {
+		reason := relayInfo.EndpointBillingAnomaly
+		params := billingexpr.TokenParams{}
+		if actual := effectiveBillingUsage(usage); actual != nil {
+			params.ServerToolCalls = actual.NumServerSideToolsUsed
+		}
+		if err := dflop.DFLOPEndpointUsageContract(relayInfo.ChannelBaseUrl, `tier("dflop_chat_token_only", 0)`, params); err != nil {
+			reason = err.Error()
+		}
+		if reason == "" && !relayInfo.EndpointBillingUsageSeen {
+			reason = "MISSING_AUTHORITATIVE_TOKEN_USAGE"
+		}
+		if reason != "" {
+			HoldEndpointBillingReservation(ctx, relayInfo, reason)
+			return
+		}
+	}
 	originUsage := usage
 	billingUsage := effectiveBillingUsage(usage)
 	if relayInfo.ChannelMeta != nil {
@@ -473,19 +539,31 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		extraContent = append(extraContent, fmt.Sprintf("Audio Input 花费 %s", logger.LogQuota(common.QuotaFromDecimal(q))))
 	}
 
-	if !summary.hasBillableUsage() {
+	if !summary.hasBillableUsage() && !(relayInfo.EndpointBillingUsageSeen && relayInfo.ChannelMeta != nil && dflop.DFLOPEndpointModelApplies(relayInfo.ChannelBaseUrl, relayInfo.GetUpstreamModelName())) {
 		extraContent = append(extraContent, "上游没有返回计费信息，无法扣费（可能是上游超时）")
 		logger.LogError(ctx, fmt.Sprintf("total tokens is 0, cannot consume quota, userId %d, channelId %d, tokenId %d, model %s， pre-consumed quota %d", relayInfo.UserId, relayInfo.ChannelId, relayInfo.TokenId, summary.ModelName, relayInfo.FinalPreConsumedQuota))
-	} else {
+	} else if !endpointBilling {
 		model.UpdateUserUsedQuotaAndRequestCount(relayInfo.UserId, summary.Quota)
 		model.UpdateChannelUsedQuota(relayInfo.ChannelId, summary.Quota)
 	}
 
 	if err := SettleBilling(ctx, relayInfo, summary.Quota); err != nil {
 		logger.LogError(ctx, "error settling billing: "+err.Error())
+		if endpointBilling {
+			other := model.NewLogOther()
+			other.SetPublic("billing_state", "PENDING")
+			other.SetPublic("settlement_verified", false)
+			other.SetAdmin("billing_anomaly", map[string]any{"reason": "ENDPOINT_SETTLEMENT_FAILED", "reserved_quota": relayInfo.FinalPreConsumedQuota, "expression_hash": expressionHash})
+			model.RecordErrorLog(ctx, relayInfo.UserId, relayInfo.ChannelId, relayInfo.OriginModelName, ctx.GetString("token_name"), "ENDPOINT_SETTLEMENT_FAILED", relayInfo.TokenId, 0, relayInfo.IsStream, relayInfo.UsingGroup, other)
+			return
+		}
 		if relayInfo.ChannelMeta != nil && dflop.DFLOPCacheContractApplies(relayInfo.ChannelBaseUrl, relayInfo.UpstreamModelName) {
 			return
 		}
+	}
+	if endpointBilling {
+		model.UpdateUserUsedQuotaAndRequestCount(relayInfo.UserId, summary.Quota)
+		model.UpdateChannelUsedQuota(relayInfo.ChannelId, summary.Quota)
 	}
 
 	logModel := summary.ModelName

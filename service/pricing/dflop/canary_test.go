@@ -7,11 +7,14 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 
 	"github.com/stretchr/testify/assert"
@@ -39,7 +42,7 @@ func TestHistoricalEvidenceRecoveryIsGETOnlyAndFollowsEveryCursor(t *testing.T) 
 		case "/v1/images/generations":
 			_, _ = io.WriteString(w, `{"data":[{"id":"image-1","model":"tvod-midjourney-v7","status":"succeeded","unit_count":4,"cost":"8.4"}],"next_cursor":null}`)
 		case "/v1/images/generations/image-1":
-			_, _ = io.WriteString(w, `{"data":[{"url":"https://private.example/image?secret=123"}]}`)
+			_, _ = io.WriteString(w, `{"id":"image-1","data":[{"url":"https://private.example/image?secret=123"}]}`)
 		default:
 			_, _ = io.WriteString(w, `{"data":[]}`)
 		}
@@ -459,18 +462,386 @@ func TestHistoricalSeedanceTokenAndLiteSecondLeg(t *testing.T) {
 
 func TestGPTEndpointSpecificBillingClassification(t *testing.T) {
 	matrix := EndpointBillingMatrix([]Item{
-		{ModelID: "gpt-5-example", Category: "text", BillingFeatures: []string{"token", "per_image", "fast_mode"}},
+		{ModelID: "gpt-5-example", Category: "text", Protocols: []string{"openai_chat", "openai_responses"}, BillingFeatures: []string{"token", "per_image", "fast_mode"}},
 		{ModelID: "gpt-image-example", Category: "image", BillingFeatures: []string{"image_token"}},
 	})
-	require.Len(t, matrix, 3)
-	for _, entry := range matrix[:2] {
-		assert.Equal(t, []string{"token"}, entry["applicable_features"])
-		assert.Equal(t, []string{"fast_mode", "per_image"}, entry["unverified_selectors"])
-		assert.Equal(t, "UNVERIFIED", entry["runtime_selector"])
-		assert.Equal(t, false, entry["global_additive_billing_verified"])
-	}
+	require.Len(t, matrix, 4)
 	assert.Equal(t, "/v1/chat/completions", matrix[0]["endpoint"])
 	assert.Equal(t, "/v1/responses", matrix[1]["endpoint"])
-	assert.Equal(t, "/v1/images/generations", matrix[2]["endpoint"])
-	assert.Equal(t, []string{"image_token"}, matrix[2]["applicable_features"])
+	assert.Equal(t, "chat_fast", matrix[2]["profile"])
+	assert.Equal(t, "MISSING_FAST_SELECTOR", matrix[2]["reason_code"])
+	assert.Equal(t, []string{"token"}, matrix[0]["applicable_features"])
+	for _, entry := range matrix[:3] {
+		assert.Equal(t, false, entry["PRICE_VERIFIED"], "missing authenticated prices cannot verify a profile")
+		assert.Equal(t, false, entry["global_additive_billing_verified"])
+	}
+	assert.Equal(t, "/v1/images/generations", matrix[3]["endpoint"])
+	assert.Equal(t, []string{"image_token"}, matrix[3]["applicable_features"])
+}
+
+func TestHistoricalEvidenceUsesOriginalIdentityAndAccountScope(t *testing.T) {
+	for _, terminal := range []string{`{"id":"other","model":"voice-tts-pro"}`, `{"model":"voice-tts-pro"}`, `{"id":"real","task_id":"other","model":"voice-tts-pro"}`} {
+		t.Run(terminal, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch r.URL.Path {
+				case "/v1/logs":
+					assert.Equal(t, "account", r.URL.Query().Get("scope"))
+					assert.Equal(t, "all", r.URL.Query().Get("period"))
+					_, _ = io.WriteString(w, `{"currency":"points","scope":"account","data":[{"id":1,"model":"voice-tts-pro","request_id":"original-request","status":"success"}],"has_more":false}`)
+				case "/v1/logs/1":
+					assert.Equal(t, "account", r.URL.Query().Get("scope"))
+					w.WriteHeader(http.StatusForbidden)
+				case "/v1/audio/speech":
+					_, _ = io.WriteString(w, `{"data":[{"id":"real","model":"voice-tts-pro","status":"succeeded"}]}`)
+				case "/v1/audio/speech/real":
+					_, _ = io.WriteString(w, terminal)
+				default:
+					_, _ = io.WriteString(w, `{"data":[]}`)
+				}
+			}))
+			defer server.Close()
+			report, err := RecoverHistoricalEvidence(context.Background(), HistoricalTransport{HTTP: server.Client(), BaseURL: server.URL, Key: "secret"}, HistoricalOptions{Scope: "account", Period: "all"}, []Item{{ModelID: "voice-tts-pro", Callable: true, ReasonCode: "UNVERIFIED"}})
+			require.NoError(t, err)
+			var detailError string
+			for _, request := range report.Requests {
+				if request.Path == "/v1/logs/1" {
+					detailError = request.Error
+				}
+			}
+			assert.Equal(t, "ACCOUNT_SCOPE_PERMISSION_REQUIRED", detailError)
+			for _, capture := range report.Captures {
+				assert.NotEqual(t, "task-poll:real", capture.EvidenceID, "unbound or conflicting terminal response cannot become exact task evidence")
+				if capture.EvidenceID == "log:1" {
+					assert.Empty(t, capture.GatewayTrace, "request ID is not a gateway trace")
+				}
+			}
+			assert.False(t, report.Models[0].CanUnlock)
+		})
+	}
+	report := HistoricalReport{}
+	model := HistoricalModelReport{RuntimeFields: map[string]any{}}
+	require.NoError(t, captureHistoricalRecord(&report, &model, "secret", "log:2", "ledger", "/v1/logs", map[string]any{"request_id": "request", "trace_id": "original-trace"}, nil))
+	require.Len(t, report.Captures, 1)
+	assert.Equal(t, "original-trace", report.Captures[0].GatewayTrace)
+}
+
+func TestHistoricalTechnicalDetailRejectsContradictoryIdentity(t *testing.T) {
+	for _, detail := range []string{`{"id":2,"request_id":"request-1"}`, `{"id":1,"request_id":"other-request"}`, `{"id":1,"task_id":"other-task"}`} {
+		t.Run(detail, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch r.URL.Path {
+				case "/v1/logs":
+					_, _ = io.WriteString(w, `{"currency":"points","scope":"key","data":[{"id":1,"model":"claude-test","request_id":"request-1","task_id":"task-1"}],"has_more":false}`)
+				case "/v1/logs/1":
+					_, _ = io.WriteString(w, detail)
+				default:
+					_, _ = io.WriteString(w, `{"data":[]}`)
+				}
+			}))
+			defer server.Close()
+			report, err := RecoverHistoricalEvidence(context.Background(), HistoricalTransport{HTTP: server.Client(), BaseURL: server.URL}, HistoricalOptions{}, []Item{{ModelID: "claude-test", Callable: true, ReasonCode: "UNVERIFIED"}})
+			require.NoError(t, err)
+			require.Len(t, report.Captures, 1)
+			assert.Equal(t, "log:1", report.Captures[0].EvidenceID)
+			assert.Contains(t, report.Models[0].Notes, "TECHNICAL_LOG_IDENTITY_MISMATCH")
+		})
+	}
+}
+
+func TestAccountScopeDenialIsNotAbsenceOfEvidence(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/v1/logs" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		_, _ = io.WriteString(w, `{"data":[]}`)
+	}))
+	defer server.Close()
+	report, err := RecoverHistoricalEvidence(context.Background(), HistoricalTransport{HTTP: server.Client(), BaseURL: server.URL}, HistoricalOptions{Scope: "account", Period: "all"}, []Item{{ModelID: "claude-test", Callable: true}})
+	require.NoError(t, err)
+	require.Len(t, report.Models, 1)
+	assert.Contains(t, report.Models[0].Notes, "ACCOUNT_SCOPE_PERMISSION_REQUIRED")
+	assert.NotContains(t, report.Models[0].Notes, "NO_HISTORICAL_EVIDENCE")
+}
+
+func TestClaudeCanaryTargetScopedPricingAuthorization(t *testing.T) {
+	input := ClaudeCanaryPricingInputs{Model: "claude-sonnet-5", BillingMode: "tiered_expr", BillingExpr: `tier("dflop", p * 1.5 + c * 7.5 + cr * 0.15 + cc * 1.875)`, QuotaPerUnit: "500000", GroupRatio: "1", EvaluatorHash: strings.Repeat("a", 64)}
+	fingerprint, canonical, err := ClaudeCanaryPricingFingerprint(input)
+	require.NoError(t, err)
+	assert.NotContains(t, string(canonical), "global_pricing_version")
+	binding := ClaudeCanaryPricingBinding{Execute: true, InvocationID: "new-invocation", CatalogHash: strings.Repeat("b", 64), ConfigHash: strings.Repeat("c", 64), SourceChannelID: 1, CredentialFingerprint: "afd454eb19c56131", TargetFingerprint: fingerprint, MaxPoints: "14.20382208", GlobalPricingVersion: "old-global"}
+	invalidated := map[string]string{"old-invocation": "INVALIDATED_PRICING_VERSION_DRIFT", "new-invocation": "AUTHORIZED"}
+	require.NoError(t, CheckClaudeCanaryPricingBinding(binding, binding, input, invalidated))
+	require.ErrorContains(t, CheckClaudeCanaryPricingBinding(binding, binding, input, nil), "STATE_UNKNOWN")
+	t.Run("unrelated pricing changes global version without changing target settlement", func(t *testing.T) {
+		versions := map[string]string{"claude-sonnet-5": model.ModelPricingVersion(model.PricingValues{"billing_setting.billing_mode": input.BillingMode, "billing_setting.billing_expr": input.BillingExpr}), "unrelated": model.ModelPricingVersion(model.PricingValues{"ModelRatio": 1})}
+		oldVersion := model.ModelPricingVersion(model.PricingValues{"versions": versions})
+		snap := &billingexpr.BillingSnapshot{ExprString: input.BillingExpr, ExprHash: billingexpr.ExprHashString(input.BillingExpr), ExprVersion: 1, QuotaPerUnit: 500000, GroupRatio: 1}
+		params := billingexpr.TokenParams{P: 100, C: 3, CR: 1000, CC: 2000, Len: 3100}
+		before, err := billingexpr.ComputeTieredQuota(snap, params)
+		require.NoError(t, err)
+		versions["unrelated"] = model.ModelPricingVersion(model.PricingValues{"ModelRatio": 2})
+		fresh := binding
+		fresh.GlobalPricingVersion = model.ModelPricingVersion(model.PricingValues{"versions": versions})
+		assert.NotEqual(t, oldVersion, fresh.GlobalPricingVersion)
+		fp, _, err := ClaudeCanaryPricingFingerprint(input)
+		require.NoError(t, err)
+		assert.Equal(t, fingerprint, fp)
+		after, err := billingexpr.ComputeTieredQuota(snap, params)
+		require.NoError(t, err)
+		assert.Equal(t, before, after)
+		require.NoError(t, CheckClaudeCanaryPricingBinding(binding, fresh, input, invalidated))
+	})
+	for _, field := range []string{"target price", "BillingExpr", "quota conversion", "group ratio", "evaluator code", "catalog", "config", "channel", "credential", "hard max", "old invocation"} {
+		t.Run(field, func(t *testing.T) {
+			fresh := binding
+			changed := input
+			switch field {
+			case "target price":
+				changed.BillingExpr = strings.Replace(input.BillingExpr, "p * 1.5", "p * 2", 1)
+			case "BillingExpr":
+				changed.BillingExpr = strings.Replace(input.BillingExpr, "cc * 1.875", "cc * 3", 1)
+			case "quota conversion":
+				changed.QuotaPerUnit = "1000000"
+			case "group ratio":
+				changed.GroupRatio = "2"
+			case "evaluator code":
+				changed.EvaluatorHash = strings.Repeat("d", 64)
+			case "catalog":
+				fresh.CatalogHash = strings.Repeat("d", 64)
+			case "config":
+				fresh.ConfigHash = strings.Repeat("d", 64)
+			case "channel":
+				fresh.SourceChannelID = 2
+			case "credential":
+				fresh.CredentialFingerprint = "different"
+			case "hard max":
+				fresh.MaxPoints = "15"
+			case "old invocation":
+				fresh.InvocationID = "old-invocation"
+				freshCopy := fresh
+				require.ErrorContains(t, CheckClaudeCanaryPricingBinding(freshCopy, fresh, changed, invalidated), "INVALIDATED")
+				return
+			}
+			require.Error(t, CheckClaudeCanaryPricingBinding(binding, fresh, changed, invalidated))
+			if changed != input {
+				fp, _, err := ClaudeCanaryPricingFingerprint(changed)
+				require.NoError(t, err)
+				assert.NotEqual(t, fingerprint, fp)
+			}
+		})
+	}
+	t.Run("equivalent decimal formatting", func(t *testing.T) {
+		equivalent := input
+		equivalent.GroupRatio = "1.0000"
+		equivalent.QuotaPerUnit = "5e5"
+		equivalent.BillingExpr = `v1:tier("dflop", p * 1.5000 + c * 7.50 + cr * 0.1500 + cc * 1.8750)`
+		fp, body, err := ClaudeCanaryPricingFingerprint(equivalent)
+		require.NoError(t, err)
+		assert.Equal(t, fingerprint, fp)
+		assert.Equal(t, canonical, body)
+		fresh := binding
+		fresh.MaxPoints = "14.2038220800"
+		require.NoError(t, CheckClaudeCanaryPricingBinding(binding, fresh, equivalent, invalidated))
+	})
+	t.Run("unknown evaluator inputs fail closed", func(t *testing.T) {
+		changed := input
+		changed.BillingExpr = `tier("dflop", p * 1.5 + c * 7.5 + cr * 0.15 + cc * 1.875) * param("fast")`
+		_, _, err := ClaudeCanaryPricingFingerprint(changed)
+		require.Error(t, err)
+	})
+	t.Run("proposal is not authorization", func(t *testing.T) {
+		proposal := binding
+		proposal.Execute = false
+		require.ErrorContains(t, CheckClaudeCanaryPricingBinding(proposal, binding, input, invalidated), "AUTHORIZATION_REQUIRED")
+	})
+}
+
+func TestClaudeCacheIdentityPreservesPrefixSemantics(t *testing.T) {
+	base := `{"model":"claude-sonnet-5","max_tokens":64,"stream":false,"thinking":{"type":"disabled"},"tools":[{"name":"one"},{"name":"two"}],"system":[{"type":"text","text":"café\n ","cache_control":{"type":"ephemeral","ttl":"5m"}}],"messages":[{"role":"user","content":"A"}]}`
+	headers := http.Header{"Anthropic-Version": {"2023-06-01"}}
+	original, err := ClaudeCacheIdentity([]byte(base), headers)
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name, old, replacement string
+		same                   bool
+	}{
+		{"identical", "A", "A", true},
+		{"suffix", `"content":"A"`, `"content":"B"`, true},
+		{"system", "café", "cafe", false},
+		{"whitespace", `café\n `, `café\n  `, false},
+		{"unicode", "café", `cafe\u0301`, false},
+		{"tool order", `{"name":"one"},{"name":"two"}`, `{"name":"two"},{"name":"one"}`, false},
+		{"thinking", `"disabled"`, `"adaptive"`, false},
+		{"effort", `"thinking":`, `"output_config":{"effort":"high"},"thinking":`, false},
+		{"breakpoint placement", `"system":[`, `"system":[{"type":"text","text":"earlier"},`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ClaudeCacheIdentity([]byte(strings.Replace(base, tc.old, tc.replacement, 1)), headers)
+			require.NoError(t, err)
+			assert.Equal(t, tc.same, original.Hash == got.Hash)
+		})
+	}
+	// Moving the marker between otherwise unchanged blocks changes the prefix.
+	early := `{"model":"claude-sonnet-5","system":[{"type":"text","text":"first","cache_control":{"type":"ephemeral"}},{"type":"text","text":"second"}],"messages":[{"role":"user","content":"suffix"}]}`
+	late := strings.Replace(strings.Replace(early, `,"cache_control":{"type":"ephemeral"}`, "", 1), `"text":"second"`, `"text":"second","cache_control":{"type":"ephemeral"}`, 1)
+	first, err := ClaudeCacheIdentity([]byte(early), headers)
+	require.NoError(t, err)
+	last, err := ClaudeCacheIdentity([]byte(late), headers)
+	require.NoError(t, err)
+	assert.NotEqual(t, first.Hash, last.Hash)
+	assert.Equal(t, "first", first.TextBytes["system[0].text"])
+	assert.Equal(t, "second", last.TextBytes["system[1].text"])
+	// A message breakpoint includes ordered conversation content and message role.
+	messagePrefix := `{"model":"claude-sonnet-5","messages":[{"role":"user","content":[{"type":"text","text":"cached","cache_control":{"type":"ephemeral"}},{"type":"text","text":"suffix"}]}]}`
+	cached, err := ClaudeCacheIdentity([]byte(messagePrefix), headers)
+	require.NoError(t, err)
+	suffix, err := ClaudeCacheIdentity([]byte(strings.Replace(messagePrefix, `"suffix"`, `"changed suffix"`, 1)), headers)
+	require.NoError(t, err)
+	assert.Equal(t, cached.Hash, suffix.Hash)
+	role, err := ClaudeCacheIdentity([]byte(strings.Replace(messagePrefix, `"user"`, `"assistant"`, 1)), headers)
+	require.NoError(t, err)
+	assert.NotEqual(t, cached.Hash, role.Hash)
+	image, err := ClaudeCacheIdentity([]byte(strings.Replace(messagePrefix, `{"type":"text","text":"suffix"}`, `{"type":"image","source":{"type":"base64","media_type":"image/png","data":"synthetic"}}`, 1)), headers)
+	require.NoError(t, err)
+	assert.NotEqual(t, cached.Hash, image.Hash)
+	numeric, err := ClaudeCacheIdentity([]byte(strings.Replace(base, `"thinking":`, `"unknown_control":9007199254740992,"thinking":`, 1)), headers)
+	require.NoError(t, err)
+	nextNumeric, err := ClaudeCacheIdentity([]byte(strings.Replace(base, `"thinking":`, `"unknown_control":9007199254740993,"thinking":`, 1)), headers)
+	require.NoError(t, err)
+	assert.NotEqual(t, numeric.Hash, nextNumeric.Hash)
+	changedHeaders := headers.Clone()
+	changedHeaders.Set("anthropic-beta", "inline-tools-2026-09-15")
+	changed, err := ClaudeCacheIdentity([]byte(base), changedHeaders)
+	require.NoError(t, err)
+	assert.NotEqual(t, original.Hash, changed.Hash)
+	_, err = ClaudeCacheIdentity([]byte(strings.Replace(base, `,"cache_control":{"type":"ephemeral","ttl":"5m"}`, "", 1)), headers)
+	require.ErrorContains(t, err, "INSUFFICIENT_CAPTURE")
+}
+
+func TestEndpointBillingProfilesSeparateChatFromFastImagesAndTools(t *testing.T) {
+	item := Item{ModelID: "gpt-6-sol", Category: "text", Callable: true, Protocols: []string{"openai_chat", "openai_responses"}, BillingFeatures: []string{"token", "per_image", "fast_mode"}, PriceSemantics: PriceSemantics{SourcePriceKind: "AUTHENTICATED_EFFECTIVE_PRICE", EffectiveState: "VERIFIED"}, Raw: []byte(`{"long_context_threshold_tokens":272000}`), Prices: map[string]Price{"input_per_1m": {SellingUSD: "2"}, "output_per_1m": {SellingUSD: "10"}, "cached_input_per_1m": {SellingUSD: "0.2"}, "input_per_1m_long": {SellingUSD: "4"}, "output_per_1m_long": {SellingUSD: "15"}, "cached_input_per_1m_long": {SellingUSD: "0.4"}, "price_per_image": {SellingUSD: "0.05"}}}
+	profiles := BuildEndpointBillingProfiles(item)
+	require.NotEmpty(t, profiles)
+	standard := profiles[0]
+	assert.Equal(t, "chat_standard", standard.Profile)
+	assert.Equal(t, SupportedAuto, standard.Status)
+	assert.True(t, standard.PriceVerified && standard.SemanticsVerified && standard.BindingVerified && standard.RuntimeUsageVerified && standard.SettlementVerified)
+	assert.NotContains(t, standard.Expression, "image_count")
+	require.Len(t, profiles, 4)
+	assert.Equal(t, SupportedAuto, profiles[1].Status)
+	assert.Equal(t, standard.Expression, profiles[1].Expression)
+	assert.Equal(t, "MISSING_FAST_SELECTOR", profiles[2].ReasonCode)
+	assert.Equal(t, "DEDICATED_IMAGE_BINDING_MISSING", profiles[3].ReasonCode)
+	require.ErrorContains(t, DFLOPEndpointRequestContract("https://api.dflop.top", `tier("dflop_chat_standard", p * 2 + c * 10)`, "/v1/responses", billingexpr.RequestInput{Body: []byte(`{}`)}), "DFLOP_RESPONSES_PROFILE_UNVERIFIED")
+	unknown := item
+	unknown.BillingFeatures = append(slices.Clone(item.BillingFeatures), "new_billable_addon")
+	unknownProfiles := BuildEndpointBillingProfiles(unknown)
+	assert.Equal(t, "UNKNOWN_BILLING_FEATURE", unknownProfiles[0].ReasonCode)
+	assert.Empty(t, unknownProfiles[0].Expression)
+	raw, _, err := billingexpr.RunExprWithRequest(standard.Expression, billingexpr.TokenParams{P: 272000, Len: 272000, C: 10}, billingexpr.RequestInput{})
+	require.NoError(t, err)
+	assert.InDelta(t, 1088150, raw, 0.00001)
+	for _, tc := range []struct{ endpoint, body, want string }{
+		{"/v1/chat/completions", `{"messages":[]}`, ""},
+		{"/v1/chat/completions", `{"tools":[{"type":"function"}]}`, ""},
+		{"/v1/chat/completions", `{"stream":true,"tools":[{"type":"image_generation"}]}`, ""},
+		{"/v1/responses", `{}`, ""},
+		{"/v1/responses", `{"tools":[{"type":"image_generation"}]}`, ""},
+		{"/v1/responses", `{"tools":[{"type":"unknown_paid_tool"}]}`, "DFLOP_SERVER_TOOL_UNBOUNDED"},
+		{"/v1/images/generations", `{}`, "DFLOP_DEDICATED_IMAGE_PROFILE_UNVERIFIED"},
+		{"/v1/chat/completions", `{"service_tier":"priority"}`, "DFLOP_FAST_MODE_PRICING_UNAVAILABLE"},
+		{"/v1/chat/completions", `{"extra_body":{"service_tier":"priority"}}`, "DFLOP_FAST_MODE_PRICING_UNAVAILABLE"},
+		{"/v1/chat/completions", `{"tools":[{"type":"web_search"}]}`, "DFLOP_SERVER_TOOL_UNBOUNDED"},
+		{"/v1/chat/completions", `{"tools":{"web_search":true}}`, "DFLOP_SERVER_TOOL_UNBOUNDED"},
+	} {
+		t.Run(tc.body+tc.endpoint, func(t *testing.T) {
+			err := DFLOPEndpointRequestContract("https://api.dflop.top", standard.Expression, tc.endpoint, billingexpr.RequestInput{Body: []byte(tc.body)})
+			if tc.want == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, tc.want)
+			}
+		})
+	}
+	require.NoError(t, DFLOPEndpointRequestContract("https://another.example", standard.Expression, "/v1/responses", billingexpr.RequestInput{Body: []byte(`{}`)}))
+	tools := 1
+	require.ErrorContains(t, DFLOPEndpointUsageContract("https://api.dflop.top", standard.Expression, billingexpr.TokenParams{ServerToolCalls: &tools}), "UNEXPECTED_DFLOP_SERVER_TOOL_USAGE")
+	tools = 0
+	require.NoError(t, DFLOPEndpointUsageContract("https://api.dflop.top", standard.Expression, billingexpr.TokenParams{ServerToolCalls: &tools}))
+	item.ModelID = "grok-4.7"
+	item.BillingFeatures = []string{"token", "server_tool_call"}
+	profiles = BuildEndpointBillingProfiles(item)
+	require.NotEmpty(t, profiles)
+	assert.Equal(t, SupportedAuto, profiles[1].Status)
+	require.NoError(t, DFLOPEndpointRequestContract("https://api.dflop.top", profiles[1].Expression, "/v1/responses", billingexpr.RequestInput{Body: []byte(`{"tools":[{"type":"function"}]}`)}))
+	require.NoError(t, DFLOPEndpointRequestContract("https://api.dflop.top", profiles[0].Expression, "/v1/chat/completions", billingexpr.RequestInput{Body: []byte(`{"tools":[{"type":"function"}]}`)}))
+	require.ErrorContains(t, DFLOPEndpointRequestContract("https://api.dflop.top", profiles[0].Expression, "/v1/chat/completions", billingexpr.RequestInput{Body: []byte(`{"tools":[{"type":"image_generation"}]}`)}), "DFLOP_SERVER_TOOL_UNBOUNDED")
+	item.PriceSemantics.SourcePriceKind = "EFFECTIVE_PRICE"
+	profiles = BuildEndpointBillingProfiles(item)
+	assert.NotEqual(t, SupportedAuto, profiles[0].Status)
+	assert.False(t, profiles[0].PriceVerified)
+}
+
+func TestEndpointBillingResponseRequiresActualUsageAndServedStandardTier(t *testing.T) {
+	expression := `tier("dflop_chat_token_only", p * 2 + c * 10)`
+	for _, tc := range []struct {
+		body   string
+		seen   bool
+		reason string
+	}{
+		{`{"choices":[{"delta":{"content":"a"}}]}`, false, ""},
+		{`{"usage":null}`, false, ""},
+		{`{"usage":{"prompt_tokens":0,"completion_tokens":0,"num_server_side_tools_used":0}}`, true, ""},
+		{`{"usage":{"prompt_tokens":12,"completion_tokens":3}}`, true, ""},
+		{`{"usage":{"prompt_tokens":12}}`, false, "MISSING_AUTHORITATIVE_TOKEN_USAGE"},
+		{`{"usage":{"prompt_tokens":-1,"completion_tokens":3}}`, false, "INVALID_AUTHORITATIVE_TOKEN_USAGE"},
+		{`{"service_tier":"priority","usage":{"prompt_tokens":12,"completion_tokens":3}}`, false, "UNEXPECTED_DFLOP_SELECTED_TIER"},
+		{`{"usage":{"prompt_tokens":12,"completion_tokens":3,"num_server_side_tools_used":1}}`, false, "UNEXPECTED_DFLOP_SERVER_TOOL_USAGE"},
+		{`{"object":"response","usage":{"input_tokens":1,"output_tokens":2}}`, false, "DFLOP_RESPONSES_PROFILE_UNVERIFIED"},
+	} {
+		t.Run(tc.body, func(t *testing.T) {
+			seen, err := DFLOPEndpointResponseContract("https://api.dflop.top", expression, []byte(tc.body))
+			assert.Equal(t, tc.seen, seen)
+			if tc.reason == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, tc.reason)
+			}
+		})
+	}
+}
+
+func TestDFLOPResponsesProfileUsesAuthoritativeUsage(t *testing.T) {
+	expression := `tier("dflop_chat_standard_responses", p * 2 + c * 10 + cr * 0.2)`
+	for _, tc := range []struct {
+		body, reason string
+		seen         bool
+	}{
+		{`{"object":"response","usage":{"input_tokens":0,"output_tokens":0,"input_tokens_details":{"cached_tokens":0}},"output":[{"type":"image_generation_call"}]}`, "", true},
+		{`{"response":{"object":"response","usage":{"input_tokens":12,"output_tokens":5,"input_tokens_details":{"cached_tokens":4},"output_tokens_details":{"reasoning_tokens":3}}}}`, "", true},
+		{`{"object":"response","usage":{"input_tokens":0,"input_tokens_details":{"cached_tokens":0}}}`, "MISSING_AUTHORITATIVE_TOKEN_USAGE", false},
+		{`{"object":"response","usage":{"input_tokens":12,"output_tokens":5}}`, "MISSING_AUTHORITATIVE_CACHE_USAGE", false},
+		{`{"object":"response","usage":{"input_tokens":12,"output_tokens":5,"input_tokens_details":{"cached_tokens":13}}}`, "INVALID_AUTHORITATIVE_CACHE_USAGE", false},
+		{`{"response":{"object":"response","service_tier":"priority"}}`, "UNEXPECTED_DFLOP_SELECTED_TIER", false},
+		{`{"item":{"type":"web_search_call"}}`, "UNEXPECTED_DFLOP_SERVER_TOOL_USAGE", false},
+		{`{"service_tier":"priority","response":{"object":"response","usage":{"input_tokens":0,"output_tokens":0,"input_tokens_details":{"cached_tokens":0}}}}`, "UNEXPECTED_DFLOP_SELECTED_TIER", false},
+		{`{"usage":{"prompt_tokens":0,"completion_tokens":0,"prompt_tokens_details":{"cached_tokens":0}}}`, "", true},
+		{`{"usage":{"prompt_tokens":12,"completion_tokens":5}}`, "MISSING_AUTHORITATIVE_CACHE_USAGE", false},
+		{`{"usage":{"prompt_tokens":12,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":-1}}}`, "INVALID_AUTHORITATIVE_CACHE_USAGE", false},
+		{`{"usage":{"prompt_tokens":12,"completion_tokens":5,"prompt_tokens_details":{"cached_tokens":13}}}`, "INVALID_AUTHORITATIVE_CACHE_USAGE", false},
+	} {
+		t.Run(tc.body, func(t *testing.T) {
+			seen, err := DFLOPEndpointResponseContract("https://api.dflop.top", expression, []byte(tc.body))
+			assert.Equal(t, tc.seen, seen)
+			if tc.reason == "" {
+				require.NoError(t, err)
+			} else {
+				require.ErrorContains(t, err, tc.reason)
+			}
+		})
+	}
 }
