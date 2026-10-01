@@ -16,12 +16,24 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { resolveModelProvider } from '@/lib/model-provider'
+
 import { EXCLUDED_GROUPS, FILTER_ALL, QUOTA_TYPE_VALUES } from '../constants'
 import type { PricingModel } from '../types'
 
 // ----------------------------------------------------------------------------
 // Model Helper Utilities
 // ----------------------------------------------------------------------------
+
+export function getPricingModelIconKey(
+  model: Pick<PricingModel, 'model_name' | 'icon' | 'vendor_icon'>
+): string | undefined {
+  return (
+    model.icon ||
+    model.vendor_icon ||
+    resolveModelProvider(model.model_name)?.icon
+  )
+}
 
 /**
  * Get available groups for a model

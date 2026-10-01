@@ -93,6 +93,8 @@ import type {
   SearchChannelsResponse,
 } from '../../types'
 import { useChannels } from '../channels-provider'
+import type { ChannelTestResult } from '../../lib/channel-test-export'
+import { ChannelTestExport } from './channel-test-export'
 
 type ChannelTestDialogProps = {
   open: boolean
@@ -107,15 +109,7 @@ type ModelRow = {
   model: string
 }
 
-type TestStatus = 'idle' | 'testing' | 'success' | 'error'
-
-type TestResult = {
-  status: TestStatus
-  responseTime?: number
-  completedAt?: number
-  error?: string
-  errorCode?: string
-}
+type TestResult = ChannelTestResult
 
 type BatchProgress = {
   total: number
@@ -562,6 +556,8 @@ function ChannelTestDialogContent({
               completedAt,
               error,
               errorCode,
+              endpointType,
+              stream: effectiveStreamTest,
             }
             updateTestResult(model, finalResult)
           }
@@ -571,6 +567,8 @@ function ChannelTestDialogContent({
           status: 'error',
           completedAt: Date.now(),
           error: error instanceof Error ? error.message : t('Test failed'),
+          endpointType,
+          stream: effectiveStreamTest,
         }
         updateTestResult(model, finalResult)
       } finally {
@@ -1016,6 +1014,13 @@ function ChannelTestDialogContent({
           </div>
 
           <div className='space-y-3 max-sm:has-[div[role="toolbar"]]:pb-16'>
+            <ChannelTestExport
+              channelId={currentRow.id}
+              channelName={currentRow.name}
+              models={models}
+              results={testResults}
+              disabled={isAnyTesting || isDeletingFailed}
+            />
             <div className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
               <div className='min-w-0 space-y-2'>
                 <p className='text-sm font-medium'>{t('Channel models')}</p>

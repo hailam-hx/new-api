@@ -38,6 +38,7 @@ import {
 import { CachedPriceCell } from '../components/cached-price-cell'
 import { ModelCard } from '../components/model-card'
 import { ModelCardGrid } from '../components/model-card-grid'
+import { getPricingModelIconKey } from '../lib/model-helpers'
 import type { PricingModel } from '../types'
 
 function pricingModel(overrides: Partial<PricingModel> = {}): PricingModel {
@@ -88,6 +89,35 @@ afterEach(() => {
 })
 
 describe('model cards', () => {
+  it.each([
+    [{ model_name: 'claude-fable-5-1' }, 'Claude.Color'],
+    [{ model_name: 'gemini-custom' }, 'Gemini.Color'],
+    [{ model_name: 'claude-fable-5-1', icon: 'OpenAI' }, 'OpenAI'],
+    [{ model_name: 'claude-fable-5-1', vendor_icon: 'OpenAI' }, 'OpenAI'],
+    [
+      { model_name: 'claude-fable-5-1', icon: 'Claude', vendor_icon: 'OpenAI' },
+      'Claude',
+    ],
+    [{ model_name: 'private-model' }, undefined],
+  ])(
+    'resolves the model square icon from metadata before family fallback: %j',
+    (model, expected) => {
+      expect(getPricingModelIconKey(model)).toBe(expected)
+    }
+  )
+
+  it('shows the Claude logo instead of an initial when model and vendor icons are absent', async () => {
+    render(
+      <ModelCard
+        model={pricingModel({ model_name: 'claude-fable-5-1' })}
+        onClick={vi.fn()}
+      />
+    )
+    await waitFor(() => {
+      expect(screen.queryByText('C', { exact: true })).not.toBeInTheDocument()
+    })
+  })
+
   it('shows separate generic and image cache prices including a free image cache', () => {
     render(
       <CachedPriceCell

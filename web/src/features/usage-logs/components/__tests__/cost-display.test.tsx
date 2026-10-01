@@ -58,9 +58,36 @@ describe('log cost display', () => {
   })
 
   test('shows quarantined billing as pending review instead of zero cost', () => {
-    renderCost({quota: 0, other: {billing_state: 'QUARANTINED'}})
+    renderCost({ quota: 0, other: { billing_state: 'QUARANTINED' } })
     expect(screen.getByText('Billing quarantined')).toBeVisible()
     expect(screen.queryByText('$0')).not.toBeInTheDocument()
+  })
+
+  test.each([
+    { quota: 0.061728394506, expected: '$0.000000123457' },
+    { quota: 617283.9450615, expected: '$1.234567890123' },
+    { quota: 124, expected: '$0.000248' },
+    { quota: 0, expected: '$0' },
+  ])(
+    'shows cost with up to twelve decimal places without trailing zeros ($quota)',
+    ({ quota, expected }) => {
+      renderCost({ quota, other: null })
+      expect(screen.getByText(expected)).toBeVisible()
+    }
+  )
+
+  test('preserves the custom points conversion while showing twelve decimal places', () => {
+    const { config } = useSystemConfigStore.getState()
+    useSystemConfigStore.getState().setConfig({
+      currency: {
+        ...config.currency,
+        quotaDisplayType: 'CUSTOM',
+        customCurrencySymbol: 'Điểm',
+        customCurrencyExchangeRate: 2,
+      },
+    })
+    renderCost({ quota: 0.061728394506, other: null })
+    expect(screen.getByText('Điểm 0.000000246914')).toBeVisible()
   })
 
   test.each([
@@ -121,7 +148,9 @@ describe('log cost display', () => {
 
     expect(screen.getByText('$0.025')).toBeVisible()
     expect(screen.getByRole('img', { name: 'Subscription' })).toBeVisible()
-    expect(screen.queryByRole('img', { name: 'Wallet' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('img', { name: 'Wallet' })
+    ).not.toBeInTheDocument()
   })
 
   test('keeps legacy cost visible without inventing a funding source', () => {
@@ -140,7 +169,7 @@ describe('log cost display', () => {
       showBillingSource: true,
     })
 
-    const amount = screen.getByText('$4,294.9673')
+    const amount = screen.getByText('$4,294.967294')
     expect(amount).toBeVisible()
     expect(amount).toHaveClass('whitespace-nowrap')
     expect(amount.closest('[data-slot="status-badge"]')).toHaveClass(
