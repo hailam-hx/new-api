@@ -24,7 +24,6 @@ import { useTranslation } from 'react-i18next'
 import { ErrorState } from '@/components/error-state'
 import { PublicLayout } from '@/components/layout'
 import { LoadingState } from '@/components/loading-state'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -42,7 +41,7 @@ import { useAuthStore } from '@/stores/auth-store'
 
 import { ModelCatalog, ModelDocument } from './catalog'
 import { CodeExamples } from './code-examples'
-import { articles, getArticle } from './content'
+import { articles, getArticle, translateDocSection } from './content'
 import { DocumentationMetadata } from './metadata'
 import { DocsNavigation, DocsSearch } from './navigation'
 import { ApiReference, ErrorReference } from './reference'
@@ -83,7 +82,7 @@ export function Documentation(props: { slug?: string; modelId?: string }) {
     } else window.scrollTo({ top: 0 })
   }, [href, data.isLoading])
   return (
-    <PublicLayout showMainContainer={false}>
+    <PublicLayout showMainContainer={false} headerProps={{ variant: 'solid' }}>
       <DocumentationMetadata
         title={title}
         description={t(article.description)}
@@ -95,7 +94,7 @@ export function Documentation(props: { slug?: string; modelId?: string }) {
       >
         {t('Skip to content')}
       </a>
-      <div className='bg-background/95 border-border fixed inset-x-0 top-14 z-30 border-b backdrop-blur'>
+      <div className='bg-background/95 border-border fixed inset-x-0 top-16 z-30 border-b backdrop-blur'>
         <div className='mx-auto flex max-w-[1500px] items-center justify-between gap-2 px-4 py-2'>
           <div className='lg:hidden'>
             <DocsNavigation slug={article.slug} mobile />
@@ -290,7 +289,7 @@ export function Documentation(props: { slug?: string; modelId?: string }) {
                     </a>
                   </h2>
                   <Markdown className='text-sm leading-7 [&_table]:block [&_table]:overflow-x-auto'>
-                    {t(section.body)}
+                    {translateDocSection(section, t)}
                   </Markdown>
                 </section>
               ))}
@@ -374,13 +373,6 @@ export function Documentation(props: { slug?: string; modelId?: string }) {
           )}
           {article.kind === 'reference' && <ApiReference />}
           {article.kind === 'errors' && <ErrorReference />}
-          <Alert className='bg-muted/30 mt-10'>
-            <AlertDescription>
-              {t(
-                'Documentation articles currently use English as the source language.'
-              )}
-            </AlertDescription>
-          </Alert>
           <details className='text-muted-foreground mt-6 text-xs'>
             <summary className='cursor-pointer'>
               {t('Implementation sources')}

@@ -19,6 +19,7 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relay"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -26,6 +27,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	hosttypes "github.com/QuantumNous/new-api/types"
 
@@ -39,6 +41,60 @@ type testResult struct {
 	context     *gin.Context
 	localErr    error
 	newAPIError *types.NewAPIError
+	billingPlan *billing_setting.TaskBillingPlan
+}
+
+// resolveChannelTestTaskPricing is a configuration preflight, not a task submit.
+// Auto checks declared task capabilities; an explicit endpoint checks only its
+// production claims. Selection and quantity validation are shared with relay.
+func resolveChannelTestTaskPricing(channel *model.Channel, generation *jsplugin.RoutingGeneration, clientModel, mappedModel, path string) *billing_setting.TaskBillingPlan {
+	if channel == nil || generation == nil {
+		return nil
+	}
+	lookupModel := clientModel
+	if declared, ok := generation.CanonicalModel(clientModel); ok {
+		lookupModel = declared
+	} else if declared, ok := generation.CanonicalModel(mappedModel); ok {
+		lookupModel = declared
+	}
+	var candidates []jsplugin.ProtocolBinding
+	if path != "" {
+		candidates = generation.LookupEndpointCandidates(http.MethodPost, path, lookupModel)
+	} else {
+		for _, plugin := range generation.PluginsByModel(lookupModel) {
+			candidates = append(candidates, jsplugin.ProtocolBinding{Plugin: plugin, Model: lookupModel})
+		}
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Set(jsplugin.ContextKeyPinnedEndpoint, jsplugin.PinnedEndpoint{Generation: generation, Plugin: candidates[0].Plugin, Model: lookupModel, Candidates: candidates})
+	selected, bound := middleware.PinnedEndpointCandidateForChannel(c, channel, candidates[0].Plugin.Meta.Key)
+	if !bound {
+		// Only report a DFLOP/native scope mismatch for this canonical origin.
+		// Other providers continue through the existing generic tester.
+		probe := &relaycommon.RelayInfo{DFLOPTaskPlugin: "dflop-media", ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: channel.GetBaseURL()}}
+		if !service.DFLOPTaskReservationApplies(probe) {
+			return nil
+		}
+		return &billing_setting.TaskBillingPlan{Model: clientModel, MappedModel: mappedModel, Reason: "PROVIDER_SCOPE_MISMATCH", Message: "Task pricing provider is not bound to the selected channel"}
+	}
+	if !service.IsDFLOPTaskPlatform(constant.TaskPlatform(selected.Plugin.Meta.Key)) {
+		return nil
+	}
+	plan := billing_setting.ResolveTaskBillingPlan(selected.Plugin.Meta.Key, clientModel, mappedModel, selected.Plugin, true)
+	if plan.Reason == "PLUGIN_PRICE_NOT_FOUND" {
+		for key := range billing_setting.GetPluginBillingExprCopy() {
+			provider, pricedModel, ok := billing_setting.SplitPluginBillingExprKey(key)
+			if ok && provider != plan.Plugin && (pricedModel == clientModel || pricedModel == mappedModel) {
+				plan.Reason = "PROVIDER_SCOPE_MISMATCH"
+				plan.Message = "Pricing exists only for a different task plugin; no cross-provider fallback is allowed"
+				break
+			}
+		}
+	}
+	return &plan
 }
 
 func normalizeChannelTestEndpoint(channel *model.Channel, endpointType string) string {
@@ -109,6 +165,29 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	}
 
 	endpointType = normalizeChannelTestEndpoint(channel, endpointType)
+
+	// Task connectivity needs a protocol-specific payload and the real funded
+	// submit path. Never send a generic chat request using a task expression.
+	preflightPath := ""
+	if endpointType != "" {
+		if endpointInfo, ok := common.GetDefaultEndpointInfo(constant.EndpointType(endpointType)); ok {
+			preflightPath = endpointInfo.Path
+		}
+	}
+	generation := jsplugin.DefaultRegistry.Generation()
+	c.Set("model_mapping", channel.GetModelMapping())
+	preflightInfo := &relaycommon.RelayInfo{OriginModelName: testModel, ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: testModel}}
+	if err := helper.ModelMappedHelper(c, preflightInfo, nil); err != nil {
+		return testResult{context: c, localErr: err, newAPIError: types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithStatusCode(http.StatusBadRequest))}
+	}
+	if plan := resolveChannelTestTaskPricing(channel, generation, testModel, preflightInfo.UpstreamModelName, preflightPath); plan != nil {
+		if !plan.Resolved {
+			err := errors.New(plan.Message)
+			return testResult{context: c, localErr: err, newAPIError: types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithStatusCode(http.StatusBadRequest), types.ErrOptionWithSkipRetry()), billingPlan: plan}
+		}
+		err := errors.New("Task plugin pricing resolved; channel connectivity test requires a task-specific payload and is not supported")
+		return testResult{context: c, localErr: err, newAPIError: types.NewError(err, types.ErrorCode("task_channel_test_unsupported"), types.ErrOptionWithStatusCode(http.StatusBadRequest), types.ErrOptionWithSkipRetry()), billingPlan: plan}
+	}
 
 	requestPath := "/v1/chat/completions"
 
@@ -884,6 +963,9 @@ func TestChannel(c *gin.Context) {
 		if result.newAPIError != nil {
 			resp["error_code"] = result.newAPIError.GetErrorCode()
 		}
+		if result.billingPlan != nil {
+			resp["billing_preflight"] = result.billingPlan
+		}
 		c.JSON(http.StatusOK, resp)
 		return
 	}
@@ -925,6 +1007,11 @@ func testChannelForHealthCheck(ctx context.Context, channel *model.Channel, test
 	milliseconds := time.Since(tik).Milliseconds()
 	if ctx.Err() != nil {
 		return summary
+	}
+	// Configuration preflight is not an upstream health observation. Do not
+	// change channel availability or response time from a task-only preflight.
+	if result.billingPlan != nil {
+		return channelTestSummary{Tested: 1, Failed: 1}
 	}
 
 	summary.Tested++

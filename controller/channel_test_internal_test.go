@@ -6,22 +6,192 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync/atomic"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
+	"github.com/QuantumNous/new-api/plugins"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
+	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestChannelTaskPricingRCAReplay(t *testing.T) {
+	registry := jsplugin.NewRegistry()
+	for _, key := range []string{"dflop-media", "dflop-image", "dflop-tts", "doubao", "alibaba"} {
+		source, err := plugins.Source(key)
+		require.NoError(t, err)
+		_, err = registry.RegisterFactory(source, jsplugin.Options{Key: key})
+		require.NoError(t, err)
+	}
+	data, err := os.ReadFile("testdata/dflop-channel-pricing-rca.json")
+	require.NoError(t, err)
+	var fixture struct {
+		Models []struct {
+			Model      string `json:"model"`
+			Plugin     string `json:"plugin"`
+			Expression string `json:"expression"`
+			RootCause  string `json:"root_cause"`
+			Resolved   bool   `json:"resolved"`
+		} `json:"models"`
+	}
+	require.NoError(t, common.Unmarshal(data, &fixture))
+	require.Len(t, fixture.Models, 89)
+	settings := config.GlobalConfig.Get("billing_setting").(*billing_setting.BillingSetting)
+	previous := *settings
+	previousSelfUse := operation_setting.SelfUseModeEnabled
+	operation_setting.SelfUseModeEnabled = false
+	*settings = billing_setting.BillingSetting{BillingMode: map[string]string{}, BillingExpr: map[string]string{}, PluginBillingExpr: map[string]string{}}
+	t.Cleanup(func() { *settings = previous; operation_setting.SelfUseModeEnabled = previousSelfUse })
+	for _, row := range fixture.Models {
+		if row.Expression != "" {
+			settings.PluginBillingExpr[billing_setting.PluginBillingExprKey(row.Plugin, row.Model)] = row.Expression
+		}
+	}
+	channel := &model.Channel{Id: 987, Type: constant.ChannelTypeNewAPI, BaseURL: common.GetPointer("https://api.dflop.top")}
+	resolved, blocked := 0, 0
+	for _, row := range fixture.Models {
+		t.Run(row.Model, func(t *testing.T) {
+			_, genericPrice := ratio_setting.GetModelPrice(row.Model, false)
+			_, genericRatio, _ := ratio_setting.GetModelRatio(row.Model)
+			assert.False(t, genericPrice, "fixture must reproduce missing generic price")
+			assert.False(t, genericRatio, "fixture must reproduce missing generic ratio")
+			plan := resolveChannelTestTaskPricing(channel, registry.Generation(), row.Model, row.Model, "")
+			if plan != nil && plan.Resolved {
+				resolved++
+			} else {
+				blocked++
+			}
+			if row.Resolved {
+				require.NotNil(t, plan)
+				assert.True(t, plan.Resolved, "reason=%s", plan.Reason)
+				assert.Equal(t, row.Plugin, plan.Plugin)
+				assert.Equal(t, "plugin_expression", plan.BillingSource)
+				assert.Equal(t, row.Expression, plan.Expression)
+				t.Logf("PRICING_RESOLVED model=%s plugin=%s source=%s", row.Model, plan.Plugin, plan.BillingSource)
+			} else {
+				if plan != nil {
+					assert.False(t, plan.Resolved, "RCA=%s", row.RootCause)
+					if row.RootCause == "PRICING_PROVIDER_BINDING_MISMATCH" {
+						assert.Equal(t, "PROVIDER_SCOPE_MISMATCH", plan.Reason)
+					} else {
+						assert.Equal(t, "PLUGIN_PRICE_NOT_FOUND", plan.Reason)
+					}
+				} else {
+					c, _ := gin.CreateTestContext(httptest.NewRecorder())
+					info := &relaycommon.RelayInfo{OriginModelName: row.Model, ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: row.Model}}
+					_, err := helper.ModelPriceHelper(c, info, 0, nil)
+					assert.Error(t, err, "unclaimed model must still fail generic pricing")
+				}
+				reason := "GENERIC_PRICE_NOT_FOUND"
+				if plan != nil {
+					reason = plan.Reason
+				}
+				t.Logf("PRICING_UNRESOLVED model=%s reason=%s RCA=%s", row.Model, reason, row.RootCause)
+			}
+		})
+	}
+	assert.Equal(t, 71, resolved)
+	assert.Equal(t, 18, blocked)
+	t.Logf("OFFLINE_REPLAY resolved=%d blocked=%d total=%d", resolved, blocked, len(fixture.Models))
+}
+
+func TestChannelTaskPricingScopeAndValidation(t *testing.T) {
+	registry := jsplugin.NewRegistry()
+	for _, key := range []string{"dflop-media", "dflop-image", "dflop-tts", "alibaba"} {
+		source, err := plugins.Source(key)
+		require.NoError(t, err)
+		_, err = registry.RegisterFactory(source, jsplugin.Options{Key: key})
+		require.NoError(t, err)
+	}
+	settings := config.GlobalConfig.Get("billing_setting").(*billing_setting.BillingSetting)
+	previous := *settings
+	t.Cleanup(func() { *settings = previous })
+	channel := &model.Channel{Type: constant.ChannelTypeNewAPI, BaseURL: common.GetPointer("https://api.dflop.top")}
+	for _, tc := range []struct {
+		name, model, mapped, key, expression, path, reason string
+		resolved                                           bool
+	}{
+		{name: "video", model: "tvod-veo-3.1", key: "dflop-media", expression: `u("duration_sec") * 0.1`, resolved: true},
+		{name: "image", model: "tvod-midjourney-v7", key: "dflop-image", expression: `u("image_count") * 0.1`, resolved: true},
+		{name: "tts", model: "voice-tts-pro", key: "dflop-tts", expression: `u("character_count") * 0.1`, resolved: true},
+		{name: "music native capability", model: "suno-v5", key: "dflop-media", expression: `u("generation_count") * 0.1`, resolved: true},
+		{name: "async digital human", model: "dh-avatar", key: "dflop-media", expression: `u("duration_sec") * 0.1`, resolved: true},
+		{name: "missing", model: "tvod-veo-3.1", key: "dflop-media", reason: "PLUGIN_PRICE_NOT_FOUND"},
+		{name: "syntax invalid", model: "tvod-veo-3.1", key: "dflop-media", expression: `u(`, reason: "PLUGIN_EXPR_INVALID"},
+		{name: "wrong usage schema", model: "tvod-veo-3.1", key: "dflop-media", expression: `u("seconds")`, reason: "PLUGIN_EXPR_INVALID"},
+		{name: "no quantity", model: "tvod-veo-3.1", key: "dflop-media", expression: `0`, reason: "REQUIRED_USAGE_UNRESOLVED"},
+		{name: "explicit zero quantity price", model: "tvod-veo-3.1", key: "dflop-media", expression: `u("duration_sec") * 0`, resolved: true},
+		{name: "mapped override", model: "tvod-veo-3.1", mapped: "vendor-endpoint-id", key: "dflop-media", expression: `u("duration_sec") * 0.1`, resolved: true},
+		{name: "mapped client alias", model: "my-video-alias", mapped: "tvod-veo-3.1", key: "dflop-media", expression: `u("duration_sec") * 0.1`, resolved: true},
+		{name: "no cross provider", model: "wan3.0-video", key: "alibaba", expression: `u("seconds") * 0.1`, reason: "PROVIDER_SCOPE_MISMATCH"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			*settings = billing_setting.BillingSetting{BillingMode: map[string]string{}, BillingExpr: map[string]string{}, PluginBillingExpr: map[string]string{}}
+			mapped := tc.mapped
+			if mapped == "" {
+				mapped = tc.model
+			}
+			if tc.expression != "" {
+				settings.PluginBillingExpr[billing_setting.PluginBillingExprKey(tc.key, mapped)] = tc.expression
+			}
+			plan := resolveChannelTestTaskPricing(channel, registry.Generation(), tc.model, mapped, tc.path)
+			require.NotNil(t, plan)
+			assert.Equal(t, tc.resolved, plan.Resolved)
+			assert.Equal(t, tc.reason, plan.Reason)
+			// Compare the real production selector and gate, not a second pricing implementation.
+			if tc.key != "alibaba" {
+				candidates := registry.Generation().LookupEndpointCandidates(http.MethodPost, "/v1/videos", tc.model)
+				if len(candidates) > 0 {
+					c, _ := gin.CreateTestContext(httptest.NewRecorder())
+					c.Set(jsplugin.ContextKeyPinnedEndpoint, jsplugin.PinnedEndpoint{Generation: registry.Generation(), Plugin: candidates[0].Plugin, Candidates: candidates})
+					selected, bound := middleware.PinnedEndpointCandidateForChannel(c, channel, candidates[0].Plugin.Meta.Key)
+					require.True(t, bound)
+					production := billing_setting.ResolveTaskBillingPlan(selected.Plugin.Meta.Key, tc.model, mapped, selected.Plugin, true)
+					assert.Equal(t, production, *plan)
+				}
+			}
+		})
+	}
+	assert.Nil(t, resolveChannelTestTaskPricing(channel, registry.Generation(), "tvod-veo-3.1", "tvod-veo-3.1", "/v1/chat/completions"))
+	assert.Nil(t, resolveChannelTestTaskPricing(channel, jsplugin.NewRegistry().Generation(), "tvod-veo-3.1", "tvod-veo-3.1", ""))
+}
+
+func TestChannelTaskPreflightDoesNotSubmitOrUseDatabase(t *testing.T) {
+	settings := config.GlobalConfig.Get("billing_setting").(*billing_setting.BillingSetting)
+	previous := *settings
+	previousDB, previousLogDB := model.DB, model.LOG_DB
+	model.DB, model.LOG_DB = nil, nil
+	t.Cleanup(func() { *settings = previous; model.DB, model.LOG_DB = previousDB, previousLogDB })
+	*settings = billing_setting.BillingSetting{BillingMode: map[string]string{}, BillingExpr: map[string]string{}, PluginBillingExpr: map[string]string{"dflop-media::tvod-veo-3.1": `u("duration_sec") * 0.1`}}
+	channel := &model.Channel{Type: constant.ChannelTypeNewAPI, BaseURL: common.GetPointer("https://api.dflop.top")}
+	result := testChannel(context.Background(), channel, 123, "tvod-veo-3.1", "", false)
+	require.NotNil(t, result.billingPlan)
+	assert.True(t, result.billingPlan.Resolved)
+	assert.Equal(t, "task_channel_test_unsupported", string(result.newAPIError.GetErrorCode()))
+	delete(settings.PluginBillingExpr, "dflop-media::tvod-veo-3.1")
+	result = testChannel(context.Background(), channel, 123, "tvod-veo-3.1", "", false)
+	require.NotNil(t, result.billingPlan)
+	assert.False(t, result.billingPlan.Resolved)
+	assert.Equal(t, "model_price_error", string(result.newAPIError.GetErrorCode()))
+	channel.Models = "tvod-veo-3.1"
+	assert.Equal(t, channelTestSummary{Tested: 1, Failed: 1}, testChannelForHealthCheck(context.Background(), channel, 123, true, 0))
+}
 
 func TestGetChannelDefaultBaseURLsUsesBuiltInDefaults(t *testing.T) {
 	originalBaseURLs := constant.ChannelBaseURLs

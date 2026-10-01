@@ -259,16 +259,11 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	if pinnedPlugin.Plugin != nil {
 		pluginKey = pinnedPlugin.Plugin.Meta.Key
 	}
-	exprStr, exists := billing_setting.ResolveTaskBillingExpr(pluginKey, modelName, info.UpstreamModelName)
-	if service.IsDFLOPTaskPlatform(platform) {
-		if !exists || strings.TrimSpace(exprStr) == "" || pinnedPlugin.Plugin == nil {
-			return nil, service.TaskErrorWrapperLocal(errors.New("DFLOP tasks require a configured quantity billing expression"), "model_price_error", http.StatusBadRequest)
-		}
-		schema, _ := pinnedPlugin.Plugin.Meta.UsageForModels(info.UpstreamModelName, modelName)
-		if !billing_setting.TaskExprCompatible(exprStr, schema) || len(billingexpr.UsedUsageKeys(exprStr)) == 0 {
-			return nil, service.TaskErrorWrapperLocal(errors.New("DFLOP task pricing must use the executing plugin's authoritative quantity schema"), "model_price_error", http.StatusBadRequest)
-		}
+	billingPlan := billing_setting.ResolveTaskBillingPlan(pluginKey, modelName, info.UpstreamModelName, pinnedPlugin.Plugin, service.IsDFLOPTaskPlatform(platform))
+	if billingPlan.Reason != "" {
+		return nil, service.TaskErrorWrapperLocal(errors.New(billingPlan.Message), "model_price_error", http.StatusBadRequest)
 	}
+	exprStr, exists := billingPlan.Expression, billingPlan.ExpressionFound
 	useTiered := exists || billing_setting.GetBillingMode(modelName) == billing_setting.BillingModeTieredExpr
 	if useTiered {
 		provider, supported := adaptor.(channel.TaskUsageFactsProvider)

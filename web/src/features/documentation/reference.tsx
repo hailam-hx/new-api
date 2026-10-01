@@ -34,6 +34,7 @@ import {
 } from '@/components/ui/select'
 
 import { DocsCode } from './code-examples'
+import { DOC_ERROR_GUIDANCE, DEFAULT_ERROR_GUIDANCE } from './content'
 import reference from './generated/reference.json'
 import { endpointAnchor } from './lib'
 
@@ -166,17 +167,6 @@ export function ApiReference() {
   )
 }
 
-const actions: Record<string, string> = {
-  invalid_request: 'Correct the request shape and endpoint.',
-  model_not_found:
-    'Check model access with your API key and confirm channel configuration.',
-  model_price_error:
-    'Ask an administrator to configure effective model or provider pricing.',
-  insufficient_user_quota:
-    'Review wallet balance, subscription funding and API key quota.',
-  access_denied: 'Check account permissions and API key restrictions.',
-}
-
 export function ErrorReference() {
   const { t } = useTranslation()
   const [query, setQuery] = useState('')
@@ -237,10 +227,7 @@ export function ErrorReference() {
             header: t('Suggested Action'),
             cell: (error) => (
               <Markdown className='text-sm'>
-                {t(
-                  actions[error.code] ??
-                    'Inspect the response and relevant logs; contact the administrator for configuration errors.'
-                )}
+                {t(DOC_ERROR_GUIDANCE[error.code] ?? DEFAULT_ERROR_GUIDANCE)}
               </Markdown>
             ),
           },

@@ -17,12 +17,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 
 export function DocumentationMetadata(props: {
   title: string
   description: string
   canonical: string
 }) {
+  const { t } = useTranslation()
+  const title = `${props.title} · ${t('New API Documentation')}`
   useEffect(() => {
     // React hoists its own tags, but does not adopt head tags from the SPA template.
     // Temporarily remove those defaults and restore them when leaving documentation.
@@ -38,17 +41,13 @@ export function DocumentationMetadata(props: {
   }, [])
   return (
     <>
-      <title data-new-api-docs-meta=''>{`${props.title} · New API Documentation`}</title>
+      <title data-new-api-docs-meta=''>{title}</title>
       <meta
         data-new-api-docs-meta=''
         name='description'
         content={props.description}
       />
-      <meta
-        data-new-api-docs-meta=''
-        property='og:title'
-        content={`${props.title} · New API Documentation`}
-      />
+      <meta data-new-api-docs-meta='' property='og:title' content={title} />
       <meta
         data-new-api-docs-meta=''
         property='og:description'

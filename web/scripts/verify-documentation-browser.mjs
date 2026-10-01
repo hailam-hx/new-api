@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import assert from 'node:assert/strict'
+import fs from 'node:fs/promises'
 
 const { chromium } = await import(
   process.env.PLAYWRIGHT_MODULE_PATH || 'playwright'
@@ -191,10 +192,84 @@ await page.getByText('Catalog access restricted', { exact: true }).waitFor()
 assert.equal(pricingRequests, 0)
 assert.deepEqual(errors, [])
 await page.setViewportSize({ width: 1440, height: 1000 })
+await page.goto(`${baseUrl}/docs`)
 await page.getByRole('button', { name: 'Change language', exact: true }).click()
 await page.getByRole('menuitem', { name: 'Tiếng Việt', exact: true }).click()
 await page.getByRole('button', { name: 'Tìm tài liệu', exact: true }).waitFor()
+// Vietnamese navigation must remain readable at the reported viewport while scrolling.
+await page.setViewportSize({ width: 1091, height: 959 })
+await page.getByRole('button', { name: 'Tìm tài liệu', exact: true }).waitFor()
+await page.evaluate(() => window.scrollTo(0, 220))
+await page.getByRole('button', { name: 'Chuyển đổi menu điều hướng' }).waitFor()
+const header = page.locator('header').first()
+const shortcuts = page.getByRole('navigation', {
+  name: 'Liên kết nhanh tài liệu',
+})
+const headerBounds = await header.boundingBox()
+const shortcutsBounds = await shortcuts.boundingBox()
+assert(shortcutsBounds.y >= headerBounds.y + headerBounds.height)
+assert(
+  !['transparent', 'rgba(0, 0, 0, 0)'].includes(
+    await header.evaluate(
+      (element) => getComputedStyle(element).backgroundColor
+    )
+  )
+)
+await page.getByRole('button', { name: 'Chuyển đổi menu điều hướng' }).click()
+await page.getByRole('link', { name: 'Trang chủ', exact: true }).waitFor()
+await page.getByRole('button', { name: 'Chuyển đổi menu điều hướng' }).click()
+assert.equal(await page.evaluate(() => document.body.style.overflow), '')
+await page.setViewportSize({ width: 1440, height: 1000 })
+await header.getByRole('link', { name: 'Trang chủ', exact: true }).waitFor()
+assert(
+  await header
+    .getByRole('link')
+    .evaluateAll((links) =>
+      links
+        .filter((link) => link.getBoundingClientRect().width > 0)
+        .every((link) => link.scrollWidth <= link.clientWidth)
+    )
+)
+await page.setViewportSize({ width: 1091, height: 959 })
+await page.screenshot({ path: '/tmp/new-api-docs-header-vi.png' })
+await page.setViewportSize({ width: 1440, height: 1000 })
+const documentation = JSON.parse(
+  await fs.readFile('src/features/documentation/content-data.json', 'utf8')
+)
+const overview = documentation.articles.find(
+  (article) => article.slug === 'overview'
+)
+let currentLocale = JSON.parse(
+  await fs.readFile('src/i18n/locales/vi.json', 'utf8')
+).translation
+for (const [locale, label] of [
+  ['en', 'English'],
+  ['zh', '简体中文'],
+  ['zh-TW', '繁體中文'],
+  ['fr', 'Français'],
+  ['ja', '日本語'],
+  ['ru', 'Русский'],
+  ['vi', 'Tiếng Việt'],
+]) {
+  await page
+    .getByRole('button', {
+      name: currentLocale['Change language'],
+      exact: true,
+    })
+    .click()
+  await page.getByRole('menuitem', { name: label, exact: true }).click()
+  currentLocale = JSON.parse(
+    await fs.readFile(`src/i18n/locales/${locale}.json`, 'utf8')
+  ).translation
+  await page
+    .getByText(currentLocale[overview.sections[0].body], { exact: true })
+    .waitFor()
+  assert.equal(
+    await page.title(),
+    `${currentLocale[overview.title]} · ${currentLocale['New API Documentation']}`
+  )
+}
 console.log(
-  'PASS: desktop navigation, SDK tabs/streaming, endpoint anchors, live catalog/model detail, mobile drawer/overflow, dark mode, catalog access gate; no page errors.'
+  'PASS: desktop navigation, SDK tabs/streaming, endpoint anchors, live catalog/model detail, mobile drawer/overflow, dark mode, catalog access gate, Vietnamese header layout and article prose/title switching in all seven languages; no page errors.'
 )
 await browser.close()

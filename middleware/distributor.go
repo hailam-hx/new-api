@@ -189,6 +189,11 @@ func channelMatchesExpectedTaskPlugin(c *gin.Context, channel *model.Channel, ex
 	return ok && plugin == pinned.Plugin
 }
 
+// PinnedEndpointCandidateForChannel selects metadata without running plugin hooks or billing.
+func PinnedEndpointCandidateForChannel(c *gin.Context, channel *model.Channel, expected string) (jsplugin.ProtocolBinding, bool) {
+	return pinnedEndpointCandidateForChannel(c, channel, expected)
+}
+
 func pinnedEndpointCandidateForChannel(c *gin.Context, channel *model.Channel, expected string) (jsplugin.ProtocolBinding, bool) {
 	if c == nil || channel == nil || expected == "" {
 		return jsplugin.ProtocolBinding{}, false

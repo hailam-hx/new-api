@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { PricingModel } from '@/features/pricing/types'
 
-import type { DocArticle } from './content'
+import { translateDocSection, type DocArticle } from './content'
 import type reference from './generated/reference.json'
 
 export type SearchResult = { title: string; detail: string; href: string }
@@ -69,7 +69,7 @@ export function searchDocumentation(
   pages: DocArticle[],
   data: DocReference,
   models: PricingModel[],
-  translate: (key: string) => string
+  translate: (key: string, values?: Record<string, string | number>) => string
 ): SearchResult[] {
   const terms = query
     .trim()
@@ -89,13 +89,15 @@ export function searchDocumentation(
           translate(article.description),
           ...article.sections.flatMap((section) => [
             translate(section.title),
-            translate(section.body),
+            translateDocSection(section, translate),
           ]),
         ].join(' ')
       )
     ) {
       const section = article.sections.find((item) =>
-        matches(`${translate(item.title)} ${translate(item.body)}`)
+        matches(
+          `${translate(item.title)} ${translateDocSection(item, translate)}`
+        )
       )
       results.push({
         title: translate(article.title),

@@ -127,6 +127,61 @@ func ResolveTaskBillingExpr(pluginKey, model, mappedModel string) (string, bool)
 	return "", false
 }
 
+// TaskBillingPlan resolves configuration only. It never estimates usage,
+// reserves funds, creates a task, or contacts the provider.
+type TaskBillingPlan struct {
+	Plugin          string                               `json:"plugin,omitempty"`
+	BillingSource   string                               `json:"billing_source,omitempty"`
+	BillingMode     string                               `json:"billing_mode,omitempty"`
+	Model           string                               `json:"model"`
+	MappedModel     string                               `json:"mapped_model"`
+	Expression      string                               `json:"-"`
+	ExpressionFound bool                                 `json:"-"`
+	UsageSchema     map[string]jsplugin.UsageFieldSchema `json:"-"`
+	Resolved        bool                                 `json:"resolved"`
+	Reason          string                               `json:"reason,omitempty"`
+	Message         string                               `json:"message,omitempty"`
+}
+
+// ResolveTaskBillingPlan shares the DFLOP configuration gate with submission.
+// Non-DFLOP callers retain their existing downstream validation and fallback.
+func ResolveTaskBillingPlan(pluginKey, model, mappedModel string, plugin *jsplugin.LoadedPlugin, requireQuantity bool) TaskBillingPlan {
+	expression, exists := ResolveTaskBillingExpr(pluginKey, model, mappedModel)
+	plan := TaskBillingPlan{Plugin: pluginKey, Model: model, MappedModel: mappedModel, BillingMode: GetBillingMode(model), Expression: expression, ExpressionFound: exists, Resolved: exists}
+	if exists {
+		plan.BillingMode = BillingModeTieredExpr
+		plan.BillingSource = "expression"
+		_, clientOverride := GetPluginBillingExpr(pluginKey, model)
+		_, mappedOverride := GetPluginBillingExpr(pluginKey, mappedModel)
+		if pluginKey != "" && (clientOverride || mappedOverride) {
+			plan.BillingSource = "plugin_expression"
+		}
+	}
+	if !requireQuantity {
+		return plan
+	}
+	if !exists || strings.TrimSpace(expression) == "" || plugin == nil {
+		plan.Resolved = false
+		plan.Reason = "PLUGIN_PRICE_NOT_FOUND"
+		if plugin == nil {
+			plan.Reason = "PLUGIN_USAGE_PROFILE_MISSING"
+		}
+		plan.Message = "DFLOP tasks require a configured quantity billing expression"
+		return plan
+	}
+	schema, _ := plugin.Meta.UsageForModels(mappedModel, model)
+	plan.UsageSchema = schema
+	if !TaskExprCompatible(expression, schema) || len(billingexpr.UsedUsageKeys(expression)) == 0 {
+		plan.Resolved = false
+		plan.Reason = "PLUGIN_EXPR_INVALID"
+		if _, err := billingexpr.CompileFromCache(expression); err == nil && len(billingexpr.UsedUsageKeys(expression)) == 0 {
+			plan.Reason = "REQUIRED_USAGE_UNRESOLVED"
+		}
+		plan.Message = "DFLOP task pricing must use the executing plugin's authoritative quantity schema"
+	}
+	return plan
+}
+
 // TaskExprCompatible checks the schema contract even for usage references in
 // branches that the current request would not evaluate.
 func TaskExprCompatible(expression string, schema map[string]jsplugin.UsageFieldSchema) bool {

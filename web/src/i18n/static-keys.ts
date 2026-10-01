@@ -16,12 +16,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { articles, groups } from '@/features/documentation/content'
+import {
+  articles,
+  groups,
+  DOC_ERROR_GUIDANCE,
+  DEFAULT_ERROR_GUIDANCE,
+} from '@/features/documentation/content'
 
 // Static translation keys that don't get picked up by the t('...') regex.
 // These cover dynamic labels (e.g. constants, configs) that are passed into t at runtime.
 export const STATIC_I18N_KEYS = [
   ...groups,
+  ...Object.values(DOC_ERROR_GUIDANCE),
+  DEFAULT_ERROR_GUIDANCE,
   ...articles.flatMap((article) => [
     article.title,
     article.description,

@@ -26,7 +26,12 @@ import {
 import data from './content-data.json'
 import reference from './generated/reference.json'
 
-export type DocSection = { id: string; title: string; body: string }
+export type DocSection = {
+  id: string
+  title: string
+  body: string
+  values?: Record<string, string | number>
+}
 export type DocArticle = {
   slug: string
   group: string
@@ -60,7 +65,12 @@ const providers: DocArticle[] = CHANNEL_TYPE_OPTIONS.map((provider) => ({
     {
       id: 'provider-type',
       title: 'Provider Type',
-      body: `${provider.label} · channel type ${provider.value}. ${CHANNEL_PROVIDER_PRESENTATION[provider.value]?.detailKey ?? ''}`,
+      body: 'Channel type {{type}}: {{provider}}.\n\n{{detail}}',
+      values: {
+        type: provider.value,
+        provider: provider.label,
+        detail: CHANNEL_PROVIDER_PRESENTATION[provider.value]?.detailKey ?? '',
+      },
     },
     {
       id: 'provider-credential',
@@ -100,7 +110,8 @@ const taskPluginProviders: DocArticle[] = reference.taskPlugins.map(
       {
         id: 'provider-type',
         title: 'Provider Type',
-        body: `${plugin.name} · task plugin ${plugin.key} · source version ${plugin.version}. This is shipped source metadata, not a list of enabled plugins on your deployment.`,
+        body: '{{name}} · task plugin {{key}} · source version {{version}}. This is shipped source metadata, not a list of enabled plugins on your deployment.',
+        values: { name: plugin.name, key: plugin.key, version: plugin.version },
       },
       {
         id: 'provider-setup',
@@ -122,3 +133,30 @@ export const articles: DocArticle[] = [
 ]
 export const getArticle = (slug: string): DocArticle | undefined =>
   articles.find((article) => article.slug === slug)
+
+export function translateDocSection(
+  section: DocSection,
+  translate: (key: string, values?: Record<string, string | number>) => string
+): string {
+  const values = Object.fromEntries(
+    Object.entries(section.values ?? {}).map(([key, value]) => [
+      key,
+      typeof value === 'string' ? translate(value) : value,
+    ])
+  )
+  return translate(section.body, values)
+}
+
+export const DOC_ERROR_GUIDANCE: Record<string, string> = {
+  invalid_request: 'Correct the request shape and endpoint.',
+  model_not_found:
+    'Check model access with your API key and confirm channel configuration.',
+  model_price_error:
+    'Ask an administrator to configure effective model or provider pricing.',
+  insufficient_user_quota:
+    'Review wallet balance, subscription funding and API key quota.',
+  access_denied: 'Check account permissions and API key restrictions.',
+}
+
+export const DEFAULT_ERROR_GUIDANCE =
+  'Inspect the response and relevant logs; contact the administrator for configuration errors.'

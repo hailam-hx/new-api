@@ -19,10 +19,24 @@ For commercial licensing, please contact support@quantumnous.com
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
+import { createInstance } from 'i18next'
 import { marked } from 'marked'
 
-import { articles, groups } from '../src/features/documentation/content.ts'
+import {
+  articles,
+  groups,
+  translateDocSection,
+} from '../src/features/documentation/content.ts'
 import { buildQuickstart } from '../src/features/documentation/lib.ts'
+import en from '../src/i18n/locales/en.json' with { type: 'json' }
+
+const translations = createInstance()
+await translations.init({
+  lng: 'en',
+  nsSeparator: false,
+  resources: { en },
+  interpolation: { escapeValue: false },
+})
 
 const directory =
   process.argv.find((value) => value.startsWith('--dist='))?.slice(7) || 'dist'
@@ -124,7 +138,7 @@ for (const article of data.articles) {
         '<p>Open this page in your browser for SDK examples using your current deployment URL.</p>'
     }
   }
-  const content = `<a href="#docs-content" class="sr-only focus:not-sr-only">Skip to content</a><header class="border-b px-6 py-4"><a href="/">New API</a> · <a href="/docs">Docs</a> · <a href="/docs/models">Models</a> · <a href="/docs/pricing">Pricing</a> · <a href="/docs/api-reference">API Reference</a> · <a href="/dashboard">Console</a></header><div class="mx-auto grid max-w-[1500px] gap-8 p-6 lg:grid-cols-[230px_minmax(0,1fr)_180px]"><aside class="hidden lg:block"><nav aria-label="Documentation navigation">${navigation}</nav></aside><main id="docs-content" class="min-w-0"><nav aria-label="Breadcrumb"><a href="/docs">Docs</a> / ${escape(article.group)} / ${escape(article.title)}</nav><article class="prose max-w-none"><h1 class="mt-6 text-4xl font-semibold">${escape(article.title)}</h1><p class="text-muted-foreground my-4">${escape(article.description)}</p>${article.kind === 'home' ? '<section class="grid gap-6 border-y py-6 sm:grid-cols-2"><div><h2>I want to use the API</h2><p>Create an API key → choose a model → send your first request.</p><a href="/docs/quickstart">Quickstart</a> · <a href="/docs/models">Browse Models</a></div><div><h2>I manage the platform</h2><p>Configure channels → models → pricing → routing.</p><a href="/docs/admin-overview">Admin Guide</a> · <a href="/docs/admin-providers">Providers</a></div></section>' : ''}${article.sections.map((section) => `<section id="${section.id}" class="mt-8 scroll-mt-40"><h2 class="mb-4 text-xl font-semibold"><a href="#${section.id}">${escape(section.title)}</a></h2>${marked.parse(section.body)}</section>`).join('')}${extra}${article.console ? `<p class="mt-6"><a href="${escape(article.console)}">Open in Console</a></p>` : ''}</article><p class="mt-8 text-sm text-muted-foreground">Documentation articles currently use English as the source language. Live catalogs follow platform access settings.</p><nav aria-label="Previous and next page" class="mt-8 flex justify-between border-t pt-6">${previous ? `<a href="${articlePath(previous)}">Previous: ${escape(previous.title)}</a>` : '<span></span>'}${next ? `<a href="${articlePath(next)}">Next: ${escape(next.title)}</a>` : ''}</nav></main><aside class="hidden lg:block"><nav aria-label="On this page">${article.sections.map((section) => `<p class="mb-3 text-xs"><a href="#${section.id}">${escape(section.title)}</a></p>`).join('')}</nav></aside></div>`
+  const content = `<a href="#docs-content" class="sr-only focus:not-sr-only">Skip to content</a><header class="border-b px-6 py-4"><a href="/">New API</a> · <a href="/docs">Docs</a> · <a href="/docs/models">Models</a> · <a href="/docs/pricing">Pricing</a> · <a href="/docs/api-reference">API Reference</a> · <a href="/dashboard">Console</a></header><div class="mx-auto grid max-w-[1500px] gap-8 p-6 lg:grid-cols-[230px_minmax(0,1fr)_180px]"><aside class="hidden lg:block"><nav aria-label="Documentation navigation">${navigation}</nav></aside><main id="docs-content" class="min-w-0"><nav aria-label="Breadcrumb"><a href="/docs">Docs</a> / ${escape(article.group)} / ${escape(article.title)}</nav><article class="prose max-w-none"><h1 class="mt-6 text-4xl font-semibold">${escape(article.title)}</h1><p class="text-muted-foreground my-4">${escape(article.description)}</p>${article.kind === 'home' ? '<section class="grid gap-6 border-y py-6 sm:grid-cols-2"><div><h2>I want to use the API</h2><p>Create an API key → choose a model → send your first request.</p><a href="/docs/quickstart">Quickstart</a> · <a href="/docs/models">Browse Models</a></div><div><h2>I manage the platform</h2><p>Configure channels → models → pricing → routing.</p><a href="/docs/admin-overview">Admin Guide</a> · <a href="/docs/admin-providers">Providers</a></div></section>' : ''}${article.sections.map((section) => `<section id="${section.id}" class="mt-8 scroll-mt-40"><h2 class="mb-4 text-xl font-semibold"><a href="#${section.id}">${escape(section.title)}</a></h2>${marked.parse(translateDocSection(section, translations.t.bind(translations)))}</section>`).join('')}${extra}${article.console ? `<p class="mt-6"><a href="${escape(article.console)}">Open in Console</a></p>` : ''}</article><p class="mt-8 text-sm text-muted-foreground">Live catalogs follow platform access settings.</p><nav aria-label="Previous and next page" class="mt-8 flex justify-between border-t pt-6">${previous ? `<a href="${articlePath(previous)}">Previous: ${escape(previous.title)}</a>` : '<span></span>'}${next ? `<a href="${articlePath(next)}">Next: ${escape(next.title)}</a>` : ''}</nav></main><aside class="hidden lg:block"><nav aria-label="On this page">${article.sections.map((section) => `<p class="mb-3 text-xs"><a href="#${section.id}">${escape(section.title)}</a></p>`).join('')}</nav></aside></div>`
   const metadata = `<title>${escape(article.title)} · New API Documentation</title><meta name="description" content="${escape(article.description)}"><link rel="canonical" href="${escape(canonical)}"><meta property="og:title" content="${escape(article.title)} · New API Documentation"><meta property="og:description" content="${escape(article.description)}"><meta property="og:type" content="article"><meta property="og:url" content="${escape(canonical)}">`
   const ownedMetadata = metadata.replaceAll(
     /<(title|meta|link)\b/g,

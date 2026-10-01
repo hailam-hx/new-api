@@ -1,0 +1,628 @@
+{
+  "source": "dflop-model-price-20261001/audit-89-models.json",
+  "models": [
+    {
+      "model": "tvod-jimeng-1.0-lite-i2v",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.07077) : tier(\"720p\", u(\"duration_sec\") * 0.045495)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-jimeng-1.0-pro",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.07077) : tier(\"720p\", u(\"duration_sec\") * 0.045495)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-jimeng-1.0-pro-fast",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.07077) : tier(\"720p\", u(\"duration_sec\") * 0.045495)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-jimeng-1.5-pro",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.07077) : tier(\"720p\", u(\"duration_sec\") * 0.045495)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-jimeng-3.0",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.07077) : tier(\"720p\", u(\"duration_sec\") * 0.045495)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-jimeng-3.0-pro",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.07077) : tier(\"720p\", u(\"duration_sec\") * 0.045495)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-jimeng-4.0",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.07077) : tier(\"720p\", u(\"duration_sec\") * 0.045495)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-veo-3.1",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.1011) : u(\"resolution\") == \"4k\" ? tier(\"4k\", u(\"duration_sec\") * 0.3033) : tier(\"720p\", u(\"duration_sec\") * 0.06066)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-veo-3.1-fast",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.07077) : tier(\"720p\", u(\"duration_sec\") * 0.04044)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-veo-3.1-lite",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.07077) : tier(\"720p\", u(\"duration_sec\") * 0.04044)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "doubao-seedance-2.0",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" && u(\"input_mode\") == \"default\" ? tier(\"default@1080p\", u(\"completion_tokens\") * 7.65 / 1000000) : u(\"resolution\") == \"1080p\" && u(\"input_mode\") == \"with_video_input\" ? tier(\"with_video_input@1080p\", u(\"completion_tokens\") * 4.65 / 1000000) : u(\"resolution\") == \"480p\" && u(\"input_mode\") == \"default\" ? tier(\"default@480p\", u(\"completion_tokens\") * 6.9 / 1000000) : u(\"resolution\") == \"480p\" && u(\"input_mode\") == \"with_video_input\" ? tier(\"with_video_input@480p\", u(\"completion_tokens\") * 4.2 / 1000000) : u(\"resolution\") == \"720p\" && u(\"input_mode\") == \"default\" ? tier(\"default@720p\", u(\"completion_tokens\") * 6.9 / 1000000) : tier(\"with_video_input@720p\", u(\"completion_tokens\") * 4.2 / 1000000)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "doubao-seedance-2.0-fast",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" && u(\"input_mode\") == \"default\" ? tier(\"default@1080p\", u(\"completion_tokens\") * 4.1625 / 1000000) : u(\"resolution\") == \"1080p\" && u(\"input_mode\") == \"with_video_input\" ? tier(\"with_video_input@1080p\", u(\"completion_tokens\") * 2.475 / 1000000) : u(\"resolution\") == \"480p\" && u(\"input_mode\") == \"default\" ? tier(\"default@480p\", u(\"completion_tokens\") * 4.1625 / 1000000) : u(\"resolution\") == \"480p\" && u(\"input_mode\") == \"with_video_input\" ? tier(\"with_video_input@480p\", u(\"completion_tokens\") * 2.475 / 1000000) : u(\"resolution\") == \"720p\" && u(\"input_mode\") == \"default\" ? tier(\"default@720p\", u(\"completion_tokens\") * 4.1625 / 1000000) : tier(\"with_video_input@720p\", u(\"completion_tokens\") * 2.475 / 1000000)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "doubao-seedance-2.0-fast-lite",
+      "plugin": null,
+      "expression": null,
+      "root_cause": "PROVIDER_CATALOG_MISSING_UPSCALE_RATE",
+      "resolved": false
+    },
+    {
+      "model": "doubao-seedance-2.0-lite",
+      "plugin": null,
+      "expression": null,
+      "root_cause": "PROVIDER_CATALOG_MISSING_UPSCALE_RATE",
+      "resolved": false
+    },
+    {
+      "model": "doubao-seedance-2.0-mini",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"480p\" && u(\"input_mode\") == \"default\" ? tier(\"default@480p\", u(\"completion_tokens\") * 1.38 / 1000000) : u(\"resolution\") == \"480p\" && u(\"input_mode\") == \"with_video_input\" ? tier(\"with_video_input@480p\", u(\"completion_tokens\") * 0.84 / 1000000) : u(\"resolution\") == \"720p\" && u(\"input_mode\") == \"default\" ? tier(\"default@720p\", u(\"completion_tokens\") * 1.38 / 1000000) : tier(\"with_video_input@720p\", u(\"completion_tokens\") * 0.84 / 1000000)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "doubao-seedance-2.0-mini-lite",
+      "plugin": null,
+      "expression": null,
+      "root_cause": "PROVIDER_CATALOG_MISSING_UPSCALE_RATE",
+      "resolved": false
+    },
+    {
+      "model": "doubao-seedance-2.5",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" && u(\"input_mode\") == \"default\" ? tier(\"default@1080p\", u(\"completion_tokens\") * 11.55 / 1000000) : u(\"resolution\") == \"1080p\" && u(\"input_mode\") == \"with_video_input\" ? tier(\"with_video_input@1080p\", u(\"completion_tokens\") * 6.9 / 1000000) : u(\"resolution\") == \"480p\" && u(\"input_mode\") == \"default\" ? tier(\"default\", u(\"completion_tokens\") * 10.5 / 1000000) : u(\"resolution\") == \"480p\" && u(\"input_mode\") == \"with_video_input\" ? tier(\"with_video_input\", u(\"completion_tokens\") * 6.3 / 1000000) : u(\"resolution\") == \"720p\" && u(\"input_mode\") == \"default\" ? tier(\"default\", u(\"completion_tokens\") * 10.5 / 1000000) : tier(\"with_video_input\", u(\"completion_tokens\") * 6.3 / 1000000)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "doubao-seedance-2.5-lite",
+      "plugin": null,
+      "expression": null,
+      "root_cause": "PROVIDER_CATALOG_MISSING_UPSCALE_RATE",
+      "resolved": false
+    },
+    {
+      "model": "doubao-seedream-4-0-250828",
+      "plugin": "doubao",
+      "expression": "tier(\"image\", u(\"image_count\") * 0.03)",
+      "root_cause": "PRICING_PROVIDER_BINDING_MISMATCH",
+      "resolved": false
+    },
+    {
+      "model": "doubao-seedream-4-5-251128",
+      "plugin": "doubao",
+      "expression": "tier(\"image\", u(\"image_count\") * 0.0375)",
+      "root_cause": "PRICING_PROVIDER_BINDING_MISMATCH",
+      "resolved": false
+    },
+    {
+      "model": "doubao-seedream-5-0-260128",
+      "plugin": "doubao",
+      "expression": "tier(\"image\", u(\"image_count\") * 0.033)",
+      "root_cause": "PRICING_PROVIDER_BINDING_MISMATCH",
+      "resolved": false
+    },
+    {
+      "model": "doubao-seedream-5-0-pro-260628",
+      "plugin": "doubao",
+      "expression": "tier(\"image\", u(\"images_up_to_1_5k\") * 0.045 + u(\"images_above_1_5k\") * 0.09 + max(u(\"input_images\") - 1, 0) * 0.003)",
+      "root_cause": "PRICING_PROVIDER_BINDING_MISMATCH",
+      "resolved": false
+    },
+    {
+      "model": "tvod-kling-video-1.6",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.06066) : tier(\"720p\", u(\"duration_sec\") * 0.04044)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-kling-video-2.0",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.06066) : tier(\"720p\", u(\"duration_sec\") * 0.04044)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-kling-video-2.1",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.06066) : tier(\"720p\", u(\"duration_sec\") * 0.04044)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-kling-video-2.5-turbo",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.05055) : tier(\"720p\", u(\"duration_sec\") * 0.03033)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-kling-video-2.6",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.06066) : tier(\"720p\", u(\"duration_sec\") * 0.04044)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-kling-video-3.0",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.08088) : u(\"resolution\") == \"4k\" ? tier(\"4k\", u(\"duration_sec\") * 0.24264) : tier(\"720p\", u(\"duration_sec\") * 0.05055)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-kling-video-3.0-omni",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.08088) : u(\"resolution\") == \"4k\" ? tier(\"4k\", u(\"duration_sec\") * 0.24264) : tier(\"720p\", u(\"duration_sec\") * 0.05055)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-kling-video-master",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.12132) : tier(\"720p\", u(\"duration_sec\") * 0.08088)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-kling-video-o1",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.05055) : tier(\"720p\", u(\"duration_sec\") * 0.03033)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "minimax-h3",
+      "plugin": null,
+      "expression": null,
+      "root_cause": "MISSING_INPUT_VIDEO_DURATION",
+      "resolved": false
+    },
+    {
+      "model": "minimax-h3-max",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"480p\" ? tier(\"480p\", u(\"duration_sec\") * 0.0495) : tier(\"768p\", u(\"duration_sec\") * 0.075)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-hailuo-02",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.06066) : tier(\"720p\", u(\"duration_sec\") * 0.04044)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-hailuo-2.3",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.06066) : tier(\"720p\", u(\"duration_sec\") * 0.04044)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-hailuo-2.3-fast",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.06066) : tier(\"720p\", u(\"duration_sec\") * 0.04044)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-hailuo-h3",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"2k\" ? tier(\"2k\", u(\"duration_sec\") * 0.12) : tier(\"4k\", u(\"duration_sec\") * 0.36)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-sora-2",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.25275) : tier(\"720p\", u(\"duration_sec\") * 0.15165)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "voice-tts-pro",
+      "plugin": "dflop-tts",
+      "expression": "u(\"character_count\") * 0.000330165",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "qwen-image-3.0",
+      "plugin": "alibaba",
+      "expression": "tier(\"image\", u(\"image_count\") * 0.027 + u(\"input_image_count\") * 0.003)",
+      "root_cause": "PRICING_PROVIDER_BINDING_MISMATCH",
+      "resolved": false
+    },
+    {
+      "model": "qwen-image-3.0-pro",
+      "plugin": null,
+      "expression": null,
+      "root_cause": "PROVIDER_CONTRACT_IMAGE_THRESHOLD_CONFLICT",
+      "resolved": false
+    },
+    {
+      "model": "suno-v3.5",
+      "plugin": "dflop-media",
+      "expression": "tier(\"base\", u(\"generation_count\") * 0.051)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "suno-v4",
+      "plugin": "dflop-media",
+      "expression": "tier(\"base\", u(\"generation_count\") * 0.051)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "suno-v4.5",
+      "plugin": "dflop-media",
+      "expression": "tier(\"base\", u(\"generation_count\") * 0.051)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "suno-v5",
+      "plugin": "dflop-media",
+      "expression": "tier(\"base\", u(\"generation_count\") * 0.051)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "suno-v5.5",
+      "plugin": "dflop-media",
+      "expression": "tier(\"base\", u(\"generation_count\") * 0.051)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-hunyuan-video-1.0",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.08088) : u(\"resolution\") == \"4k\" ? tier(\"4k\", u(\"duration_sec\") * 0.24264) : tier(\"720p\", u(\"duration_sec\") * 0.05055)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-hunyuan-video-1.1",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.08088) : u(\"resolution\") == \"4k\" ? tier(\"4k\", u(\"duration_sec\") * 0.24264) : tier(\"720p\", u(\"duration_sec\") * 0.05055)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-vidu-video-2.0",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.06066) : tier(\"720p\", u(\"duration_sec\") * 0.04044)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-vidu-video-q1",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.06066) : tier(\"720p\", u(\"duration_sec\") * 0.04044)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-vidu-video-q1-classic",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.06066) : tier(\"720p\", u(\"duration_sec\") * 0.04044)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-vidu-video-q2",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.06066) : tier(\"720p\", u(\"duration_sec\") * 0.04044)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-vidu-video-q2-pro",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.06066) : tier(\"720p\", u(\"duration_sec\") * 0.04044)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-vidu-video-q2-pro-fast",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.06066) : tier(\"720p\", u(\"duration_sec\") * 0.04044)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-vidu-video-q2-turbo",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.06066) : tier(\"720p\", u(\"duration_sec\") * 0.04044)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-vidu-video-q3",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.07077) : u(\"resolution\") == \"4k\" ? tier(\"4k\", u(\"duration_sec\") * 0.2022) : tier(\"720p\", u(\"duration_sec\") * 0.045495)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-vidu-video-q3-ad",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.07077) : u(\"resolution\") == \"4k\" ? tier(\"4k\", u(\"duration_sec\") * 0.2022) : tier(\"720p\", u(\"duration_sec\") * 0.045495)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-vidu-video-q3-drama",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.07077) : u(\"resolution\") == \"4k\" ? tier(\"4k\", u(\"duration_sec\") * 0.2022) : tier(\"720p\", u(\"duration_sec\") * 0.045495)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-vidu-video-q3-pro",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.07077) : u(\"resolution\") == \"4k\" ? tier(\"4k\", u(\"duration_sec\") * 0.2022) : tier(\"720p\", u(\"duration_sec\") * 0.045495)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-vidu-video-q3-turbo",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.07077) : tier(\"720p\", u(\"duration_sec\") * 0.045495)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "wan2.7-t2v",
+      "plugin": "alibaba",
+      "expression": "u(\"resolution\") == \"1080P\" ? tier(\"1080P\", u(\"seconds\") * 0.15) : tier(\"720P\", u(\"seconds\") * 0.09)",
+      "root_cause": "PRICING_PROVIDER_BINDING_MISMATCH",
+      "resolved": false
+    },
+    {
+      "model": "wan3.0-video",
+      "plugin": "alibaba",
+      "expression": "u(\"resolution\") == \"1080P\" ? tier(\"1080P\", u(\"seconds\") * 0.18) : u(\"resolution\") == \"480P\" ? tier(\"480P\", u(\"seconds\") * 0.045) : tier(\"720P\", u(\"seconds\") * 0.09)",
+      "root_cause": "PRICING_PROVIDER_BINDING_MISMATCH",
+      "resolved": false
+    },
+    {
+      "model": "wan3.0-video-prime",
+      "plugin": "alibaba",
+      "expression": "u(\"resolution\") == \"1080P\" ? tier(\"1080P\", u(\"seconds\") * 0.27) : u(\"resolution\") == \"480P\" ? tier(\"480P\", u(\"seconds\") * 0.0675) : tier(\"720P\", u(\"seconds\") * 0.135)",
+      "root_cause": "PRICING_PROVIDER_BINDING_MISMATCH",
+      "resolved": false
+    },
+    {
+      "model": "grok-imagine-video",
+      "plugin": "dflop-media",
+      "expression": "tier(\"base\", u(\"duration_sec\") * 0.015)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "grok-imagine-video-1.5-preview",
+      "plugin": "dflop-media",
+      "expression": "tier(\"base\", u(\"duration_sec\") * 0.015)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-midjourney-v7",
+      "plugin": "dflop-image",
+      "expression": "tier(\"image\", u(\"image_count\") * 0.08088)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-midjourney-v8.1",
+      "plugin": "dflop-image",
+      "expression": "tier(\"image\", u(\"image_count\") * 0.1011)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "clip-compose",
+      "plugin": "dflop-media",
+      "expression": "tier(\"base\", u(\"count\") * 0.225)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "clip-mixcut",
+      "plugin": null,
+      "expression": null,
+      "root_cause": "CATALOG_RECORD_ABSENT_FROM_STORED_PREVIEW",
+      "resolved": false
+    },
+    {
+      "model": "clip-news",
+      "plugin": null,
+      "expression": null,
+      "root_cause": "CATALOG_RECORD_ABSENT_FROM_STORED_PREVIEW",
+      "resolved": false
+    },
+    {
+      "model": "clip-realman",
+      "plugin": null,
+      "expression": null,
+      "root_cause": "CATALOG_RECORD_ABSENT_FROM_STORED_PREVIEW",
+      "resolved": false
+    },
+    {
+      "model": "dh-avatar",
+      "plugin": "dflop-media",
+      "expression": "tier(\"base\", u(\"duration_sec\") * 0.009)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "dh-avatar-create",
+      "plugin": "dflop-media",
+      "expression": "tier(\"base\", u(\"count\") * 0.0025)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "dh-lipsync",
+      "plugin": "dflop-media",
+      "expression": "tier(\"base\", u(\"duration_sec\") * 0.01011)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "dh-lipsync-max",
+      "plugin": "dflop-media",
+      "expression": "tier(\"base\", u(\"duration_sec\") * 0.03033)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "dh-lipsync-pro",
+      "plugin": "dflop-media",
+      "expression": "tier(\"base\", u(\"duration_sec\") * 0.02022)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "dh-motion",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"fast\" ? tier(\"fast\", u(\"duration_sec\") * 0.01011) : u(\"resolution\") == \"max\" ? tier(\"max\", u(\"duration_sec\") * 0.03033) : tier(\"standard\", u(\"duration_sec\") * 0.02022)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "happyhorse-1.0-i2v",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.22242) : tier(\"720p\", u(\"duration_sec\") * 0.13143)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "happyhorse-1.0-r2v",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.22242) : tier(\"720p\", u(\"duration_sec\") * 0.13143)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "happyhorse-1.0-t2v",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.22242) : tier(\"720p\", u(\"duration_sec\") * 0.13143)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "happyhorse-1.0-video-edit",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.22242) : tier(\"720p\", u(\"duration_sec\") * 0.13143)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "happyhorse-1.1-i2v",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.18) : tier(\"720p\", u(\"duration_sec\") * 0.135)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "happyhorse-1.1-r2v",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.18) : tier(\"720p\", u(\"duration_sec\") * 0.135)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "happyhorse-1.1-t2v",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.18) : tier(\"720p\", u(\"duration_sec\") * 0.135)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-pixverse-c1",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.06066) : tier(\"720p\", u(\"duration_sec\") * 0.05055)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-pixverse-v5.6",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.05055) : tier(\"720p\", u(\"duration_sec\") * 0.05055)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-pixverse-v6",
+      "plugin": "dflop-media",
+      "expression": "u(\"resolution\") == \"1080p\" ? tier(\"1080p\", u(\"duration_sec\") * 0.05055) : u(\"resolution\") == \"4k\" ? tier(\"4k\", u(\"duration_sec\") * 0.116265) : tier(\"720p\", u(\"duration_sec\") * 0.05055)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    },
+    {
+      "model": "tvod-subtitle-soft",
+      "plugin": null,
+      "expression": null,
+      "root_cause": "MISSING_SUBTITLE_SOURCE_DURATION",
+      "resolved": false
+    },
+    {
+      "model": "voice-clone-pro",
+      "plugin": "dflop-media",
+      "expression": "tier(\"base\", u(\"count\") * 4.5)",
+      "root_cause": "TESTER_BILLING_PATH_BUG",
+      "resolved": true
+    }
+  ]
+}

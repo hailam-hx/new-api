@@ -2,7 +2,7 @@
 
 ## Design and implementation plan
 
-Integrate a public `/docs` feature in the existing React 19 / TanStack Router / Rsbuild application. Use the existing PublicLayout, Dialog, CopyButton, Tabs, Input, Markdown and pricing display components. Articles are English source strings resolved by the existing i18next architecture. UI translations cover seven locales; editorial translation may fall back to the English source. Keep API and billing execution unchanged.
+Integrate a public `/docs` feature in the existing React 19 / TanStack Router / Rsbuild application. Use the existing PublicLayout, Dialog, CopyButton, Tabs, Input, Markdown and pricing display components. Articles are English source strings resolved by the existing i18next architecture. UI and editorial translations cover all seven supported locales; article paragraphs, provider metadata and search follow the selected interface language. Keep API and billing execution unchanged.
 
 1. Audit source, resolve the nine navigation groups, and retain source references for each article.
 2. Extract registered routes with Go AST, join only matching operations to OpenAPI, and generate error constants. Never publish unimplemented OpenAPI paths as supported.
@@ -104,7 +104,7 @@ SDK ví dụ minimal + streaming cho cURL/Python/TypeScript. Model selection kh�
 
 Dùng namespace và bảy locale hiện có, thêm 370 keys mỗi locale qua script `add-missing-keys.mjs`, rồi chạy `bun run i18n:sync`; script tạm đã xóa. Các entry người dùng sửa từ trước được giữ nguyên. `static-keys.ts` đăng ký dynamic group/article/section keys từ cùng article registry.
 
-Shell UI có bản dịch bảy ngôn ngữ. Nội dung editorial dùng English source/fallback theo lựa chọn cho phép trong yêu cầu; một số title/section label đã có translation được reuse. Chưa tuyên bố bản dịch đầy đủ toàn bộ nội dung tiếng Việt/中文. Không tạo translation system hoặc language routes riêng. Sync report: missingCount = 0, extrasCount = 0 ở tất cả locale.
+Shell UI và toàn bộ nội dung bài viết được đồng bộ cho en, zh, zh-TW, fr, ja, ru, vi. Đã áp dụng 1.316 cập nhật qua add-missing-keys.mjs và i18n:sync. Provider metadata dùng template dịch có tham số; giữ nguyên tên sản phẩm, mã API, URL, code và version. Tìm kiếm dùng nội dung đã dịch; metadata đổi cùng interface language. Không tạo translation system hoặc language routes riêng. Sync report: missingCount = 0, extrasCount = 0 ở tất cả locale. Các brand/literal và khóa provider ghép cũ còn nằm trong dictionary có thể xuất hiện trong báo cáo untranslated; nội dung đang hiển thị được kiểm tra riêng bằng registry tests.
 
 ## 10. SEO changes
 
@@ -149,7 +149,7 @@ Manual visual inspection: 1440px desktop model detail and 390px mobile dark Quic
 3. Backend pricing payload chưa cung cấp đủ category/context/modalities/capabilities và không là key-scoped callable list. Docs ghi unknown và dùng `/v1/models` trong examples; không thêm DB field hoặc metadata heuristic.
 4. Checked-in OpenAPI chưa bao phủ mọi registered operation và có schema cũ. Reference ghi source/gap, không tự suy ra request/response DTO hoặc fabricate response. Error index không tuyên bố là mọi provider-specific error.
 5. Native task-plugin routes phụ thuộc installed/enabled configuration; shipped provider pages không chứng minh availability và không expose private deployment inventory.
-6. Editorial translations VI/中文 chưa đầy đủ; English source/fallback được ghi rõ. Sitemap absolute cần public `DOCS_SITE_URL` khi deploy; dynamic model detail không public-snapshot/SSG private catalog.
+6. Sitemap absolute cần public `DOCS_SITE_URL` khi deploy; dynamic model detail không public-snapshot/SSG private catalog.
 7. Integration setup đã đối chiếu docs chính chủ, nhưng không có tài khoản/ứng dụng thực tế để certify mọi client feature. Không có Docker daemon run được ghi nhận; build dependency issue được sửa bằng frontend-only-compatible scripts và review.
 
 Không tuyên bố toàn bộ acceptance production đã đóng trong khi các mục 1/2 còn chưa xác minh/giải quyết.
@@ -160,7 +160,7 @@ Không tuyên bố toàn bộ acceptance production đã đóng trong khi các m
 - Đặt public `DOCS_SITE_URL`, build lại và kiểm tra HTML/sitemap/robots qua deployment thực; preview build riêng hiện đang ở port 5174 (port 5173 có dev server của workspace).
 - Thêm `docs:check` vào CI có checkout đầy đủ/Go để kiểm soát drift khi đổi backend; giữ frontend Docker stage độc lập.
 - Bổ sung OpenAPI từ DTO/source và metadata catalog bằng một thay đổi backend được review riêng. Nếu thay đổi DB, thực hiện matrix SQLite/MySQL/PostgreSQL theo policy.
-- Hoàn thiện editorial VI/中文 bằng cùng workflow i18n; sửa baseline lint trong task riêng.
+- Sửa baseline lint trong task riêng.
 
 ## File inventory
 
@@ -202,3 +202,9 @@ Không tuyên bố toàn bộ acceptance production đã đóng trong khi các m
 ### Deleted
 
 Không có file bị xóa bởi phần việc Documentation. Các thay đổi channels/model-actions và deletion `channel-test-hide-failed.tsx` đã có trước task, được giữ nguyên và không thuộc inventory này.
+
+## Localization follow-up
+
+Documentation có bản dịch đầy đủ cho cả bảy locale, bao gồm hướng dẫn xử lý lỗi API. Đã kiểm tra 133 trang qua article registry: không thiếu paragraph translation, giữ nguyên code/link/interpolation tokens. Browser QA xác minh prose và page title khi chuyển cả bảy ngôn ngữ trên cùng route. Production build prerender thành công 133 trang; HTML ban đầu vẫn dùng English source trước khi ứng dụng đọc interface language.
+
+Validation follow-up: full frontend suite 177 files / 2.192 tests PASS, bao gồm 38 tests Documentation; typecheck, lint các file sửa (0 errors), format check và browser QA PASS. Production build PASS, prerender 133 trang.
