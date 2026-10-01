@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
   ColumnDef,
   RowSelectionState,
@@ -57,6 +57,7 @@ import {
   sideDrawerFormClassName,
   sideDrawerHeaderClassName,
 } from '@/components/drawer-layout'
+import { ErrorState } from '@/components/error-state'
 import { StatusBadge } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -77,6 +78,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { modelsQueryKeys } from '@/features/models/lib/query-keys'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { useIsMobile } from '@/hooks/use-mobile'
 import { handleServerError } from '@/lib/handle-server-error'
@@ -87,14 +89,20 @@ import {
   formatResponseTime,
   handleTestChannel,
 } from '../../lib'
+import {
+  filterChannelModels,
+  loadChannelModelVisibility,
+  type ChannelModelVisibilityFilter,
+} from '../../lib/channel-model-visibility'
+import type { ChannelTestResult } from '../../lib/channel-test-export'
 import type {
   Channel,
   GetChannelsResponse,
   SearchChannelsResponse,
 } from '../../types'
 import { useChannels } from '../channels-provider'
-import type { ChannelTestResult } from '../../lib/channel-test-export'
 import { ChannelTestExport } from './channel-test-export'
+import { ChannelTestHideFailed } from './channel-test-hide-failed'
 
 type ChannelTestDialogProps = {
   open: boolean
@@ -319,6 +327,14 @@ function ChannelTestDialogContent({
   const [endpointType, setEndpointType] = useState('auto')
   const [isStreamTest, setIsStreamTest] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [visibilityFilter, setVisibilityFilter] =
+    useState<ChannelModelVisibilityFilter>('all')
+  const visibilityQuery = useQuery({
+    queryKey: [...modelsQueryKeys.lists(), 'channel-test-visibility'],
+    queryFn: loadChannelModelVisibility,
+    enabled: open,
+    retry: false,
+  })
   const [testResults, setTestResults] = useState<Record<string, TestResult>>({})
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [testingModels, setTestingModels] = useState<Set<string>>(
@@ -333,6 +349,7 @@ function ChannelTestDialogContent({
   const [isDeleteFailedDialogOpen, setIsDeleteFailedDialogOpen] =
     useState(false)
   const [isDeletingFailed, setIsDeletingFailed] = useState(false)
+  const [isHidingFailed, setIsHidingFailed] = useState(false)
   const [failureDetails, setFailureDetails] =
     useState<FailureDetailsState | null>(null)
   const [pagination, setPagination] = useState({
@@ -386,6 +403,7 @@ function ChannelTestDialogContent({
     setEndpointType('auto')
     setIsStreamTest(false)
     setSearchTerm('')
+    setVisibilityFilter('all')
     setTestResults({})
     setRowSelection({})
     setTestingModels(() => new Set())
@@ -447,11 +465,19 @@ function ChannelTestDialogContent({
     [models, testResults]
   )
 
-  const filteredModels = useMemo(() => {
-    if (!searchTerm) return models
-    const keyword = searchTerm.toLowerCase()
-    return models.filter((model) => model.toLowerCase().includes(keyword))
-  }, [models, searchTerm])
+  const visibilityStates = visibilityQuery.isError
+    ? undefined
+    : visibilityQuery.data
+  const filteredModels = useMemo(
+    () =>
+      filterChannelModels(
+        models,
+        searchTerm,
+        visibilityFilter,
+        visibilityStates
+      ),
+    [models, searchTerm, visibilityFilter, visibilityStates]
+  )
 
   const tableData = useMemo<ModelRow[]>(
     () => filteredModels.map((model) => ({ model })),
@@ -801,9 +827,10 @@ function ChannelTestDialogContent({
   }, [currentRow.id, models, refreshChannelLists, t, testResults])
 
   const handleClose = useCallback(() => {
+    if (isHidingFailed) return
     resetState()
     onOpenChange(false)
-  }, [onOpenChange, resetState])
+  }, [isHidingFailed, onOpenChange, resetState])
 
   const handleDialogOpenChange = useCallback(
     (nextOpen: boolean) => {
@@ -814,8 +841,10 @@ function ChannelTestDialogContent({
     [handleClose]
   )
 
-  const isAnyTesting = testingModels.size > 0 || isBatchTesting
-  const isFilteringModels = searchTerm.trim().length > 0
+  const isAnyTesting =
+    testingModels.size > 0 || isBatchTesting || isHidingFailed
+  const isFilteringModels =
+    searchTerm.trim().length > 0 || visibilityFilter !== 'all'
   const testAllButtonLabel = isFilteringModels
     ? t('Test {{count}} matching models', { count: filteredModels.length })
     : t('Test all {{count}} models', { count: filteredModels.length })
@@ -1061,6 +1090,13 @@ function ChannelTestDialogContent({
                         </Button>
                       )}
                       {failedModels.length > 0 && (
+                        <ChannelTestHideFailed
+                          models={failedModels}
+                          disabled={isAnyTesting || isDeletingFailed}
+                          onBusyChange={setIsHidingFailed}
+                        />
+                      )}
+                      {failedModels.length > 0 && (
                         <Button
                           variant='outline'
                           size='sm'
@@ -1076,7 +1112,42 @@ function ChannelTestDialogContent({
                   )}
                 </div>
               </div>
-              <div className='flex flex-col gap-2 sm:flex-row sm:items-center'>
+              <div className='flex flex-col gap-2 sm:w-64'>
+                <Label htmlFor='channel-model-visibility'>
+                  {t('Model visibility')}
+                </Label>
+                <Combobox
+                  id='channel-model-visibility'
+                  options={[
+                    { value: 'all', label: t('All') },
+                    { value: 'visible', label: t('Displayed') },
+                    { value: 'hidden', label: t('Listing hidden') },
+                  ]}
+                  value={visibilityFilter}
+                  disabled={visibilityQuery.isPending || isAnyTesting}
+                  onValueChange={(value) => {
+                    if (
+                      value !== 'all' &&
+                      value !== 'visible' &&
+                      value !== 'hidden'
+                    ) {
+                      return
+                    }
+                    setVisibilityFilter(value)
+                    setRowSelection({})
+                    setPagination((prev) => ({ ...prev, pageIndex: 0 }))
+                  }}
+                  className='w-full'
+                />
+                {visibilityQuery.isError && (
+                  <ErrorState
+                    title={t('Failed to load models')}
+                    onRetry={() => {
+                      void visibilityQuery.refetch()
+                    }}
+                    className='min-h-0 p-2'
+                  />
+                )}
                 <Input
                   placeholder={t('Filter models...')}
                   value={searchTerm}
