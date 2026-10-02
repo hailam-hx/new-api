@@ -1,9 +1,12 @@
 package service
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"strconv"
@@ -19,16 +22,27 @@ import (
 )
 
 type DFLOPVerificationTarget struct {
-	Model               string `json:"model"`
-	Protocol            string `json:"protocol"`
-	Mode                string `json:"mode"`
-	FixtureID           string `json:"fixture_id"`
-	PricingSnapshotHash string `json:"pricing_snapshot_hash"`
-	BillingExprHash     string `json:"billing_expr_hash"`
-	RequestBodyHash     string `json:"request_body_hash"`
+	FixtureHash           string   `json:"fixture_hash"`
+	FixturePublicURLs     []string `json:"fixture_public_urls"`
+	Endpoint              string   `json:"endpoint"`
+	Operation             string   `json:"operation"`
+	MaximumProviderPoints string   `json:"maximum_provider_points"`
+	ConfigHash            string   `json:"config_hash"`
+	PluginHash            string   `json:"plugin_hash"`
+	Model                 string   `json:"model"`
+	Protocol              string   `json:"protocol"`
+	Mode                  string   `json:"mode"`
+	FixtureID             string   `json:"fixture_id"`
+	PricingSnapshotHash   string   `json:"pricing_snapshot_hash"`
+	BillingExprHash       string   `json:"billing_expr_hash"`
+	RequestBodyHash       string   `json:"request_body_hash"`
 }
 
 type DFLOPVerificationAuthorization struct {
+	IssuedAt               int64                     `json:"issued_at,omitempty"`
+	Signature              string                    `json:"signature,omitempty"`
+	PlanVersion            string                    `json:"plan_version"`
+	Concurrency            int                       `json:"concurrency"`
 	Approved               bool                      `json:"approved"`
 	ChannelID              int                       `json:"channel_id"`
 	FundingUserID          int                       `json:"funding_user_id"`
@@ -42,6 +56,21 @@ type DFLOPVerificationAuthorization struct {
 	ExpiresAt              int64                     `json:"expires_at"`
 	ApprovedBy             string                    `json:"approved_by"`
 	ApprovalReference      string                    `json:"approval_reference"`
+}
+
+// Unapproved proposals have no expiry. A final approved manifest receives a
+// fresh expiry only during explicit operator approval.
+func (a DFLOPVerificationAuthorization) MarshalJSON() ([]byte, error) {
+	type wire DFLOPVerificationAuthorization
+	var expiry *int64
+	if a.Approved && a.ExpiresAt != 0 {
+		value := a.ExpiresAt
+		expiry = &value
+	}
+	return common.Marshal(struct {
+		wire
+		ExpiresAt *int64 `json:"expires_at"`
+	}{wire(a), expiry})
 }
 
 // ValidateDFLOPVerificationAuthorization does not infer consent from a test,
@@ -61,6 +90,14 @@ func ValidateDFLOPVerificationAuthorization(a DFLOPVerificationAuthorization, ru
 		return target.Model == item.Model && target.Protocol == item.Protocol && target.Mode == item.Mode && target.FixtureID == item.FixtureID && target.PricingSnapshotHash == item.PricingSnapshotHash && target.BillingExprHash == item.BillingExprHash && target.RequestBodyHash == item.RequestBodyHash
 	}) {
 		return errors.New("PAID_TARGET_NOT_AUTHORIZED")
+	}
+	if a.PlanVersion == DFLOPVerificationPlanVersion {
+		var frozen model.RuntimeVerificationProviderSnapshot
+		if a.Concurrency != 1 || common.UnmarshalJsonStr(item.FrozenProviderJSON, &frozen) != nil || !slices.ContainsFunc(a.Targets, func(target DFLOPVerificationTarget) bool {
+			return target.Model == item.Model && target.RequestBodyHash == item.RequestBodyHash && target.Endpoint == item.Endpoint && target.Operation == item.Operation && target.FixtureHash == frozen.FixtureHash && target.ConfigHash == frozen.ConfigHash && target.PluginHash == frozen.PluginHash && target.MaximumProviderPoints == maximum
+		}) {
+			return errors.New("PAID_TARGET_BINDING_MISMATCH")
+		}
 	}
 	maximumCost, err := decimal.NewFromString(maximum)
 	perRequest, perErr := decimal.NewFromString(a.MaxCostPerRequest[item.Model])
@@ -103,7 +140,7 @@ func verificationQuantity(facts map[string]any, key string, ceiling int64, integ
 
 func verificationRate(item dflop.Item, key string) (decimal.Decimal, error) {
 	price, present := item.Prices[key]
-	if !present || price.SourcePriceKind != "AUTHENTICATED_EFFECTIVE_PRICE" {
+	if !present {
 		return decimal.Zero, fmt.Errorf("PROVIDER_DOCUMENTATION_CONFLICT: authenticated rate %s unavailable", key)
 	}
 	value := price.EffectiveCredits
@@ -113,6 +150,22 @@ func verificationRate(item dflop.Item, key string) (decimal.Decimal, error) {
 	rate, err := decimal.NewFromString(value)
 	if err != nil || rate.IsNegative() {
 		return decimal.Zero, errors.New("PROVIDER_PRICE_INVALID")
+	}
+	if price.SourcePriceKind == "AUTHENTICATED_EFFECTIVE_PRICE" {
+		return rate, nil
+	}
+	// Only the missing Lite upscale component may use the official contract.
+	// Token rates and authenticated second-stage amounts are never replaced.
+	allowedModels := []string{"doubao-seedance-2.0-lite", "doubao-seedance-2.0-fast-lite", "doubao-seedance-2.0-mini-lite", "doubao-seedance-2.5-lite"}
+	if price.SourcePriceKind != dflop.DocumentedContractOverride || item.OverrideStale || item.PriceSemantics.SourcePriceKind != "AUTHENTICATED_EFFECTIVE_PRICE" || !slices.Contains(allowedModels, item.ModelID) || item.EndpointType != "videos_generations" || !slices.Contains(item.BillingFeatures, "video_two_stage") || price.Unit != dflop.UnitSecond || price.PromotionState != "VERIFIED" || len(price.ContractOverrides) != 1 {
+		return decimal.Zero, errors.New("PROVIDER_DOCUMENTATION_CONFLICT")
+	}
+	if key != "video_second_stage:720p" && key != "video_second_stage:1080p" || key == "video_second_stage:720p" && !rate.Equal(decimal.RequireFromString("2.5")) || key == "video_second_stage:1080p" && !rate.Equal(decimal.NewFromInt(5)) {
+		return decimal.Zero, errors.New("PROVIDER_DOCUMENTATION_CONFLICT")
+	}
+	override := price.ContractOverrides[0]
+	if override.Provider != "dflop" || override.Model != item.ModelID || override.Feature != "second_stage_upscale_rate" || override.Source != "official_dflop_contract" || override.SourceURL != "https://model.dflop.top/en/docs/reference/media-apis" || override.Value != "720p=2.5 points/s;1080p=5 points/s;delivered output only" || override.CatalogConflict != "missing authenticated second-stage rates" || override.ObservedAt == "" || override.Version == "" || override.AutoApplyAllowed || !slices.Contains(item.ContractOverrides, override) {
+		return decimal.Zero, errors.New("PROVIDER_DOCUMENTATION_CONFLICT")
 	}
 	return rate, nil
 }
@@ -542,4 +595,46 @@ func verificationIntentKey(runID, itemID int64, bodyHash string) string {
 
 func verificationSecretSafeID(value string) bool {
 	return len(value) <= 200 && !strings.ContainsAny(value, "\r\n\t /\\?%#") && !strings.Contains(value, ":")
+}
+
+// FinalizeDFLOPVerificationAuthorization is an explicit offline operator step.
+// It never submits a request, and never alters a proposed manifest in place.
+func FinalizeDFLOPVerificationAuthorization(plan DFLOPVerificationPlan, operator, reference string, key ed25519.PrivateKey, now time.Time) (DFLOPVerificationAuthorization, error) {
+	a := plan.Authorization
+	a.Models = slices.Clone(a.Models)
+	a.Targets = slices.Clone(a.Targets)
+	for i := range a.Targets {
+		a.Targets[i].FixturePublicURLs = slices.Clone(a.Targets[i].FixturePublicURLs)
+	}
+	a.MaxCostPerRequest = maps.Clone(a.MaxCostPerRequest)
+	if plan.Version != DFLOPVerificationPlanVersion || a.Approved || a.ExpiresAt != 0 || a.PlanVersion != plan.Version || a.Concurrency != 1 || len(a.Targets) == 0 || len(key) != ed25519.PrivateKeySize || operator == "" || reference == "" {
+		return a, errors.New("EXPLICIT_V2_APPROVAL_REQUIRED")
+	}
+	a.Approved = true
+	a.ApprovedBy = operator
+	a.ApprovalReference = reference
+	a.IssuedAt = now.Unix()
+	a.ExpiresAt = now.Add(30 * time.Minute).Unix()
+	body, err := common.Marshal(a)
+	if err != nil {
+		return a, err
+	}
+	a.Signature = hex.EncodeToString(ed25519.Sign(key, body))
+	return a, nil
+}
+
+func VerifyDFLOPVerificationManifest(a DFLOPVerificationAuthorization, trusted ed25519.PublicKey, now time.Time) error {
+	if a.PlanVersion != DFLOPVerificationPlanVersion || a.Concurrency != 1 || !a.Approved || a.IssuedAt <= 0 || a.IssuedAt > now.Unix() || a.ExpiresAt <= now.Unix() || a.ExpiresAt-a.IssuedAt != 1800 || a.ApprovedBy == "" || a.ApprovalReference == "" || len(trusted) != ed25519.PublicKeySize {
+		return errors.New("FRESH_SIGNED_V2_APPROVAL_REQUIRED")
+	}
+	signature, err := hex.DecodeString(a.Signature)
+	if err != nil {
+		return errors.New("APPROVAL_SIGNATURE_INVALID")
+	}
+	a.Signature = ""
+	body, err := common.Marshal(a)
+	if err != nil || !ed25519.Verify(trusted, body, signature) {
+		return errors.New("APPROVAL_SIGNATURE_INVALID")
+	}
+	return nil
 }

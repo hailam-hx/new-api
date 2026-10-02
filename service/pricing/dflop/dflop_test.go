@@ -752,6 +752,7 @@ func TestDocumentedBasisAndThresholdInvalidateWhenCatalogChanges(t *testing.T) {
 			require.Len(t, items[0].ContractOverrides, 1)
 			if tc.id == "minimax-h3" {
 				require.NotEmpty(t, items[0].TaskExpression)
+				assert.NotContains(t, items[0].BillingFeatures, "video_input_seconds")
 				cost, _, err := billingexpr.RunExprWithRequest(items[0].TaskExpression, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: map[string]any{"duration_sec": 4.5, "resolution": "768p", "input_video_duration_sec": 999}})
 				require.NoError(t, err)
 				assert.InDelta(t, 2.25, cost, 1e-12)

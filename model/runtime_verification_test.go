@@ -60,7 +60,7 @@ func runtimeVerificationRunFixture(t *testing.T, budget string, requests int) (*
 		{Model: "image-c", Protocol: "openai_image", Operation: "generate", Mode: "default", FixtureID: "image-v1", Endpoint: "/v1/images/generations", PricingSnapshotHash: strings.Repeat("d", 64), BillingExprHash: billingexpr.ExprHashString(expression), BillingSnapshotJSON: string(snapshot)},
 	}
 	for i := range items {
-		provider, err := common.Marshal(RuntimeVerificationProviderSnapshot{Model: items[i].Model, EndpointType: "image", Features: []string{"image_count"}, Rates: map[string]string{"image_count": "0.1", "default@720p": "0.2"}, PointsPerCNY: "100", CNYToUSD: "0.15", Markup: "1", ConfigHash: strings.Repeat("a", 64), PluginHash: strings.Repeat("b", 64), FixtureHash: strings.Repeat("c", 64)})
+		provider, err := common.Marshal(RuntimeVerificationProviderSnapshot{Model: items[i].Model, EndpointType: "image", Features: []string{"image_count"}, Rates: map[string]string{"image_count": "0.1", "default@720p": "0.2"}, RateProvenance: map[string]string{"image_count": "AUTHENTICATED_EFFECTIVE_PRICE", "default@720p": "DFLOP_DOCUMENTED_CONTRACT_OVERRIDE"}, ContractOverrides: []RuntimeVerificationContractOverride{{Provider: "dflop", Model: items[i].Model, Feature: "second_stage_upscale_rate", Source: "official_dflop_contract", SourceReferenceHash: strings.Repeat("f", 64), Value: "720p=2.5 points/s;1080p=5 points/s;delivered output only"}}, PointsPerCNY: "100", CNYToUSD: "0.15", Markup: "1", ConfigHash: strings.Repeat("a", 64), PluginHash: strings.Repeat("b", 64), FixtureHash: strings.Repeat("c", 64)})
 		require.NoError(t, err)
 		items[i].FrozenProviderJSON = string(provider)
 		items[i].ConfigStatus, items[i].ConnectivityStatus = "PASS", "PASS"
@@ -401,6 +401,11 @@ func runtimeVerificationCanonicalUsageFixture(t *testing.T, run *RuntimeVerifica
 	require.NoError(t, err)
 	for _, saved := range stored {
 		if saved.ID == item.ID {
+			var frozen RuntimeVerificationProviderSnapshot
+			require.NoError(t, common.UnmarshalJsonStr(saved.FrozenProviderJSON, &frozen))
+			assert.Equal(t, "DFLOP_DOCUMENTED_CONTRACT_OVERRIDE", frozen.RateProvenance["default@720p"])
+			require.Len(t, frozen.ContractOverrides, 1)
+			assert.Equal(t, strings.Repeat("f", 64), frozen.ContractOverrides[0].SourceReferenceHash)
 			assert.JSONEq(t, canonical, saved.NormalizedUsageJSON)
 			assert.JSONEq(t, `{"usage":`+canonical+`}`, saved.ProviderUsageJSON)
 			return

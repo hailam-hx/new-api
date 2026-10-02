@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -13,7 +12,14 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+const DFLOPVerificationPlanVersion = "canary-plan-v2"
+
 type DFLOPVerificationPlannedTarget struct {
+	FixtureHash           string              `json:"fixture_hash"`
+	FixturePublicURLs     []string            `json:"fixture_public_urls"`
+	RequestBody           common.RawMessage   `json:"request_body,omitempty"`
+	ConfigHash            string              `json:"config_hash"`
+	PluginHash            string              `json:"plugin_hash"`
 	Model                 string              `json:"model"`
 	Wave                  int                 `json:"wave"`
 	Fixture               VerificationFixture `json:"fixture"`
@@ -25,6 +31,14 @@ type DFLOPVerificationPlannedTarget struct {
 }
 
 type DFLOPVerificationPlan struct {
+	Version                       string                           `json:"plan_version"`
+	Supersedes                    string                           `json:"supersedes"`
+	Currency                      string                           `json:"currency"`
+	WaveMaximumProviderPoints     map[int]string                   `json:"wave_maximum_provider_points"`
+	InformationalUSD              string                           `json:"informational_usd"`
+	PointsPerCNY                  string                           `json:"points_per_cny"`
+	ConfiguredCNYToUSD            string                           `json:"configured_cny_to_usd"`
+	UnknownMaxima                 int                              `json:"unknown_maxima"`
 	RunID                         int64                            `json:"run_id"`
 	CatalogHash                   string                           `json:"catalog_hash"`
 	SourceChannel                 int                              `json:"source_channel_id"`
@@ -59,12 +73,20 @@ func (engine DFLOPVerificationEngine) Plan(ctx context.Context, runID int64) (DF
 	if err != nil {
 		return plan, err
 	}
-	plan = DFLOPVerificationPlan{RunID: run.ID, CatalogHash: run.CatalogHash, SourceChannel: run.ChannelID, CredentialFingerprint: run.CredentialFingerprint, Concurrency: 1, ExpiryRecommendation: "30 minutes after explicit approval", Authorization: DFLOPVerificationAuthorization{Approved: false, ChannelID: run.ChannelID, FundingUserID: run.FundingUserID, CatalogHash: run.CatalogHash, CredentialFingerprint: run.CredentialFingerprint, MaxCostPerRequest: map[string]string{}, ExpiresAt: time.Now().Add(30 * time.Minute).Unix()}}
-	fixtures := DFLOPVerificationFixtures(source.items)
+	plan = DFLOPVerificationPlan{Version: DFLOPVerificationPlanVersion, Supersedes: "canary-plan-v1", Currency: "points", WaveMaximumProviderPoints: map[int]string{}, PointsPerCNY: source.pointsPerCNY, ConfiguredCNYToUSD: source.config.CNYToUSD, RunID: run.ID, CatalogHash: run.CatalogHash, SourceChannel: run.ChannelID, CredentialFingerprint: run.CredentialFingerprint, Concurrency: 1, ExpiryRecommendation: "30 minutes after explicit approval", Authorization: DFLOPVerificationAuthorization{Approved: false, ChannelID: run.ChannelID, FundingUserID: run.FundingUserID, CatalogHash: run.CatalogHash, CredentialFingerprint: run.CredentialFingerprint, MaxCostPerRequest: map[string]string{}, PlanVersion: DFLOPVerificationPlanVersion, Concurrency: 1}}
+	options := engine.FixtureOptions
+	options.SourceCatalogHash = source.hash
+	fixtures := DFLOPVerificationFixturesWithOptions(source.items, options)
 	total := decimal.Zero
 	for _, fixture := range fixtures {
 		fixture.SourceCatalogHash = run.CatalogHash
-		target := DFLOPVerificationPlannedTarget{Model: fixture.Model, Wave: 2, Fixture: fixture}
+		fixtureJSON, _ := common.Marshal(fixture)
+		target := DFLOPVerificationPlannedTarget{Model: fixture.Model, Wave: 2, Fixture: fixture, FixtureHash: verificationHash(fixtureJSON), FixturePublicURLs: []string{}}
+		for _, media := range fixture.Media {
+			if media.PublicURL != "" {
+				target.FixturePublicURLs = append(target.FixturePublicURLs, media.PublicURL)
+			}
+		}
 		index := slices.IndexFunc(items, func(item model.RuntimeVerificationItem) bool {
 			return item.Model == fixture.Model && item.Protocol == fixture.Protocol && item.Mode == fixture.Mode
 		})
@@ -84,6 +106,7 @@ func (engine DFLOPVerificationEngine) Plan(ctx context.Context, runID int64) (DF
 				target.Blocker = verificationReason(requestErr)
 			} else {
 				target.RequestBodyHash = request.BodyHash
+				target.RequestBody = request.Body
 				provider := slices.IndexFunc(source.items, func(item dflop.Item) bool { return item.ModelID == fixture.Model })
 				facts, factsErr := verificationMaximumFacts(fixture, request)
 				if provider < 0 {
@@ -97,12 +120,20 @@ func (engine DFLOPVerificationEngine) Plan(ctx context.Context, runID int64) (DF
 					} else if item.BillingSnapshotJSON == "" || item.FrozenProviderJSON == "" {
 						target.Blocker = "OFFLINE_ACCEPTANCE_FAILED"
 					} else {
+						var frozen model.RuntimeVerificationProviderSnapshot
+						_ = common.UnmarshalJsonStr(item.FrozenProviderJSON, &frozen)
+						target.ConfigHash, target.PluginHash = frozen.ConfigHash, frozen.PluginHash
+						if frozen.FixtureHash != target.FixtureHash {
+							target.Blocker = "FROZEN_FIXTURE_DRIFT"
+							plan.Targets = append(plan.Targets, target)
+							continue
+						}
 						maximum := points.String()
 						target.MaximumProviderPoints = &maximum
 						total = total.Add(points)
 						plan.Authorization.Models = append(plan.Authorization.Models, item.Model)
 						plan.Authorization.MaxCostPerRequest[item.Model] = maximum
-						plan.Authorization.Targets = append(plan.Authorization.Targets, DFLOPVerificationTarget{Model: item.Model, Protocol: item.Protocol, Mode: item.Mode, FixtureID: item.FixtureID, PricingSnapshotHash: item.PricingSnapshotHash, BillingExprHash: item.BillingExprHash, RequestBodyHash: request.BodyHash})
+						plan.Authorization.Targets = append(plan.Authorization.Targets, DFLOPVerificationTarget{Model: item.Model, Protocol: item.Protocol, Mode: item.Mode, FixtureID: item.FixtureID, PricingSnapshotHash: item.PricingSnapshotHash, BillingExprHash: item.BillingExprHash, RequestBodyHash: request.BodyHash, FixtureHash: target.FixtureHash, FixturePublicURLs: target.FixturePublicURLs, Endpoint: fixture.Endpoint, Operation: fixture.Operation, MaximumProviderPoints: maximum, ConfigHash: target.ConfigHash, PluginHash: target.PluginHash})
 					}
 				}
 			}
@@ -129,6 +160,18 @@ func (engine DFLOPVerificationEngine) Plan(ctx context.Context, runID int64) (DF
 	for _, i := range cheapest {
 		plan.Targets[i].Wave = 1
 	}
+	for _, target := range plan.Targets {
+		if target.MaximumProviderPoints == nil {
+			plan.UnknownMaxima++
+			continue
+		}
+		value, _ := decimal.NewFromString(*target.MaximumProviderPoints)
+		old, _ := decimal.NewFromString(plan.WaveMaximumProviderPoints[target.Wave])
+		plan.WaveMaximumProviderPoints[target.Wave] = old.Add(value).String()
+	}
+	conversion, _ := decimal.NewFromString(source.config.CNYToUSD)
+	pointsPerCNY, _ := decimal.NewFromString(source.pointsPerCNY)
+	plan.InformationalUSD = total.Mul(conversion).DivRound(pointsPerCNY, 12).String()
 	plan.FixturePlans = len(fixtures)
 	plan.PlannedPOSTs = len(plan.Authorization.Targets)
 	plan.Authorization.MaxRequests = plan.PlannedPOSTs

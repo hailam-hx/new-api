@@ -7,7 +7,9 @@
     "bytes": 8855,
     "synthetic": true,
     "width": 768,
-    "height": 768
+    "height": 768,
+    "provenance": "repository-generated non-human verification asset",
+    "rights_classification": "synthetic-test-only"
   },
   {
     "id": "moving-square-v1",
@@ -18,7 +20,9 @@
     "synthetic": true,
     "width": 768,
     "height": 768,
-    "seconds": 3
+    "seconds": 3,
+    "provenance": "repository-generated non-human verification asset",
+    "rights_classification": "synthetic-test-only"
   },
   {
     "id": "synthetic-speech-v1",
@@ -27,6 +31,21 @@
     "sha256": "2ef8f7466281249456d06fbd1e0a42e8682afd36946595d3d29887b0731da8fd",
     "bytes": 245586,
     "synthetic": true,
-    "seconds": 7.5465625
+    "seconds": 7.5465625,
+    "provenance": "repository synthetic speech verification recording",
+    "rights_classification": "synthetic-test-only"
+  },
+  {
+    "id": "speaking-square-v1",
+    "path": "testdata/dflop-verification/speaking-square-v1.mp4",
+    "mime_type": "video/mp4",
+    "sha256": "70de1db4c11bd7ba8fe6d6e17633a97867c2a5db79f7260c872af979d520936f",
+    "bytes": 101162,
+    "width": 768,
+    "height": 768,
+    "seconds": 7.584,
+    "synthetic": true,
+    "provenance": "Repository moving-square-v1 plus synthetic-speech-v1, generated with bounded ffmpeg mux",
+    "rights_classification": "synthetic-test-only"
   }
 ]

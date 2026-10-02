@@ -100,6 +100,13 @@ func verificationUpdate(item *model.RuntimeVerificationItem, result, reason stri
 // Execute claims one durable intent before the sole billed POST. A previously
 // claimed intent can only be resumed through free GETs, never resubmitted here.
 func (engine DFLOPVerificationEngine) Execute(ctx context.Context, runID, itemID int64, authorization DFLOPVerificationAuthorization, fixture VerificationFixture) error {
+	if fixture.verifyPublicMedia == nil {
+		fixture.verifyPublicMedia = engine.FixtureOptions.VerifyPublicMedia
+	}
+	if fixture.verifyClipSource == nil {
+		fixture.verifyClipSource = engine.FixtureOptions.VerifyClipSource
+	}
+
 	if common.BatchUpdateEnabled {
 		return errors.New("BILLING_JOURNAL_BATCH_UNSUPPORTED")
 	}
@@ -151,6 +158,19 @@ func (engine DFLOPVerificationEngine) Execute(ctx context.Context, runID, itemID
 	snapshotJSON, _ := common.Marshal(snapshot)
 	if item.PricingSnapshotHash != verificationHash(frozenJSON) || item.BillingSnapshotJSON != string(snapshotJSON) {
 		return errors.New("PRICING_SNAPSHOT_DRIFT")
+	}
+	if authorization.PlanVersion == DFLOPVerificationPlanVersion {
+		urls := []string{}
+		for _, media := range fixture.Media {
+			if media.PublicURL != "" {
+				urls = append(urls, media.PublicURL)
+			}
+		}
+		if !slices.ContainsFunc(authorization.Targets, func(target DFLOPVerificationTarget) bool {
+			return target.Model == item.Model && slices.Equal(target.FixturePublicURLs, urls)
+		}) {
+			return errors.New("PAID_FIXTURE_URL_BINDING_MISMATCH")
+		}
 	}
 	item.RequestBodyHash = request.BodyHash
 	if err = ValidateDFLOPVerificationAuthorization(authorization, *run, item, maximum, time.Now()); err != nil {
@@ -258,6 +278,13 @@ func (engine DFLOPVerificationEngine) Execute(ctx context.Context, runID, itemID
 // Resume never performs a POST. A changed catalog after submission cannot
 // change the frozen tariff or BillingExpr used for a running task.
 func (engine DFLOPVerificationEngine) Resume(ctx context.Context, runID, itemID int64, fixture VerificationFixture) error {
+	if fixture.verifyPublicMedia == nil {
+		fixture.verifyPublicMedia = engine.FixtureOptions.VerifyPublicMedia
+	}
+	if fixture.verifyClipSource == nil {
+		fixture.verifyClipSource = engine.FixtureOptions.VerifyClipSource
+	}
+
 	run, err := model.GetRuntimeVerificationRun(runID)
 	if err != nil {
 		return err
@@ -558,11 +585,11 @@ func (engine DFLOPVerificationEngine) reconcileTerminal(ctx context.Context, run
 		if common.UnmarshalJsonStr(item.FrozenProviderJSON, &frozen) != nil || common.UnmarshalJsonStr(item.BillingSnapshotJSON, &snapshot) != nil {
 			return errors.New("FROZEN_PRICING_REQUIRED")
 		}
-		provider := dflop.Item{ModelID: frozen.Model, EndpointType: frozen.EndpointType, BillingFeatures: frozen.Features, PriceSemantics: dflop.PriceSemantics{SourcePriceKind: "AUTHENTICATED_EFFECTIVE_PRICE"}, Prices: map[string]dflop.Price{}}
-		for rate, value := range frozen.Rates {
-			provider.Prices[rate] = dflop.Price{EffectiveCredits: value, SourcePriceKind: "AUTHENTICATED_EFFECTIVE_PRICE"}
+		provider, restoreErr := verificationProviderFromSnapshot(frozen)
+		if restoreErr != nil {
+			return restoreErr
 		}
-		provider.Raw, _ = common.Marshal(map[string]any{"free_input_images": frozen.FreeInputImages})
+
 		points, pointsErr := DFLOPVerificationPoints(provider, facts)
 		computed, _, billingErr := EvaluateDFLOPTaskCompletionUsage(&snapshot, facts, []byte(item.PluginStateJSON))
 		if pointsErr != nil || billingErr != nil || computed.Clamp != nil {
@@ -679,4 +706,39 @@ func (engine DFLOPVerificationEngine) settle(ctx context.Context, run *model.Run
 		return model.FinalizeRuntimeVerificationItem(run.ID, item.ID)
 	}
 	return nil
+}
+
+func verificationProviderFromSnapshot(frozen model.RuntimeVerificationProviderSnapshot) (dflop.Item, error) {
+	provider := dflop.Item{ModelID: frozen.Model, EndpointType: frozen.EndpointType, BillingFeatures: frozen.Features, PriceSemantics: dflop.PriceSemantics{SourcePriceKind: "AUTHENTICATED_EFFECTIVE_PRICE"}, Prices: map[string]dflop.Price{}}
+	for _, override := range frozen.ContractOverrides {
+		reference := "https://model.dflop.top/en/docs/reference/media-apis"
+		if override.Model == "minimax-h3" {
+			reference = "https://model.dflop.top/models/minimax-h3"
+		}
+		if override.SourceReferenceHash != verificationHash([]byte(reference)) {
+			return provider, errors.New("FROZEN_PROVENANCE_INVALID")
+		}
+		provider.ContractOverrides = append(provider.ContractOverrides, dflop.ContractOverride{Provider: override.Provider, Model: override.Model, Feature: override.Feature, Source: override.Source, SourceURL: reference, ObservedAt: override.ObservedAt, Version: override.Version, CatalogConflict: override.CatalogConflict, Value: override.Value, AutoApplyAllowed: override.AutoApplyAllowed})
+	}
+	for rate, value := range frozen.Rates {
+		kind := frozen.RateProvenance[rate]
+		if kind == "" {
+			kind = "AUTHENTICATED_EFFECTIVE_PRICE"
+		}
+		price := dflop.Price{EffectiveCredits: value, SourcePriceKind: kind, ContractOverrides: provider.ContractOverrides}
+		if kind == dflop.DocumentedContractOverride {
+			// The only supported frozen override is the verified per-second Lite leg.
+			// Restore its contract attributes, then revalidate exact provenance/rates.
+			price.Unit = dflop.UnitSecond
+			price.PromotionState = "VERIFIED"
+		}
+		provider.Prices[rate] = price
+	}
+	provider.Raw, _ = common.Marshal(map[string]any{"free_input_images": frozen.FreeInputImages})
+	for key := range provider.Prices {
+		if _, err := verificationRate(provider, key); err != nil {
+			return provider, err
+		}
+	}
+	return provider, nil
 }

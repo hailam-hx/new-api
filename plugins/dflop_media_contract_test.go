@@ -15,7 +15,7 @@ func TestDFLOPPartialMediaFrozenSettlement(t *testing.T) {
 	require.NoError(t, err)
 	for _, model := range []string{"clip-compose", "dh-avatar", "dh-lipsync", "dh-lipsync-pro", "dh-lipsync-max", "dh-motion", "dh-avatar-create"} {
 		t.Run(model, func(t *testing.T) {
-			request := map[string]any{"model": model, "duration": 10, "resolution": "standard", "source_video_url": "https://example.com/source.mp4", "audio_url": "https://example.com/audio.mp3", "avatar_id": "avatar-1", "name": "avatar", "source_url": "https://example.com/portrait.png", "face_count": 1, "content": []any{map[string]any{"type": "image_url", "image_url": map[string]any{"url": "https://example.com/face.png"}}}}
+			request := map[string]any{"model": model, "duration": 10, "resolution": "standard", "source_video_url": "https://example.com/source.mp4", "audio_url": "https://example.com/audio.mp3", "avatar": "avatar-1", "video_url": "https://example.com/source.mp4", "asr_id": "fresh-same-source-asr", "name": "avatar", "source_url": "https://example.com/portrait.png", "face_count": 1, "content": []any{map[string]any{"type": "image_url", "image_url": map[string]any{"url": "https://example.com/face.png"}}}}
 			ctx := map[string]any{"model": model, "upstreamModel": model, "requestBody": request, "baseUrl": "https://api.dflop.top", "apiKey": "fixture", "requestHeaders": map[string]any{"Idempotency-Key": "fixture-intent"}}
 			endpoint := "/v1/videos/generations"
 			if model == "dh-avatar-create" {
@@ -28,6 +28,9 @@ func TestDFLOPPartialMediaFrozenSettlement(t *testing.T) {
 			reservation, err := plugin.Engine.Call(t.Context(), "extractUsage", ctx)
 			require.NoError(t, err)
 			fixed := model == "clip-compose" || model == "dh-avatar-create"
+			if model == "clip-compose" {
+				assert.NotContains(t, submit.(map[string]any)["body"].(map[string]any), "duration")
+			}
 			if fixed {
 				assert.Equal(t, map[string]any{"count": int64(1)}, reservation)
 			} else {

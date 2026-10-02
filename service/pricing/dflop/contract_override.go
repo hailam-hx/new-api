@@ -51,6 +51,7 @@ func applyDocumentedContract(item *Item, source *Model, points, rate, markup dec
 			source.BillingFeatures = slices.DeleteFunc(slices.Clone(source.BillingFeatures), func(s string) bool { return s == "video_input_seconds" })
 			value := false
 			source.VideoBillsInputSeconds = &value
+			item.BillingFeatures = slices.Clone(source.BillingFeatures)
 		}
 	default:
 		return

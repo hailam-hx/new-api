@@ -126,18 +126,33 @@ type RuntimeVerificationEvidence struct {
 
 // RuntimeVerificationProviderSnapshot freezes provider point tariffs and the
 // display conversion alongside the production BillingSnapshot.
+type RuntimeVerificationContractOverride struct {
+	Provider            string `json:"provider"`
+	Model               string `json:"model"`
+	Feature             string `json:"feature"`
+	Source              string `json:"source"`
+	SourceReferenceHash string `json:"source_reference_hash"`
+	ObservedAt          string `json:"observed_at"`
+	Version             string `json:"version"`
+	CatalogConflict     string `json:"catalog_conflict"`
+	Value               string `json:"value"`
+	AutoApplyAllowed    bool   `json:"auto_apply_allowed"`
+}
+
 type RuntimeVerificationProviderSnapshot struct {
-	Model           string            `json:"model"`
-	EndpointType    string            `json:"endpoint_type"`
-	Features        []string          `json:"features"`
-	Rates           map[string]string `json:"rates"`
-	FreeInputImages *int              `json:"free_input_images,omitempty"`
-	PointsPerCNY    string            `json:"points_per_cny"`
-	CNYToUSD        string            `json:"cny_to_usd"`
-	Markup          string            `json:"markup"`
-	ConfigHash      string            `json:"config_hash"`
-	PluginHash      string            `json:"plugin_hash"`
-	FixtureHash     string            `json:"fixture_hash"`
+	Model             string                                `json:"model"`
+	EndpointType      string                                `json:"endpoint_type"`
+	Features          []string                              `json:"features"`
+	Rates             map[string]string                     `json:"rates"`
+	RateProvenance    map[string]string                     `json:"rate_provenance,omitempty"`
+	ContractOverrides []RuntimeVerificationContractOverride `json:"contract_overrides,omitempty"`
+	FreeInputImages   *int                                  `json:"free_input_images,omitempty"`
+	PointsPerCNY      string                                `json:"points_per_cny"`
+	CNYToUSD          string                                `json:"cny_to_usd"`
+	Markup            string                                `json:"markup"`
+	ConfigHash        string                                `json:"config_hash"`
+	PluginHash        string                                `json:"plugin_hash"`
+	FixtureHash       string                                `json:"fixture_hash"`
 }
 
 func CreateRuntimeVerificationRun(run *RuntimeVerificationRun, items []RuntimeVerificationItem) error {

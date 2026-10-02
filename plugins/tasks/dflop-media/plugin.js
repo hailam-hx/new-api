@@ -257,9 +257,11 @@ function requestIntent(ctx, endpoint) {
     if (model === "dh-avatar") {
       const audio = typeof requestBody.audio_url === "string" && /^https?:\/\//.test(requestBody.audio_url);
       const speech = typeof requestBody.voice === "string" && requestBody.voice && typeof requestBody.text === "string" && requestBody.text;
-      if (typeof requestBody.avatar_id !== "string" || !requestBody.avatar_id || (!audio && !speech)) throw new Error("Avatar and driving audio or voice/text required");
+      if (typeof requestBody.avatar !== "string" || !requestBody.avatar || (!audio && !speech)) throw new Error("Avatar and driving audio or voice/text required");
     }
-    if (["clip-compose", "dh-lipsync", "dh-lipsync-pro", "dh-lipsync-max", "dh-motion"].includes(model) && (typeof requestBody.source_video_url !== "string" || !/^https?:\/\//.test(requestBody.source_video_url))) throw new Error("Public source video URL required");
+    if (["dh-lipsync", "dh-lipsync-pro", "dh-lipsync-max", "dh-motion"].includes(model) && (typeof requestBody.source_video_url !== "string" || !/^https?:\/\//.test(requestBody.source_video_url))) throw new Error("Public source video URL required");
+    if (model === "clip-compose" && (typeof requestBody.video_url !== "string" || !/^https?:\/\//.test(requestBody.video_url) || typeof requestBody.asr_id !== "string" || !requestBody.asr_id)) throw new Error("Public compose video and same-source ASR required");
+    if (model === "clip-compose") { delete requestBody.duration; delete requestBody.seconds; }
     if (model.startsWith("dh-lipsync") && (typeof requestBody.audio_url !== "string" || !/^https?:\/\//.test(requestBody.audio_url))) throw new Error("Public driving audio URL required");
     if (model === "dh-motion") {
       if (requestBody.resolution === undefined) requestBody.resolution = "standard";
@@ -326,10 +328,28 @@ export function extractUsage(ctx) {
   if (["token", "token_lite"].includes(contract.shape)) {
     const hasVideo = (req.content || []).some(item => item && item.type === "video_url");
     facts.input_mode = hasVideo ? "with_video_input" : "default";
-    // A conservative reservation only. Largest square bounds every documented
-    // 1080p aspect ratio; the terminal token quantity never uses this estimate.
-    const inputCap = (ctx.upstreamModel || ctx.model).includes("2.5") ? 30 : 15;
-    facts.completion_tokens = Math.ceil((seconds + (hasVideo ? inputCap : 0)) * 1920 * 1920 * 24 / 1024);
+    const model = ctx.upstreamModel || ctx.model;
+    const inputCap = model.includes("2.5") ? 30 : 15;
+    if (!Number.isInteger(seconds) || seconds < 4 || seconds > inputCap) throw new Error("Requested Seedance duration must be an integer within the documented model bounds");
+    // Official Ark ratio tables, linked from the DFLOP endpoint contract:
+    // https://docs.volcengine.com/docs/ark/create-video-generation-task-api?lang=zh
+    // Lite generates one tier down; the price selector stays at delivery resolution.
+    const generationResolution = contract.shape === "token_lite" ? (req.resolution === "720p" ? "480p" : "720p") : req.resolution;
+    const framesByResolution = {
+      "480p": model.includes("2.5")
+        ? [[854, 480], [752, 560], [640, 640], [560, 752], [480, 854], [992, 432]]
+        : [[864, 496], [752, 560], [640, 640], [560, 752], [496, 864], [992, 432]],
+      "720p": [[1280, 720], [1112, 834], [960, 960], [834, 1112], [720, 1280], [1470, 630]],
+      "1080p": [[1920, 1080], [1664, 1248], [1440, 1440], [1248, 1664], [1080, 1920], [2206, 946]],
+    };
+    const frames = framesByResolution[generationResolution];
+    if (!frames) throw new Error("PROVIDER_TOKEN_CEILING_REQUIRED");
+    let pixels = 0;
+    for (const frame of frames) pixels = Math.max(pixels, frame[0] * frame[1]);
+    // All validated durations and integer pixel products remain below 2^53;
+    // division by 1024 is exact in IEEE-754. Round the integer-token hold upward.
+    // Final settlement always consumes authoritative usage.completion_tokens.
+    facts.completion_tokens = Math.ceil((seconds + (hasVideo ? inputCap : 0)) * pixels * 24 / 1024);
     nonNegativeFact(facts.completion_tokens, "reserved video tokens", 2147483647, true);
   }
   return facts;

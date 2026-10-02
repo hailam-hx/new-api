@@ -22,7 +22,10 @@ import (
 
 // DFLOPVerificationEngine permits an injected transport for deterministic failure
 // tests. Production requests always use the selected key and approved origin.
-type DFLOPVerificationEngine struct{ HTTP *http.Client }
+type DFLOPVerificationEngine struct {
+	HTTP           *http.Client
+	FixtureOptions VerificationFixtureOptions
+}
 
 type verificationSource struct {
 	channel                         *model.Channel
@@ -90,17 +93,57 @@ func verificationMaximumFacts(fixture VerificationFixture, request ProductionVer
 		return nil, errors.New("BILLING_QUANTITY_MISSING")
 	}
 	if fixture.Plan.ID == "VIDEO_TOKEN_PLUS_OUTPUT_SECONDS" {
-		return nil, errors.New("PROVIDER_TOKEN_CEILING_REQUIRED")
+		// The immutable request bounds output; a fixture's provider capability
+		// maximum does not enlarge the actual submitted output duration.
+		seconds, err := verificationQuantity(fixture.Request, "duration", 30, true)
+		bound, bounded := fixture.Bounds["duration"]
+		if err != nil || !bounded || seconds.LessThan(decimal.NewFromFloat(bound.Min)) || seconds.GreaterThan(decimal.NewFromFloat(bound.Max)) {
+			return nil, errors.New("BILLING_QUANTITY_INVALID: frozen output duration")
+		}
+		resolution, ok := facts["resolution"].(string)
+		mode, modeOK := facts["input_mode"].(string)
+		if !ok || !modeOK || mode != "default" && mode != "with_video_input" || fixture.Request["resolution"] != resolution {
+			return nil, errors.New("BILLING_QUANTITY_MISSING: selected token tier")
+		}
+		inputSeconds := decimal.Zero
+		if mode == "with_video_input" {
+			inputSeconds = decimal.NewFromInt(15)
+			if strings.HasPrefix(fixture.Model, "doubao-seedance-2.5") {
+				inputSeconds = decimal.NewFromInt(30)
+			}
+		}
+		// DFLOP reserves the largest documented frame even with a requested
+		// ratio: references and provider selection can override that ratio.
+		tokens, err := DFLOPSeedanceTokenEstimate(fixture.Model, resolution, "adaptive", seconds, inputSeconds)
+		if err != nil {
+			return nil, err
+		}
+		facts["completion_tokens"] = tokens.Ceil().IntPart()
+		facts["duration_sec"] = seconds.IntPart()
+		return facts, nil
 	}
 	if bound, ok := fixture.Bounds["duration"]; ok {
-		facts["duration_sec"] = bound.Max
+		seconds, err := verificationQuantity(fixture.Request, "duration", 3600, false)
+		if err != nil || seconds.LessThan(decimal.NewFromFloat(bound.Min)) || seconds.GreaterThan(decimal.NewFromFloat(bound.Max)) {
+			return nil, errors.New("BILLING_QUANTITY_INVALID: frozen output duration")
+		}
+		// The exact immutable request, rather than the global SKU capability cap,
+		// defines this invocation's output ceiling.
+		facts["duration_sec"] = seconds.InexactFloat64()
 	}
 	if fixture.Plan.ID == "VIDEO_INPUT_PLUS_OUTPUT_SECONDS" && fixture.Mode != "t2v" {
 		return nil, errors.New("AUTHORITATIVE_INPUT_DURATION_REQUIRED")
 	}
 	if fixture.Plan.ID == "OPENAI_IMAGE_PER_OUTPUT" || fixture.Plan.ID == "OPENAI_IMAGE_OUTPUT_PLUS_REFERENCE" {
 		if bound, ok := fixture.Bounds["n"]; ok {
-			facts["image_count"] = bound.Max
+			quantity, err := verificationQuantity(fixture.Request, "n", 128, true)
+			if err != nil || quantity.LessThan(decimal.NewFromFloat(bound.Min)) || quantity.GreaterThan(decimal.NewFromFloat(bound.Max)) {
+				return nil, errors.New("BILLING_QUANTITY_INVALID: frozen image count")
+			}
+			if fixed, present := fixture.Bounds["output_count"]; present {
+				quantity = decimal.Max(quantity, decimal.NewFromFloat(fixed.Max))
+			}
+			facts["image_count"] = quantity.IntPart()
 		}
 	}
 	return facts, nil
@@ -145,15 +188,19 @@ func verificationFrozenSnapshot(source verificationSource, fixture VerificationF
 	metaJSON, _ := common.Marshal(map[string]any{"meta": plugin.Meta, "source_hash": plugin.Engine.SourceHash()})
 	fixtureJSON, _ := common.Marshal(fixture)
 	bindingJSON, _ := common.Marshal(map[string]any{"pricing_config": source.config, "channel_type": source.channel.Type, "channel_setting": source.channel.GetSetting(), "model_mapping": mapping})
-	frozen = model.RuntimeVerificationProviderSnapshot{Model: provider.ModelID, EndpointType: provider.EndpointType, Features: slices.Clone(provider.BillingFeatures), Rates: map[string]string{}, PointsPerCNY: source.pointsPerCNY, CNYToUSD: source.config.CNYToUSD, Markup: source.config.MarkupMultiplier, ConfigHash: verificationHash(bindingJSON), PluginHash: verificationHash(metaJSON), FixtureHash: verificationHash(fixtureJSON)}
+	frozen = model.RuntimeVerificationProviderSnapshot{Model: provider.ModelID, EndpointType: provider.EndpointType, Features: slices.Clone(provider.BillingFeatures), Rates: map[string]string{}, RateProvenance: map[string]string{}, PointsPerCNY: source.pointsPerCNY, CNYToUSD: source.config.CNYToUSD, Markup: source.config.MarkupMultiplier, ConfigHash: verificationHash(bindingJSON), PluginHash: verificationHash(metaJSON), FixtureHash: verificationHash(fixtureJSON)}
 	var raw struct {
 		FreeInputImages *int `json:"free_input_images"`
 	}
 	_ = common.Unmarshal(provider.Raw, &raw)
 	frozen.FreeInputImages = raw.FreeInputImages
+	for _, override := range provider.ContractOverrides {
+		frozen.ContractOverrides = append(frozen.ContractOverrides, model.RuntimeVerificationContractOverride{Provider: override.Provider, Model: override.Model, Feature: override.Feature, Source: override.Source, SourceReferenceHash: verificationHash([]byte(override.SourceURL)), ObservedAt: override.ObservedAt, Version: override.Version, CatalogConflict: override.CatalogConflict, Value: override.Value, AutoApplyAllowed: override.AutoApplyAllowed})
+	}
 	for key, price := range provider.Prices {
-		if price.SourcePriceKind != "AUTHENTICATED_EFFECTIVE_PRICE" {
-			return nil, frozen, request, "", errors.New("PROVIDER_DOCUMENTATION_CONFLICT")
+		frozen.RateProvenance[key] = price.SourcePriceKind
+		if _, err := verificationRate(provider, key); err != nil {
+			return nil, frozen, request, "", err
 		}
 		value := price.EffectiveCredits
 		if value == "" {
@@ -179,7 +226,7 @@ func (engine DFLOPVerificationEngine) Prepare(ctx context.Context, channelID int
 	if err != nil {
 		return nil, nil, err
 	}
-	fixtures := DFLOPVerificationFixtures(source.items)
+	fixtures := DFLOPVerificationFixturesWithOptions(source.items, engine.FixtureOptions)
 	if modelFilter != "" && !slices.ContainsFunc(fixtures, func(f VerificationFixture) bool { return f.Model == modelFilter }) {
 		return nil, nil, errors.New("MODEL_NOT_IN_VERIFICATION_REGISTRY")
 	}

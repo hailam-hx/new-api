@@ -1,10 +1,21 @@
 package service
 
 import (
+	"context"
+	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 	"maps"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"slices"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
@@ -362,4 +373,194 @@ func TestDFLOPVerificationReferenceCountUsesActualSubmittedImage(t *testing.T) {
 	replay, err := ReplayDFLOPVerificationTerminal(t.Context(), fixture, plugin, request.RequestBody, submission.PluginState, terminal)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{"image_count": float64(1), "input_image_count": float64(1)}, replay.NormalizedUsage)
+}
+
+func TestDFLOPVerificationV2ModesAndPublicReachability(t *testing.T) {
+	media := dflopVerificationMedia("reference-grid-v1")
+	media.PublicURL = "https://fixtures.example/verification-fixtures/v1/" + media.SHA256 + "/reference-grid-v1.png"
+	options := VerificationFixtureOptions{PublishedMedia: map[string]VerificationMediaFixture{media.ID: media}, VerifyPublicMedia: func(_ context.Context, fixture VerificationMediaFixture) error {
+		assert.Equal(t, media.SHA256, fixture.SHA256)
+		return fmt.Errorf("FIXTURE_PUBLIC_UNREACHABLE")
+	}}
+	fixtures := map[string]VerificationFixture{}
+	for _, fixture := range DFLOPVerificationFixturesWithOptions(verificationFixtureCatalog(t), options) {
+		fixtures[fixture.Model] = fixture
+	}
+	for _, model := range []string{"happyhorse-1.0-r2v", "happyhorse-1.1-r2v", "tvod-jimeng-1.0-lite-i2v", "happyhorse-1.0-i2v"} {
+		t.Run(model, func(t *testing.T) {
+			fixture := fixtures[model]
+			expected := "i2v"
+			if strings.Contains(model, "r2v") {
+				expected = "r2v"
+			}
+			assert.Equal(t, expected, fixture.Mode)
+			assert.Empty(t, fixture.BlockedReason)
+			content, ok := fixture.Request["content"].([]any)
+			require.True(t, ok)
+			require.Len(t, content, 2)
+			assert.Equal(t, "image_url", content[1].(map[string]any)["type"])
+			if expected == "r2v" {
+				assert.Contains(t, content[0].(map[string]any)["text"], "character1")
+			}
+			_, err := ValidateDFLOPVerificationFixture(t.Context(), fixture, verificationFixturePlugin(t, fixture.Plugin))
+			require.ErrorContains(t, err, "FIXTURE_PUBLIC_UNREACHABLE")
+		})
+	}
+	assert.Equal(t, "video_edit", fixtures["happyhorse-1.0-video-edit"].Mode)
+	for _, model := range []string{"dh-avatar-create", "dh-motion", "dh-lipsync", "dh-lipsync-pro", "dh-lipsync-max"} {
+		assert.Equal(t, "OPERATOR_ASSET_REQUIRED", fixtures[model].BlockedReason)
+		assert.NotEmpty(t, fixtures[model].OperatorAssetSpecification)
+	}
+}
+
+func TestDFLOPVerificationV2PresetAvatarAndExactClipPrerequisite(t *testing.T) {
+	options := VerificationFixtureOptions{PresetAvatar: "free-avatar", PresetVoice: "free-voice", ClipASRID: "fresh-asr", ClipSourceVideoURL: "https://fixtures.example/speech-video.mp4", ClipStyleID: "active-style", VerifyClipSource: func(context.Context, string, string) error { return fmt.Errorf("FRESH_SAME_SOURCE_ASR_REQUIRED") }}
+	fixtures := map[string]VerificationFixture{}
+	for _, fixture := range DFLOPVerificationFixturesWithOptions(verificationFixtureCatalog(t), options) {
+		fixtures[fixture.Model] = fixture
+	}
+	avatar := fixtures["dh-avatar"]
+	assert.Empty(t, avatar.BlockedReason)
+	assert.Equal(t, "avatar", avatar.Mode)
+	assert.Equal(t, "free-avatar", avatar.Request["avatar"])
+	assert.Equal(t, "free-voice", avatar.Request["voice"])
+	assert.Equal(t, "Hello.", avatar.Request["text"])
+	assert.Empty(t, avatar.Media)
+	clip := fixtures["clip-compose"]
+	assert.Empty(t, clip.BlockedReason)
+	assert.Equal(t, "fresh-asr", clip.Request["asr_id"])
+	assert.Equal(t, options.ClipSourceVideoURL, clip.Request["video_url"])
+	assert.NotContains(t, clip.Request, "duration")
+	assert.NotContains(t, clip.Request, "source_video_url")
+	_, err := ValidateDFLOPVerificationFixture(t.Context(), clip, verificationFixturePlugin(t, clip.Plugin))
+	require.ErrorContains(t, err, "FRESH_SAME_SOURCE_ASR_REQUIRED")
+}
+
+func TestDFLOPVerificationPublicOriginAllowlist(t *testing.T) {
+	for _, media := range DFLOPVerificationMediaInventory() {
+		published, err := DFLOPVerificationPublishedMedia("https://fixtures.example")
+		require.NoError(t, err)
+		fixture := published[media.ID]
+		request := httptest.NewRequest(http.MethodGet, fixture.PublicURL, nil)
+		response := httptest.NewRecorder()
+		VerificationFixtureHandler(response, request)
+		require.Equal(t, http.StatusOK, response.Code)
+		assert.Equal(t, media.MIMEType, response.Header().Get("Content-Type"))
+		assert.Equal(t, strconv.Itoa(media.Bytes), response.Header().Get("Content-Length"))
+		assert.Equal(t, "public, max-age=31536000, immutable", response.Header().Get("Cache-Control"))
+		assert.Equal(t, media.SHA256, fmt.Sprintf("%x", sha256.Sum256(response.Body.Bytes())))
+		head := httptest.NewRecorder()
+		VerificationFixtureHandler(head, httptest.NewRequest(http.MethodHead, fixture.PublicURL, nil))
+		assert.Equal(t, http.StatusOK, head.Code)
+		assert.Empty(t, head.Body.Bytes())
+	}
+	media := DFLOPVerificationMediaInventory()[0]
+	data, err := DFLOPVerificationMediaBytes(media.ID)
+	require.NoError(t, err)
+	for _, failure := range []string{"none", "mime", "length", "cache", "checksum", "status"} {
+		t.Run(failure, func(t *testing.T) {
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mime, length, cache := media.MIMEType, media.Bytes, "public, max-age=31536000, immutable"
+				if failure == "mime" {
+					mime = "application/octet-stream"
+				}
+				if failure == "length" {
+					length++
+				}
+				if failure == "cache" {
+					cache = "max-age=300"
+				}
+				w.Header().Set("Content-Type", mime)
+				w.Header().Set("Content-Length", strconv.Itoa(length))
+				w.Header().Set("Cache-Control", cache)
+				if failure == "status" {
+					w.WriteHeader(404)
+					return
+				}
+				w.WriteHeader(200)
+				if r.Method == http.MethodGet {
+					body := slices.Clone(data)
+					if failure == "checksum" {
+						body[0] ^= 1
+					}
+					_, _ = w.Write(body)
+				}
+			}))
+			defer server.Close()
+			probe := media
+			probe.PublicURL = server.URL
+			err := verifyDFLOPPublicMediaResponses(context.Background(), probe, server.Client())
+			if failure == "none" {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
+		})
+	}
+	for _, path := range []string{"/verification-fixtures/v1/wrong/reference-grid-v1.png", "/verification-fixtures/../../one-api.db", "/verification-fixtures/synthetic-v1/not-in-allowlist/private.wav"} {
+		response := httptest.NewRecorder()
+		VerificationFixtureHandler(response, httptest.NewRequest(http.MethodGet, path, nil))
+		assert.Equal(t, http.StatusNotFound, response.Code)
+	}
+	for _, origin := range []string{"http://fixtures.example", "https://user:secret@fixtures.example", "https://fixtures.example/?token=secret"} {
+		_, err := DFLOPVerificationPublishedMedia(origin)
+		require.Error(t, err)
+	}
+	media = DFLOPVerificationMediaInventory()[0]
+	media.PublicURL = "https://127.0.0.1/fixture.png"
+	require.EqualError(t, VerifyDFLOPPublicMedia(context.Background(), media), "FIXTURE_PUBLIC_REACHABILITY_REQUIRED")
+}
+
+func TestDFLOPVerificationUnapprovedManifestExpiry(t *testing.T) {
+	body, err := common.Marshal(DFLOPVerificationAuthorization{PlanVersion: DFLOPVerificationPlanVersion, Concurrency: 1})
+	require.NoError(t, err)
+	assert.Contains(t, string(body), `"expires_at":null`)
+	var roundtrip DFLOPVerificationAuthorization
+	require.NoError(t, common.Unmarshal(body, &roundtrip))
+	assert.Zero(t, roundtrip.ExpiresAt)
+	assert.False(t, roundtrip.Approved)
+}
+
+func TestDFLOPVerificationFinalManifestRequiresFreshSignature(t *testing.T) {
+	public, private, err := ed25519.GenerateKey(nil)
+	require.NoError(t, err)
+	now := time.Unix(1800000000, 0)
+	plan := DFLOPVerificationPlan{Version: DFLOPVerificationPlanVersion, Authorization: DFLOPVerificationAuthorization{PlanVersion: DFLOPVerificationPlanVersion, Concurrency: 1, Targets: []DFLOPVerificationTarget{{Model: "model", RequestBodyHash: "original"}}}}
+	final, err := FinalizeDFLOPVerificationAuthorization(plan, "admin", "explicit-operator-approval", private, now)
+	require.NoError(t, err)
+	assert.False(t, plan.Authorization.Approved)
+	assert.Zero(t, plan.Authorization.ExpiresAt)
+	assert.Equal(t, int64(1800), final.ExpiresAt-final.IssuedAt)
+	require.NoError(t, VerifyDFLOPVerificationManifest(final, public, now))
+	final.Targets[0].RequestBodyHash = "changed"
+	require.EqualError(t, VerifyDFLOPVerificationManifest(final, public, now), "APPROVAL_SIGNATURE_INVALID")
+	final.Targets[0].RequestBodyHash = "original"
+	require.Error(t, VerifyDFLOPVerificationManifest(final, public, now.Add(30*time.Minute)))
+	plan.Version = "canary-plan-v1"
+	_, err = FinalizeDFLOPVerificationAuthorization(plan, "admin", "approval", private, now)
+	require.Error(t, err)
+}
+
+func TestDFLOPVerificationHumanFixtureRequiresRightsMetadata(t *testing.T) {
+	media := DFLOPVerificationMediaInventory()[0]
+	media.Provenance = ""
+	require.ErrorContains(t, ValidateDFLOPVerificationMedia(media), "FIXTURE_PROVENANCE_REQUIRED")
+	media.Provenance = "unknown internet photo"
+	media.RequiresFace = true
+	media.Synthetic = false
+	require.ErrorContains(t, ValidateDFLOPVerificationMedia(media), "OPERATOR_ASSET_REQUIRED")
+	media.RightsClassification = "organization-performer-explicit-consent"
+	require.ErrorContains(t, ValidateDFLOPVerificationMedia(media), "OPERATOR_ASSET_REQUIRED")
+	media.AuthorizationRecord = "operator-owned explicit API verification consent reference"
+	require.NoError(t, ValidateDFLOPVerificationMedia(media))
+	assert.Equal(t, "rights-cleared-human-v1", verificationFixtureCategory(media))
+}
+
+func TestDFLOPVerificationFixtureRejectsSpecialUseNetworks(t *testing.T) {
+	for _, address := range []string{"100.100.100.200", "100.64.0.1", "198.18.0.1", "192.0.2.1", "203.0.113.1", "127.0.0.1", "10.0.0.1", "::1", "2001:db8::1", "64:ff9b::a00:1", "::ffff:100.100.100.200"} {
+		assert.False(t, verificationFixturePublicIP(net.ParseIP(address)), address)
+	}
+	for _, address := range []string{"8.8.8.8", "1.1.1.1", "2001:4860:4860::8888"} {
+		assert.True(t, verificationFixturePublicIP(net.ParseIP(address)), address)
+	}
 }

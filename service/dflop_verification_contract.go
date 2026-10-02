@@ -59,38 +59,44 @@ type VerificationContractPlan struct {
 }
 
 type VerificationMediaFixture struct {
-	ID           string  `json:"id"`
-	Path         string  `json:"path"`
-	MIMEType     string  `json:"mime_type"`
-	SHA256       string  `json:"sha256"`
-	Bytes        int     `json:"bytes"`
-	Width        int     `json:"width,omitempty"`
-	Height       int     `json:"height,omitempty"`
-	Seconds      float64 `json:"seconds,omitempty"`
-	Synthetic    bool    `json:"synthetic"`
-	PublicURL    string  `json:"public_url,omitempty"`
-	RequiresFace bool    `json:"requires_face,omitempty"`
+	ID                   string  `json:"id"`
+	Path                 string  `json:"path"`
+	MIMEType             string  `json:"mime_type"`
+	SHA256               string  `json:"sha256"`
+	Bytes                int     `json:"bytes"`
+	Width                int     `json:"width,omitempty"`
+	Height               int     `json:"height,omitempty"`
+	Seconds              float64 `json:"seconds,omitempty"`
+	Synthetic            bool    `json:"synthetic"`
+	PublicURL            string  `json:"public_url,omitempty"`
+	RequiresFace         bool    `json:"requires_face,omitempty"`
+	Provenance           string  `json:"provenance,omitempty"`
+	RightsClassification string  `json:"rights_classification,omitempty"`
+	AuthorizationRecord  string  `json:"authorization_record,omitempty"`
 }
 
 type VerificationFixture struct {
-	ID                       string                       `json:"id"`
-	Version                  string                       `json:"version"`
-	Model                    string                       `json:"model"`
-	Plugin                   string                       `json:"plugin"`
-	Protocol                 string                       `json:"protocol"`
-	Operation                string                       `json:"operation"`
-	Mode                     string                       `json:"mode"`
-	Endpoint                 string                       `json:"endpoint"`
-	SourceCatalogHash        string                       `json:"source_catalog_hash"`
-	CatalogRowHash           string                       `json:"catalog_row_hash"`
-	Request                  map[string]any               `json:"request"`
-	Bounds                   map[string]VerificationBound `json:"bounds"`
-	Selectors                map[string][]string          `json:"selectors"`
-	Media                    []VerificationMediaFixture   `json:"media,omitempty"`
-	RequiredInputs           []string                     `json:"required_inputs,omitempty"`
-	BlockedReason            string                       `json:"blocked_reason,omitempty"`
-	RequiresPublishedFixture bool                         `json:"requires_published_fixture"`
-	Plan                     VerificationContractPlan     `json:"plan"`
+	ID                         string                       `json:"id"`
+	Version                    string                       `json:"version"`
+	Model                      string                       `json:"model"`
+	Plugin                     string                       `json:"plugin"`
+	Protocol                   string                       `json:"protocol"`
+	Operation                  string                       `json:"operation"`
+	Mode                       string                       `json:"mode"`
+	Endpoint                   string                       `json:"endpoint"`
+	SourceCatalogHash          string                       `json:"source_catalog_hash"`
+	CatalogRowHash             string                       `json:"catalog_row_hash"`
+	Request                    map[string]any               `json:"request"`
+	Bounds                     map[string]VerificationBound `json:"bounds"`
+	Selectors                  map[string][]string          `json:"selectors"`
+	Media                      []VerificationMediaFixture   `json:"media,omitempty"`
+	RequiredInputs             []string                     `json:"required_inputs,omitempty"`
+	BlockedReason              string                       `json:"blocked_reason,omitempty"`
+	RequiresPublishedFixture   bool                         `json:"requires_published_fixture"`
+	OperatorAssetSpecification string                       `json:"operator_asset_specification,omitempty"`
+	Plan                       VerificationContractPlan     `json:"plan"`
+	verifyPublicMedia          func(context.Context, VerificationMediaFixture) error
+	verifyClipSource           func(context.Context, string, string) error
 }
 
 type ProductionVerificationRequest struct {
@@ -153,7 +159,7 @@ func DFLOPVerificationContractPlans() []VerificationContractPlan {
 	}
 	for i := range plans {
 		plan := &plans[i]
-		plan.Version = "1"
+		plan.Version = "2"
 		plan.OptionalFields = []string{"async"}
 		plan.ReservationQuantitySource = "production extractUsage from validated bounded request"
 		plan.SuccessStates = []string{"succeeded"}
@@ -181,7 +187,23 @@ func DFLOPVerificationContractPlans() []VerificationContractPlan {
 
 // DFLOPVerificationFixtures uses fresh authenticated capabilities for request
 // bounds. Missing capabilities remain blockers rather than guessed defaults.
+type VerificationFixtureOptions struct {
+	SourceCatalogHash  string
+	PublishedMedia     map[string]VerificationMediaFixture
+	PresetAvatar       string
+	PresetVoice        string
+	ClipASRID          string
+	ClipSourceVideoURL string
+	ClipStyleID        string
+	VerifyPublicMedia  func(context.Context, VerificationMediaFixture) error
+	VerifyClipSource   func(context.Context, string, string) error
+}
+
 func DFLOPVerificationFixtures(catalog []dflop.Item) []VerificationFixture {
+	return DFLOPVerificationFixturesWithOptions(catalog, VerificationFixtureOptions{})
+}
+
+func DFLOPVerificationFixturesWithOptions(catalog []dflop.Item, options VerificationFixtureOptions) []VerificationFixture {
 	var registry struct {
 		Version           string   `json:"version"`
 		SourceCatalogHash string   `json:"source_catalog_hash"`
@@ -194,6 +216,11 @@ func DFLOPVerificationFixtures(catalog []dflop.Item) []VerificationFixture {
 	items := make(map[string]dflop.Item, len(catalog))
 	for _, item := range catalog {
 		items[item.ModelID] = item
+	}
+	catalogData, _ := common.Marshal(catalog)
+	registry.SourceCatalogHash = fmt.Sprintf("%x", sha256.Sum256(catalogData))
+	if options.SourceCatalogHash != "" {
+		registry.SourceCatalogHash = options.SourceCatalogHash
 	}
 	plans := DFLOPVerificationContractPlans()
 	fixtures := make([]VerificationFixture, 0, len(registry.Models))
@@ -235,6 +262,7 @@ func DFLOPVerificationFixtures(catalog []dflop.Item) []VerificationFixture {
 				break
 			}
 		}
+		fixture.Plan.Documentation = append(fixture.Plan.Documentation, "https://model.dflop.top/models/"+model)
 		if len(item.RequiredFacts) > 0 {
 			fixture.Plan.RequiredUsageFacts = slices.Clone(item.RequiredFacts)
 		}
@@ -261,6 +289,7 @@ func DFLOPVerificationFixtures(catalog []dflop.Item) []VerificationFixture {
 				Video *struct {
 					Modes       map[string]bool `json:"modes"`
 					Resolutions []string        `json:"resolutions"`
+					Ratios      []string        `json:"ratios"`
 					Requires    []string        `json:"requires"`
 					Duration    struct {
 						Min           float64   `json:"min"`
@@ -304,12 +333,15 @@ func DFLOPVerificationFixtures(catalog []dflop.Item) []VerificationFixture {
 				}
 			}
 		case "music":
-			fixture.Protocol, fixture.Operation, fixture.Mode, fixture.Endpoint = "native", "music", "instrumental", "/v1/music/generations"
+			fixture.Protocol, fixture.Operation, fixture.Mode, fixture.Endpoint = "native", "music", "music", "/v1/music/generations"
 			fixture.Request = map[string]any{"model": model, "prompt": "A short calm instrumental melody", "instrumental": true}
 			fixture.Bounds["generation_count"] = VerificationBound{Min: 1, Max: 1}
 		case "audio":
-			fixture.Protocol, fixture.Operation, fixture.Mode, fixture.Endpoint = "openai_audio_speech", "create", "async_default", "/v1/audio/speech"
+			fixture.Protocol, fixture.Operation, fixture.Mode, fixture.Endpoint = "openai_audio_speech", "create", "speech", "/v1/audio/speech"
 			fixture.Request = map[string]any{"model": model, "input": "Hello.", "async": true}
+			if options.PresetVoice != "" {
+				fixture.Request["voice"] = options.PresetVoice
+			}
 			fixture.Bounds["characters"] = VerificationBound{Min: 1, Max: 6}
 		case "voice":
 			fixture.Protocol, fixture.Operation, fixture.Mode, fixture.Endpoint = "native", "voice", "synthetic_clone", "/v1/audio/voices"
@@ -320,7 +352,7 @@ func DFLOPVerificationFixtures(catalog []dflop.Item) []VerificationFixture {
 			fixture.Protocol, fixture.Operation, fixture.Mode, fixture.Endpoint = "native", "avatar", "avatar_image", "/v1/videos/avatars"
 			fixture.Request = map[string]any{"model": model, "name": "Verification avatar", "source_kind": "image"}
 			fixture.RequiredInputs = []string{"published_authorized_portrait_source_url"}
-			fixture.BlockedReason = "FIXTURE_AUTHORIZED_PORTRAIT_REQUIRED"
+			fixture.BlockedReason = "OPERATOR_ASSET_REQUIRED"
 		default:
 			if source.Caps.Video != nil && source.Caps.Video.Duration.Min > 0 && source.Caps.Video.Duration.Max >= source.Caps.Video.Duration.Min {
 				for _, required := range source.Caps.Video.Requires {
@@ -333,6 +365,10 @@ func DFLOPVerificationFixtures(catalog []dflop.Item) []VerificationFixture {
 				if len(source.Caps.Video.Resolutions) > 0 {
 					fixture.Request["resolution"] = source.Caps.Video.Resolutions[0]
 					fixture.Selectors["resolution"] = slices.Clone(source.Caps.Video.Resolutions)
+				}
+				if len(source.Caps.Video.Ratios) > 0 {
+					fixture.Selectors["ratio"] = slices.Clone(source.Caps.Video.Ratios)
+					fixture.Request["ratio"] = source.Caps.Video.Ratios[0]
 				}
 				if slices.Contains(source.Caps.Video.Requires, "ref_image") || !source.Caps.Video.Modes["t2v"] && source.Caps.Video.Modes["i2v"] {
 					fixture.Mode = "i2v"
@@ -360,7 +396,7 @@ func DFLOPVerificationFixtures(catalog []dflop.Item) []VerificationFixture {
 				if planID == "LIPSYNC_SECONDS" {
 					fixture.Mode = "audio_driven"
 					fixture.RequiredInputs = []string{"published_authorized_human_face_video_url", "published_matching_driving_audio_url"}
-					fixture.BlockedReason = "FIXTURE_AUTHORIZED_FACE_VIDEO_REQUIRED"
+					fixture.BlockedReason = "OPERATOR_ASSET_REQUIRED"
 				}
 				if planID == "CLIP_COMPOSE_FIXED_TASK" {
 					fixture.Mode = "speech_clip"
@@ -368,12 +404,12 @@ func DFLOPVerificationFixtures(catalog []dflop.Item) []VerificationFixture {
 					fixture.BlockedReason = "PROVIDER_DOCUMENTATION_CONFLICT"
 				}
 				if planID == "MOTION_SOURCE_SECONDS" {
-					fixture.Mode = "source_video"
+					fixture.Mode = "video_edit"
 					fixture.Request["face_count"] = 1
 					fixture.Request["resolution"] = "fast"
 					fixture.Selectors["resolution"] = []string{"fast", "standard", "max"}
 					fixture.RequiredInputs = []string{"published_authorized_human_motion_video_url", "published_authorized_portrait_url"}
-					fixture.BlockedReason = "FIXTURE_AUTHORIZED_PORTRAIT_REQUIRED"
+					fixture.BlockedReason = "OPERATOR_ASSET_REQUIRED"
 				}
 				if planID == "AVATAR_SECONDS" {
 					fixture.Mode = "avatar_audio"
@@ -384,20 +420,100 @@ func DFLOPVerificationFixtures(catalog []dflop.Item) []VerificationFixture {
 				fixture.BlockedReason = "PROVIDER_BOUNDED_DURATION_MISSING"
 			}
 		}
-		if len(fixture.RequiredInputs) > 0 {
+		// Exact model pages distinguish omni-reference lists from first-frame inputs.
+		switch model {
+		case "happyhorse-1.0-r2v", "happyhorse-1.1-r2v":
+			fixture.Mode = "r2v"
+			fixture.RequiredInputs = []string{"published_reference_image_list_1_to_9"}
+			fixture.Media = []VerificationMediaFixture{dflopVerificationMedia("reference-grid-v1")}
+		case "happyhorse-1.0-video-edit":
+			fixture.Mode = "video_edit"
+		case "tvod-jimeng-1.0-lite-i2v":
+			fixture.Mode = "i2v"
+			fixture.RequiredInputs = []string{"published_reference_image_url"}
+			fixture.Media = []VerificationMediaFixture{dflopVerificationMedia("reference-grid-v1")}
+		}
+		if planID == "CLIP_COMPOSE_FIXED_TASK" {
+			fixture.BlockedReason = "FRESH_SAME_SOURCE_ASR_REQUIRED"
+			fixture.Media = nil
+			fixture.Plan.RequiredFields = []string{"model", "video_url", "asr_id"}
+			if options.ClipASRID != "" && options.ClipSourceVideoURL != "" && options.VerifyClipSource != nil {
+				fixture.Request["asr_id"] = options.ClipASRID
+				fixture.Request["video_url"] = options.ClipSourceVideoURL
+				fixture.Request["video_style_id"] = options.ClipStyleID
+				fixture.BlockedReason = ""
+				fixture.RequiredInputs = nil
+			}
+		}
+		if planID == "AVATAR_SECONDS" {
+			fixture.Mode = "avatar"
+			fixture.Media = nil
+			fixture.Plan.RequiredFields = []string{"model", "avatar", "voice", "text", "duration"}
+			fixture.RequiredInputs = []string{"free_ready_preset_avatar", "free_preset_voice"}
+			fixture.BlockedReason = "PROVIDER_PRESET_AVATAR_VOICE_REQUIRED"
+			if options.PresetAvatar != "" && options.PresetVoice != "" {
+				fixture.Request["avatar"] = options.PresetAvatar
+				fixture.Request["voice"] = options.PresetVoice
+				fixture.Request["text"] = "Hello."
+				fixture.BlockedReason = ""
+				fixture.RequiredInputs = nil
+			}
+		}
+		if fixture.Mode == "i2v" || fixture.Mode == "r2v" || fixture.Mode == "video_edit" || fixture.Mode == "reference_video" {
+			fixture.Plan.RequiredFields = []string{"model", "content", "duration"}
+			delete(fixture.Request, "prompt")
+		}
+		if fixture.BlockedReason == "OPERATOR_ASSET_REQUIRED" {
+			switch planID {
+			case "AVATAR_CREATE_FIXED_UNIT":
+				fixture.OperatorAssetSpecification = "Rights-cleared front-facing human portrait PNG/JPEG, or short same-identity human video; source provenance, explicit organization consent or fictional synthetic identity classification, SHA-256, MIME, pixel dimensions; public HTTPS direct URL with immutable checksum verified"
+			case "LIPSYNC_SECONDS":
+				fixture.OperatorAssetSpecification = "Rights-cleared human face source video MP4 with visible speaking face; synthetic or explicitly authorized matching driving audio; both bounded short duration and public HTTPS direct URLs; provenance/consent, SHA-256, MIME, dimensions, duration required"
+			case "MOTION_SOURCE_SECONDS":
+				fixture.OperatorAssetSpecification = "Rights-cleared short human motion source MP4 plus 1-7 authorized or fictional synthetic human portraits with face_count matching portrait count; SHA-256, MIME, dimensions, duration, provenance/consent and verified immutable public HTTPS direct URLs required"
+			}
+		}
+		fixture.verifyPublicMedia = options.VerifyPublicMedia
+		fixture.verifyClipSource = options.VerifyClipSource
+		for index := range fixture.Media {
+			media := &fixture.Media[index]
+			if published, exists := options.PublishedMedia[media.ID]; exists && published.SHA256 == media.SHA256 && published.Bytes == media.Bytes && published.MIMEType == media.MIMEType {
+				media.PublicURL = published.PublicURL
+			}
+		}
+		if len(fixture.RequiredInputs) > 0 && fixture.BlockedReason == "" {
 			fixture.RequiresPublishedFixture = true
-			if fixture.BlockedReason == "" {
-				fixture.BlockedReason = "FIXTURE_PUBLIC_URL_REQUIRED"
+			fixture.BlockedReason = "FIXTURE_PUBLIC_URL_REQUIRED"
+		}
+		if fixture.BlockedReason == "FIXTURE_PUBLIC_URL_REQUIRED" && len(fixture.Media) > 0 && options.VerifyPublicMedia != nil {
+			ready := true
+			for _, media := range fixture.Media {
+				ready = ready && media.PublicURL != ""
+			}
+			if ready {
+				fixture.BlockedReason = ""
+				fixture.RequiresPublishedFixture = true
+				url := fixture.Media[0].PublicURL
+				switch fixture.Mode {
+				case "i2v", "r2v":
+					prompt := "A blue square moves on a plain background"
+					if fixture.Mode == "r2v" {
+						prompt = "character1 moves gently on a plain background"
+					}
+					fixture.Request["content"] = []any{map[string]any{"type": "text", "text": prompt}, map[string]any{"type": "image_url", "image_url": map[string]any{"url": url}}}
+				case "reference_video", "video_edit":
+					fixture.Request["content"] = []any{map[string]any{"type": "text", "text": "Make the moving square green"}, map[string]any{"type": "video_url", "video_url": map[string]any{"url": url}}}
+				}
+				if fixture.Plan.ID == "VOICE_CLONE_FIXED_UNIT" {
+					fixture.Request["audio_url"] = url
+				}
 			}
 		}
-		if len(item.ContractOverrides) > 0 || item.OverrideStale {
-			fixture.BlockedReason = "PROVIDER_DOCUMENTATION_CONFLICT"
+		// Explicit reviewed overrides are evidence, not blanket conflicts.
+		if item.OverrideStale {
+			fixture.BlockedReason = "PROVIDER_DOCUMENTED_OVERRIDE_STALE"
 		}
-		for _, price := range item.Prices {
-			if price.SourcePriceKind == dflop.DocumentedContractOverride {
-				fixture.BlockedReason = "PROVIDER_DOCUMENTATION_CONFLICT"
-			}
-		}
+
 		fixtures = append(fixtures, fixture)
 	}
 	return fixtures
@@ -406,6 +522,19 @@ func DFLOPVerificationFixtures(catalog []dflop.Item) []VerificationFixture {
 // ValidateDFLOPVerificationMedia validates immutable local fixture bytes before
 // any canary can be submitted. Public hosting is a separate explicit blocker.
 func ValidateDFLOPVerificationMedia(fixture VerificationMediaFixture) error {
+	if fixture.Provenance == "" || fixture.RightsClassification == "" {
+		return fmt.Errorf("FIXTURE_PROVENANCE_REQUIRED: %s", fixture.ID)
+	}
+	if fixture.RequiresFace {
+		fictional := fixture.Synthetic && fixture.RightsClassification == "fictional-human-test-only"
+		consented := !fixture.Synthetic && fixture.RightsClassification == "organization-performer-explicit-consent" && fixture.AuthorizationRecord != ""
+		if !fictional && !consented {
+			return fmt.Errorf("OPERATOR_ASSET_REQUIRED: %s", fixture.ID)
+		}
+	} else if !fixture.Synthetic || fixture.RightsClassification != "synthetic-test-only" {
+		return fmt.Errorf("FIXTURE_RIGHTS_CLASSIFICATION_REQUIRED: %s", fixture.ID)
+	}
+
 	data, err := dflopVerificationFiles.ReadFile(fixture.Path)
 	if err != nil || len(data) != fixture.Bytes || fmt.Sprintf("%x", sha256.Sum256(data)) != fixture.SHA256 {
 		return fmt.Errorf("FIXTURE_CHECKSUM_MISMATCH: %s", fixture.ID)
@@ -516,7 +645,27 @@ func ValidateDFLOPVerificationFixture(ctx context.Context, fixture VerificationF
 		return request, fmt.Errorf("%s", fixture.BlockedReason)
 	}
 	if fixture.RequiresPublishedFixture {
-		return request, fmt.Errorf("FIXTURE_PUBLIC_URL_REQUIRED")
+		if fixture.verifyPublicMedia == nil || len(fixture.Media) == 0 {
+			return request, fmt.Errorf("FIXTURE_PUBLIC_URL_REQUIRED")
+		}
+		for _, media := range fixture.Media {
+			if media.PublicURL == "" {
+				return request, fmt.Errorf("FIXTURE_PUBLIC_URL_REQUIRED")
+			}
+			if err := fixture.verifyPublicMedia(ctx, media); err != nil {
+				return request, err
+			}
+		}
+	}
+	if fixture.Plan.ID == "CLIP_COMPOSE_FIXED_TASK" {
+		if fixture.verifyClipSource == nil {
+			return request, fmt.Errorf("FRESH_SAME_SOURCE_ASR_REQUIRED")
+		}
+		source, _ := fixture.Request["video_url"].(string)
+		asrID, _ := fixture.Request["asr_id"].(string)
+		if err := fixture.verifyClipSource(ctx, source, asrID); err != nil {
+			return request, err
+		}
 	}
 	if plugin == nil || plugin.Engine == nil || plugin.Meta.Key != fixture.Plugin || !slices.Contains(plugin.Meta.Models, fixture.Model) {
 		return request, fmt.Errorf("PLUGIN_BINDING_MISMATCH")
@@ -930,4 +1079,22 @@ func dflopVerificationMedia(id string) VerificationMediaFixture {
 		}
 	}
 	return VerificationMediaFixture{ID: id}
+}
+
+// DFLOPVerificationMediaInventory returns the test-only immutable fixture allowlist.
+func DFLOPVerificationMediaInventory() []VerificationMediaFixture {
+	data, _ := dflopVerificationFiles.ReadFile("testdata/dflop-verification/media-v1.json")
+	var media []VerificationMediaFixture
+	if common.Unmarshal(data, &media) != nil {
+		return nil
+	}
+	return media
+}
+
+func DFLOPVerificationMediaBytes(id string) ([]byte, error) {
+	fixture := dflopVerificationMedia(id)
+	if err := ValidateDFLOPVerificationMedia(fixture); err != nil {
+		return nil, err
+	}
+	return dflopVerificationFiles.ReadFile(fixture.Path)
 }

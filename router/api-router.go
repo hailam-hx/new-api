@@ -3,6 +3,7 @@ package router
 import (
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/service/authz"
 
 	// Import oauth package to register providers via init()
@@ -13,6 +14,8 @@ import (
 )
 
 func SetApiRouter(router *gin.Engine) {
+	router.GET("/verification-fixtures/:version/:sha/:filename", gin.WrapF(service.VerificationFixtureHandler))
+	router.HEAD("/verification-fixtures/:version/:sha/:filename", gin.WrapF(service.VerificationFixtureHandler))
 	apiRouter := router.Group("/api")
 	apiRouter.Use(middleware.RouteTag("api"))
 	apiRouter.Use(gzip.Gzip(gzip.DefaultCompression))

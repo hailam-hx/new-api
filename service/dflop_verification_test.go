@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"maps"
 	"net/http"
@@ -23,6 +24,7 @@ import (
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/glebarez/sqlite"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -101,6 +103,24 @@ func TestVerificationAuthorizationCannotBeInferredOrRolledOver(t *testing.T) {
 		mutate(&copy)
 		require.Error(t, ValidateDFLOPVerificationAuthorization(copy, run, item, "0.1", now))
 	}
+	v2 := manifest
+	v2.PlanVersion = DFLOPVerificationPlanVersion
+	v2.Concurrency = 1
+	v2.Targets = slices.Clone(manifest.Targets)
+	item.Endpoint, item.Operation = "/v1/audio/speech", "create"
+	frozen := model.RuntimeVerificationProviderSnapshot{FixtureHash: "fixture", ConfigHash: "config", PluginHash: "plugin"}
+	body, err := common.Marshal(frozen)
+	require.NoError(t, err)
+	item.FrozenProviderJSON = string(body)
+	v2.Targets[0].Endpoint, v2.Targets[0].Operation = item.Endpoint, item.Operation
+	v2.Targets[0].FixtureHash, v2.Targets[0].ConfigHash, v2.Targets[0].PluginHash = "fixture", "config", "plugin"
+	v2.Targets[0].MaximumProviderPoints = "0.1"
+	require.NoError(t, ValidateDFLOPVerificationAuthorization(v2, run, item, "0.1", now))
+	v2.Targets[0].FixtureHash = "changed"
+	require.ErrorContains(t, ValidateDFLOPVerificationAuthorization(v2, run, item, "0.1", now), "BINDING_MISMATCH")
+	v2.Targets[0].FixtureHash = "fixture"
+	v2.Targets[0].RequestBodyHash = "changed"
+	require.ErrorContains(t, ValidateDFLOPVerificationAuthorization(v2, run, item, "0.1", now), "TARGET_NOT_AUTHORIZED")
 	run.PaidRequests = 1
 	require.ErrorContains(t, ValidateDFLOPVerificationAuthorization(manifest, run, item, "0.1", now), "REQUEST_LIMIT")
 }
@@ -838,4 +858,158 @@ func TestVerificationProviderPointsSelectExactFamilyRateAndQuantity(t *testing.T
 			require.ErrorContains(t, err, "PROVIDER_DOCUMENTATION_CONFLICT")
 		})
 	}
+}
+
+func TestVerificationSeedanceHoldUsesFrozenOutputAndDocumentedGenerationFrame(t *testing.T) {
+	for _, tc := range []struct{ model, resolution, mode, tokens string }{
+		{"doubao-seedance-2.0", "480p", "default", "40176"},
+		{"doubao-seedance-2.0-fast", "720p", "default", "86945"},
+		{"doubao-seedance-2.0-mini", "480p", "with_video_input", "190836"},
+		{"doubao-seedance-2.5", "480p", "with_video_input", "341496"},
+		{"doubao-seedance-2.5", "1080p", "default", "195645"},
+		{"doubao-seedance-2.0-lite", "720p", "with_video_input", "190836"},
+		{"doubao-seedance-2.0-fast-lite", "1080p", "default", "86945"},
+		{"doubao-seedance-2.0-mini-lite", "720p", "default", "40176"},
+		{"doubao-seedance-2.5-lite", "1080p", "with_video_input", "739029"},
+	} {
+		t.Run(tc.model+tc.resolution+tc.mode, func(t *testing.T) {
+			fixture := VerificationFixture{Model: tc.model, Plan: VerificationContractPlan{ID: "VIDEO_TOKEN_PLUS_OUTPUT_SECONDS"}, Request: map[string]any{"duration": 4, "resolution": tc.resolution, "ratio": "16:9"}, Bounds: map[string]VerificationBound{"duration": {Min: 4, Max: 30}}}
+			request := ProductionVerificationRequest{ReservationFacts: map[string]any{"completion_tokens": 999999, "resolution": tc.resolution, "input_mode": tc.mode, "duration_sec": 4}}
+			facts, err := verificationMaximumFacts(fixture, request)
+			require.NoError(t, err)
+			assert.Equal(t, tc.tokens, fmt.Sprint(facts["completion_tokens"]))
+			assert.Equal(t, int64(4), facts["duration_sec"])
+			assert.Equal(t, 999999, request.ReservationFacts["completion_tokens"], "freezing must not mutate the production facts")
+		})
+	}
+}
+
+func TestVerificationSeedanceTokenFormulaPreservesReferenceMinimumAndGeneration(t *testing.T) {
+	for _, tc := range []struct{ model, resolution, ratio, output, input, want string }{
+		{"doubao-seedance-2.0", "480p", "16:9", "4", "0", "40176"},
+		{"doubao-seedance-2.5", "480p", "16:9", "4", "0", "38430"},
+		{"doubao-seedance-2.0", "480p", "16:9", "4", "2", "80352"},
+		{"doubao-seedance-2.0", "480p", "16:9", "4", "4", "80352"},
+		{"doubao-seedance-2.0", "480p", "16:9", "4", "15", "190836"},
+		{"doubao-seedance-2.5", "480p", "16:9", "4", "30", "326655"},
+		{"doubao-seedance-2.5", "720p", "adaptive", "4", "0", "86944.5"},
+		{"doubao-seedance-2.5-lite", "720p", "16:9", "4", "0", "38430"},
+		{"doubao-seedance-2.5-lite", "1080p", "16:9", "4", "30", "734400"},
+	} {
+		t.Run(tc.model+tc.resolution+tc.ratio+tc.input, func(t *testing.T) {
+			output, err := decimal.NewFromString(tc.output)
+			require.NoError(t, err)
+			input, err := decimal.NewFromString(tc.input)
+			require.NoError(t, err)
+			tokens, err := DFLOPSeedanceTokenEstimate(tc.model, tc.resolution, tc.ratio, output, input)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, tokens.String())
+		})
+	}
+	for _, tc := range []struct {
+		model, resolution, ratio string
+		output, input            int64
+	}{
+		{"doubao-seedance-2.0", "480p", "16:9", 4, 16},
+		{"doubao-seedance-2.5", "480p", "16:9", 4, 31},
+		{"doubao-seedance-2.0", "480p", "16:9", 16, 0},
+		{"doubao-seedance-2.5", "480p", "16:9", 31, 0},
+		{"doubao-seedance-2.5", "4k", "16:9", 4, 0},
+		{"doubao-seedance-2.5-lite", "480p", "16:9", 4, 0},
+		{"doubao-seedance-2.0-mini", "1080p", "16:9", 4, 0},
+		{"doubao-seedance-2.5", "720p", "bogus", 4, 0},
+	} {
+		_, err := DFLOPSeedanceTokenEstimate(tc.model, tc.resolution, tc.ratio, decimal.NewFromInt(tc.output), decimal.NewFromInt(tc.input))
+		require.Error(t, err)
+	}
+}
+
+func TestVerificationSeedanceLitePointsUseDeliveredSecondsOnly(t *testing.T) {
+	item := dflop.Item{ModelID: "doubao-seedance-2.0-lite", EndpointType: "videos_generations", BillingFeatures: []string{"video_token", "video_two_stage"}, PriceSemantics: dflop.PriceSemantics{SourcePriceKind: "AUTHENTICATED_EFFECTIVE_PRICE"}, Prices: map[string]dflop.Price{
+		"video_token_tier:with_video_input@720p": {EffectiveCredits: "1000", SourcePriceKind: "AUTHENTICATED_EFFECTIVE_PRICE"},
+		"video_second_stage:720p":                {EffectiveCredits: "2.5", SourcePriceKind: "AUTHENTICATED_EFFECTIVE_PRICE"},
+	}}
+	facts := map[string]any{"completion_tokens": 80352, "duration_sec": "4", "input_video_duration_sec": "15", "resolution": "720p", "input_mode": "with_video_input"}
+	points, err := DFLOPVerificationPoints(item, facts)
+	require.NoError(t, err)
+	assert.Equal(t, "90.352", points.String(), "reference seconds must not enter the output upscale leg")
+	facts["duration_sec"] = "2.5"
+	points, err = DFLOPVerificationPoints(item, facts)
+	require.NoError(t, err)
+	assert.Equal(t, "86.602", points.String(), "final upscale uses delivered output, not requested output")
+}
+
+func TestVerificationSeedanceProductionHoldUsesDocumentedFrame(t *testing.T) {
+	plugin := verificationFixturePlugin(t, "dflop-media")
+	for _, tc := range []struct {
+		model, resolution string
+		video             bool
+		tokens            float64
+	}{
+		{"doubao-seedance-2.0", "480p", false, 40176},
+		{"doubao-seedance-2.5", "720p", false, 86945},
+		{"doubao-seedance-2.0-lite", "720p", true, 190836},
+		{"doubao-seedance-2.5-lite", "1080p", true, 739029},
+	} {
+		content := []any{map[string]any{"type": "text", "text": "A blue square"}}
+		if tc.video {
+			content = append(content, map[string]any{"type": "video_url", "video_url": map[string]any{"url": "https://fixtures.invalid/reference.mp4"}})
+		}
+		value, err := plugin.Engine.Call(t.Context(), "extractUsage", map[string]any{"model": tc.model, "upstreamModel": tc.model, "requestBody": map[string]any{"duration": 4, "resolution": tc.resolution, "ratio": "16:9", "content": content}})
+		require.NoError(t, err)
+		facts, ok := value.(map[string]any)
+		require.True(t, ok)
+		assert.EqualValues(t, tc.tokens, facts["completion_tokens"], tc.model)
+		if !tc.video {
+			imageContent := append(slices.Clone(content), map[string]any{"type": "image_url", "role": "first_frame", "image_url": map[string]any{"url": "https://fixtures.invalid/reference.png"}})
+			i2v, err := plugin.Engine.Call(t.Context(), "extractUsage", map[string]any{"model": tc.model, "upstreamModel": tc.model, "requestBody": map[string]any{"duration": 4, "resolution": tc.resolution, "ratio": "16:9", "content": imageContent}})
+			require.NoError(t, err)
+			assert.EqualValues(t, tc.tokens, i2v.(map[string]any)["completion_tokens"], "image references do not add video seconds")
+			assert.Equal(t, "default", i2v.(map[string]any)["input_mode"])
+		}
+	}
+}
+
+func TestVerificationSeedanceLiteAllowsOnlyExactDocumentedUpscaleOverride(t *testing.T) {
+	for _, tc := range []struct {
+		name, model, key, value, feature, sourceURL string
+		wantError                                   bool
+	}{
+		{"720p", "doubao-seedance-2.0-lite", "video_second_stage:720p", "2.5", "second_stage_upscale_rate", "https://model.dflop.top/en/docs/reference/media-apis", false},
+		{"1080p", "doubao-seedance-2.5-lite", "video_second_stage:1080p", "5", "second_stage_upscale_rate", "https://model.dflop.top/en/docs/reference/media-apis", false},
+		{"token override forbidden", "doubao-seedance-2.0-lite", "video_token_tier:default@720p", "2.5", "second_stage_upscale_rate", "https://model.dflop.top/en/docs/reference/media-apis", true},
+		{"base model forbidden", "doubao-seedance-2.0", "video_second_stage:720p", "2.5", "second_stage_upscale_rate", "https://model.dflop.top/en/docs/reference/media-apis", true},
+		{"changed amount", "doubao-seedance-2.0-lite", "video_second_stage:720p", "3", "second_stage_upscale_rate", "https://model.dflop.top/en/docs/reference/media-apis", true},
+		{"changed feature", "doubao-seedance-2.0-lite", "video_second_stage:720p", "2.5", "token_rate", "https://model.dflop.top/en/docs/reference/media-apis", true},
+		{"untrusted docs", "doubao-seedance-2.0-lite", "video_second_stage:720p", "2.5", "second_stage_upscale_rate", "https://untrusted.invalid", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			override := dflop.ContractOverride{Provider: "dflop", Model: tc.model, Feature: tc.feature, Source: "official_dflop_contract", SourceURL: tc.sourceURL, ObservedAt: "2026-10-02", Version: "2026-10-02-v2", Value: "720p=2.5 points/s;1080p=5 points/s;delivered output only", CatalogConflict: "missing authenticated second-stage rates"}
+			item := dflop.Item{ModelID: tc.model, EndpointType: "videos_generations", BillingFeatures: []string{"video_token", "video_two_stage"}, ContractOverrides: []dflop.ContractOverride{override}, PriceSemantics: dflop.PriceSemantics{SourcePriceKind: "AUTHENTICATED_EFFECTIVE_PRICE"}, Prices: map[string]dflop.Price{tc.key: {Unit: dflop.UnitSecond, EffectiveCredits: tc.value, SourcePriceKind: dflop.DocumentedContractOverride, PromotionState: "VERIFIED", ContractOverrides: []dflop.ContractOverride{override}}}}
+			rate, err := verificationRate(item, tc.key)
+			if tc.wantError {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.value, rate.String())
+		})
+	}
+}
+
+func TestVerificationFrozenLiteProvenanceSupportsRecovery(t *testing.T) {
+	frozen := model.RuntimeVerificationProviderSnapshot{Model: "doubao-seedance-2.0-lite", EndpointType: "videos_generations", Features: []string{"video_token", "video_two_stage"}, Rates: map[string]string{"video_token_tier:default@720p": "60", "video_second_stage:720p": "2.5"}, RateProvenance: map[string]string{"video_token_tier:default@720p": "AUTHENTICATED_EFFECTIVE_PRICE", "video_second_stage:720p": dflop.DocumentedContractOverride}, ContractOverrides: []model.RuntimeVerificationContractOverride{{Provider: "dflop", Model: "doubao-seedance-2.0-lite", Feature: "second_stage_upscale_rate", Source: "official_dflop_contract", SourceReferenceHash: verificationHash([]byte("https://model.dflop.top/en/docs/reference/media-apis")), ObservedAt: "2026-10-02", Version: "v2", Value: "720p=2.5 points/s;1080p=5 points/s;delivered output only", CatalogConflict: "missing authenticated second-stage rates"}}}
+	body, err := common.Marshal(frozen)
+	require.NoError(t, err)
+	require.NoError(t, common.Unmarshal(body, &frozen))
+	provider, err := verificationProviderFromSnapshot(frozen)
+	require.NoError(t, err)
+	assert.Equal(t, dflop.DocumentedContractOverride, provider.Prices["video_second_stage:720p"].SourcePriceKind)
+	assert.Equal(t, dflop.UnitSecond, provider.Prices["video_second_stage:720p"].Unit)
+	points, err := DFLOPVerificationPoints(provider, map[string]any{"completion_tokens": 1000000, "duration_sec": 4, "resolution": "720p", "input_mode": "default"})
+	require.NoError(t, err)
+	assert.Equal(t, "70", points.String())
+	frozen.ContractOverrides[0].SourceReferenceHash = "changed"
+	_, err = verificationProviderFromSnapshot(frozen)
+	require.Error(t, err)
 }

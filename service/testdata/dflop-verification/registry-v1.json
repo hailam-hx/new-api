@@ -1,5 +1,5 @@
 {
-  "version": "dflop-verification-v1",
+  "version": "canary-plan-v2",
   "source_catalog_hash": "89da28f4d55d6c4c359d1cc5ef3a2c20eeae0f6c8056f54f75aed1664205d73b",
   "models": [
     "clip-compose",
