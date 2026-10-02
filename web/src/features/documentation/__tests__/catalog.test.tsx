@@ -22,7 +22,7 @@ import {
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router'
-import { cleanup, render, screen, within } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, it } from 'vitest'
 
@@ -41,6 +41,8 @@ import {
 import {
   filterDocumentationModels,
   getDocumentationModelKinds,
+  normalizeDocumentationProvider,
+  getDocumentationProvider,
 } from '../model-kind'
 
 const model: PricingModel = {
@@ -84,10 +86,26 @@ it('keeps unknown models in All without inventing a category from their name', (
 })
 
 it('filters by supplied modalities, capabilities and registered endpoint metadata', () => {
-  const text = { ...model, supported_endpoint_types: ['openai'] }
-  const image: PricingModel = { ...model, output_modalities: ['image'] }
-  const video = { ...model, supported_endpoint_types: ['openai-video'] }
-  const audio: PricingModel = { ...model, output_modalities: ['audio'] }
+  const text = {
+    ...model,
+    model_name: 'chat',
+    supported_endpoint_types: ['openai'],
+  }
+  const image: PricingModel = {
+    ...model,
+    model_name: 'image',
+    output_modalities: ['image'],
+  }
+  const video = {
+    ...model,
+    model_name: 'video',
+    supported_endpoint_types: ['openai-video'],
+  }
+  const audio: PricingModel = {
+    ...model,
+    model_name: 'audio',
+    output_modalities: ['audio'],
+  }
   expect(
     filterDocumentationModels([text, image, video, audio], '', 'audio')
   ).toEqual([audio])
@@ -179,7 +197,7 @@ it('shows an unavailable-price message for expressions that cannot be expanded',
   ).not.toBeInTheDocument()
 })
 
-it('shows five columns and applies keyboard type selection and empty search state', async () => {
+it('shows four columns and applies keyboard type selection and empty search state', async () => {
   const user = userEvent.setup()
   const root = createRootRoute({
     component: () => (
@@ -210,7 +228,7 @@ it('shows five columns and applies keyboard type selection and empty search stat
   render(<RouterProvider router={router} />)
   expect(
     screen.getAllByRole('columnheader').map((head) => head.textContent)
-  ).toEqual(['Model', 'Provider', 'Type', 'Context', 'Price'])
+  ).toEqual(['Model ID', 'Provider', 'Type', 'Price'])
   const video = screen.getByRole('button', { name: 'Video' })
   video.focus()
   await user.keyboard('{Enter}')
@@ -221,10 +239,11 @@ it('shows five columns and applies keyboard type selection and empty search stat
     screen.getByRole('textbox', { name: 'Search models' }),
     'absent'
   )
-  expect(
-    within(screen.getByRole('table')).getByText('No models found')
-  ).toBeVisible()
+  expect(screen.getByText('No models found')).toBeVisible()
   expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
+  await user.click(screen.getByRole('button', { name: 'Reset filters' }))
+  expect(screen.getByRole('link', { name: 'chat' })).toBeVisible()
+  expect(screen.getByRole('textbox', { name: 'Search models' })).toHaveValue('')
 })
 
 it('shows final customer prices for every request tier without internal labels', () => {
@@ -363,3 +382,222 @@ it.each<{
     }
   }
 )
+
+it('keeps embeddings, reranking and gateway-wide protocol claims out of Chat', () => {
+  expect(
+    getDocumentationModelKinds({
+      ...model,
+      supported_endpoint_types: ['embeddings', 'openai'],
+    })
+  ).toEqual(['embeddings'])
+  expect(
+    getDocumentationModelKinds({
+      ...model,
+      supported_endpoint_types: ['jina-rerank'],
+    })
+  ).toEqual(['rerank'])
+  expect(
+    getDocumentationModelKinds({
+      ...model,
+      supported_endpoint_types: ['openai', 'anthropic', 'gemini'],
+    })
+  ).toEqual([])
+  expect(
+    getDocumentationModelKinds({
+      ...model,
+      output_modalities: ['image'],
+      supported_endpoint_types: ['openai'],
+    })
+  ).toEqual(['image'])
+  expect(
+    getDocumentationModelKinds({
+      ...model,
+      input_modalities: ['audio'],
+      output_modalities: ['text'],
+    })
+  ).toEqual(['audio'])
+})
+
+it('normalizes provider metadata and searches aliases without rewriting Model IDs', () => {
+  const aliased = { ...model, model_name: 'EXACT-ID', vendor_name: '字节跳动' }
+  expect(normalizeDocumentationProvider(aliased.vendor_name)).toBe('ByteDance')
+  expect(normalizeDocumentationProvider('阿里巴巴')).toBe('Alibaba / Qwen')
+  expect(normalizeDocumentationProvider('智谱')).toBe('Zhipu AI')
+  expect(normalizeDocumentationProvider('Moonshot')).toBe('Moonshot AI')
+  expect(
+    filterDocumentationModels([aliased], 'bytedance', 'all')[0]?.model_name
+  ).toBe('EXACT-ID')
+})
+
+it('deduplicates published IDs, excludes empty enabled groups and sorts by ID', () => {
+  const a = { ...model, model_name: 'a' }
+  expect(
+    filterDocumentationModels(
+      [
+        { ...model, model_name: 'z' },
+        a,
+        a,
+        { ...model, model_name: 'disabled', enable_groups: [] },
+      ],
+      '',
+      'all'
+    ).map((item) => item.model_name)
+  ).toEqual(['a', 'z'])
+})
+
+it('paginates 25 results, resets after search and copies the raw ID', async () => {
+  const user = userEvent.setup()
+  const root = createRootRoute({
+    component: () => (
+      <ModelCatalog
+        data={{
+          ...data,
+          models: Array.from({ length: 26 }, (_, i) => ({
+            ...model,
+            model_name: `sample-${String(i).padStart(2, '0')}`,
+            vendor_name: 'Moonshot',
+          })),
+        }}
+      />
+    ),
+  })
+  const router = createRouter({
+    routeTree: root,
+    history: createMemoryHistory(),
+  })
+  await router.load()
+  render(<RouterProvider router={router} />)
+  expect(
+    screen.queryByRole('link', { name: 'sample-25' })
+  ).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: 'Next' }))
+  expect(screen.getByRole('link', { name: 'sample-25' })).toBeVisible()
+  await user.click(screen.getByRole('button', { name: 'Copy model ID' }))
+  expect(await navigator.clipboard.readText()).toBe('sample-25')
+  await user.type(
+    screen.getByRole('textbox', { name: 'Search models' }),
+    'sample-00'
+  )
+  expect(screen.getByRole('link', { name: 'sample-00' })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled()
+  expect(screen.getByRole('status')).toHaveTextContent('1 Models')
+})
+
+it('shows a pricing-focused table without Provider or Context and uses number before currency', async () => {
+  useSystemConfigStore.getState().setConfig({
+    currency: {
+      ...DEFAULT_CURRENCY_CONFIG,
+      quotaDisplayType: 'CUSTOM',
+      customCurrencySymbol: '积分',
+      customCurrencyExchangeRate: 2,
+    },
+  })
+  const root = createRootRoute({
+    component: () => (
+      <ModelCatalog
+        pricing
+        data={{
+          ...data,
+          models: [
+            {
+              ...model,
+              enable_groups: ['default'],
+              billing_mode: 'tiered_expr',
+              billing_expr: 'tier("base", p * 1.5 + c * 6)',
+            },
+          ],
+        }}
+      />
+    ),
+  })
+  const router = createRouter({
+    routeTree: root,
+    history: createMemoryHistory(),
+  })
+  await router.load()
+  render(<RouterProvider router={router} />)
+  expect(
+    screen.getAllByRole('columnheader').map((el) => el.textContent)
+  ).toEqual(['Model', 'Type', 'Price'])
+  expect(screen.getByText('3 Points / 1M token')).toBeVisible()
+  expect(screen.getByText('12 Points / 1M token')).toBeVisible()
+  expect(screen.queryByText('From')).not.toBeInTheDocument()
+  expect(screen.getByText('Input')).toBeVisible()
+  expect(screen.getByText('Output')).toBeVisible()
+  expect(
+    screen.queryByText(/tier\(|ModelRatio|CompletionRatio|GroupRatio/)
+  ).not.toBeInTheDocument()
+})
+
+it('classifies gateway Chat and Image from explicit usage while keeping ambiguous tasks unknown', () => {
+  const gateway = [
+    'openai',
+    'openai-response',
+    'openai-response-compact',
+    'anthropic',
+    'gemini',
+    'openai-alpha-search',
+  ]
+  const chat: PricingModel = {
+    ...model,
+    model_name: 'opaque-chat-id',
+    supported_endpoint_types: gateway,
+    billing_mode: 'tiered_expr',
+    billing_expr: 'tier("base", p * 3 + c * 15 + cr * 0.3)',
+  }
+  const image: PricingModel = {
+    ...chat,
+    model_name: 'opaque-media-id',
+    billing_expr: 'tier("base", fixed(0.2)) * image_count',
+  }
+  expect(getDocumentationModelKinds(chat)).toEqual(['text'])
+  expect(getDocumentationModelKinds(image)).toEqual(['image'])
+  expect(filterDocumentationModels([chat, image], '', 'text')).toEqual([chat])
+  expect(filterDocumentationModels([chat, image], '', 'image')).toEqual([image])
+  expect(
+    getDocumentationModelKinds({ ...chat, output_modalities: ['video'] })
+  ).toEqual(['video'])
+  expect(
+    getDocumentationModelKinds({
+      ...chat,
+      supported_endpoint_types: ['embeddings'],
+    })
+  ).toEqual(['embeddings'])
+  expect(
+    getDocumentationModelKinds({
+      ...chat,
+      billing_expr: 'tier("base", u("seconds") * 0.5)',
+      billing_usage_schema: {
+        seconds: {
+          type: 'number',
+          unit: 'second',
+          description: { en: 'Usage unit price' },
+        },
+      },
+    })
+  ).toEqual([])
+})
+
+it('uses the shared provider fallback for missing metadata and preserves configured ownership', () => {
+  const claude = {
+    ...model,
+    model_name: 'claude-fable-5',
+    vendor_name: undefined,
+  }
+  expect(getDocumentationProvider(claude)).toBe('Anthropic')
+  expect(
+    getDocumentationProvider({ ...claude, vendor_name: 'Custom Provider' })
+  ).toBe('Custom Provider')
+  expect(
+    getDocumentationProvider({ ...claude, model_name: 'nano-banana' })
+  ).toBe('Google')
+  expect(
+    getDocumentationProvider({ ...claude, model_name: 'tvod-qwen-image' })
+  ).toBe('Alibaba / Qwen')
+  expect(
+    getDocumentationProvider({ ...claude, model_name: 'unknown-model' })
+  ).toBe('')
+  expect(filterDocumentationModels([claude], 'anthropic', 'all')).toEqual([
+    claude,
+  ])
+})

@@ -2035,3 +2035,16 @@ func TestTaskAdaptorChainsSunoBatchFetchThroughNewAPIUpstream(t *testing.T) {
 	assert.Equal(t, "SUCCESS", results["task_up_public"].TaskInfo.Status)
 	assert.Equal(t, []string{"POST /suno/submit/MUSIC", "POST /suno/fetch"}, seen)
 }
+
+func TestCharacterUsagePreservesExactBoundedQuantity(t *testing.T) {
+	schema := pluginruntime.UsageFieldSchema{Type: "number", Unit: "character"}
+	for _, quantity := range []float64{0, 129, 5000} {
+		actual, err := validateUsageValue(quantity, schema, false)
+		require.NoError(t, err)
+		assert.Equal(t, quantity, actual)
+	}
+	for _, quantity := range []float64{-1, 1.5, math.NaN(), math.Inf(1), float64(common.MaxQuota) + 1} {
+		_, err := validateUsageValue(quantity, schema, false)
+		require.Error(t, err)
+	}
+}

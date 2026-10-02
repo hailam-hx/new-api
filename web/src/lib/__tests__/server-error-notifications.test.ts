@@ -442,3 +442,41 @@ it('rejects an unsuccessful setting update so callers cannot proceed as if it sa
   unmount()
   client.clear()
 })
+
+it('keeps locally handled catalog failures on the page and allows a successful retry', async () => {
+  const redirect = vi.fn()
+  const notify = vi.spyOn(toast, 'error').mockReturnValue('error')
+  const client = createAppQueryClient(redirect)
+  const error = new AxiosError(
+    'HTTP 500',
+    'ERR_BAD_RESPONSE',
+    undefined,
+    undefined,
+    {
+      status: 500,
+      statusText: 'Server Error',
+      data: { message: 'Catalog unavailable' },
+      headers: {},
+      config: { headers: new AxiosHeaders() },
+    }
+  )
+  const options = {
+    queryKey: ['catalog-local-error'],
+    retry: false as const,
+    meta: { errorToast: false, errorRedirect: false },
+  }
+  await expect(
+    client.fetchQuery({
+      ...options,
+      queryFn: async () => {
+        throw error
+      },
+    })
+  ).rejects.toThrow('HTTP 500')
+  expect(redirect).not.toHaveBeenCalled()
+  expect(notify).not.toHaveBeenCalled()
+  await expect(
+    client.fetchQuery({ ...options, queryFn: async () => ['restored-model'] })
+  ).resolves.toEqual(['restored-model'])
+  client.clear()
+})

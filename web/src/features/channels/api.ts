@@ -29,6 +29,7 @@ import type {
   ChannelBalanceResponse,
   ChannelOpsResponse,
   ChannelTestResponse,
+  ChannelVerificationResponse,
   CopyChannelParams,
   CopyChannelResponse,
   FetchModelsResponse,
@@ -41,6 +42,32 @@ import type {
   SearchChannelsResponse,
   TagOperationParams,
 } from './types'
+
+export async function getChannelVerification(
+  channelId: number,
+  runId?: number,
+  signal?: AbortSignal
+): Promise<ChannelVerificationResponse> {
+  const suffix = runId === undefined ? '' : `/${runId}`
+  const response = await api.get<ChannelVerificationResponse>(
+    `/api/channel/${channelId}/runtime-verification${suffix}`,
+    channelActionConfig({ signal, disableDuplicate: true })
+  )
+  return requireServerSuccess(response.data)
+}
+
+/** Rebuild configuration evidence and run the zero-cost catalog probe only. */
+export async function prepareChannelVerification(
+  channelId: number,
+  model?: string
+): Promise<ChannelVerificationResponse> {
+  const response = await api.post<ChannelVerificationResponse>(
+    `/api/channel/${channelId}/runtime-verification`,
+    model ? { model } : {},
+    channelActionConfig()
+  )
+  return requireServerSuccess(response.data)
+}
 
 const channelActionConfig = (
   config: ApiRequestConfig = {}

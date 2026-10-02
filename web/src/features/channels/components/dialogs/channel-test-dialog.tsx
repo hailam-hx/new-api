@@ -105,7 +105,7 @@ import type {
   SearchChannelsResponse,
 } from '../../types'
 import { useChannels } from '../channels-provider'
-import { ChannelTestExport } from './channel-test-export'
+import { ChannelRuntimeVerification } from './channel-runtime-verification'
 import { ChannelTestModelVisibilityAction } from './channel-test-model-visibility-action'
 import { TaskConnectivityAction } from './task-connectivity-action'
 
@@ -1119,9 +1119,10 @@ function ChannelTestDialogContent({
           </div>
 
           <div className='space-y-3 max-sm:has-[div[role="toolbar"]]:pb-16'>
-            <ChannelTestExport
+            <ChannelRuntimeVerification
               channelId={currentRow.id}
               channelName={currentRow.name}
+              open={open}
               models={models}
               results={testResults}
               disabled={isAnyTesting || isDeletingFailed}
@@ -1131,6 +1132,11 @@ function ChannelTestDialogContent({
                 <p className='text-sm font-medium'>{t('Channel models')}</p>
                 <p className='text-muted-foreground text-xs'>
                   {t('Select models to run batch tests.')}
+                </p>
+                <p className='text-muted-foreground text-xs'>
+                  {t(
+                    'Channel request tests are separate from persisted verification. A successful connection test does not verify generation, billing, or the provider ledger.'
+                  )}
                 </p>
                 <div className='flex flex-wrap items-center gap-2'>
                   {isBatchTesting ? (
@@ -1378,11 +1384,19 @@ function TestResultCell({
     )
     let summary = t('Configuration checked; upstream not tested')
     if (failedCheck) {
-      summary = `${failedCheck.check_type ?? failedCheck.check}: ${failedCheck.reason_code ?? failedCheck.reason ?? diagnostic.status}`
+      const reason =
+        failedCheck.reason_code ?? failedCheck.reason ?? diagnostic.status
+      summary = `${taskDiagnosticReasonLabel(reason, t)} (${reason})`
     } else if (diagnostic.mode === 'connectivity') {
       summary = taskDiagnosticReasonLabel(diagnostic.connectivity_status, t)
     } else if (diagnostic.mode === 'runtime') {
-      summary = diagnostic.status
+      const runtimeCheck = diagnostic.checks.find(
+        (check) => check.check === 'runtime_evidence'
+      )
+      summary = taskDiagnosticReasonLabel(
+        runtimeCheck?.reason_code ?? runtimeCheck?.reason ?? diagnostic.status,
+        t
+      )
     } else if (diagnostic.outcome === 'untested') {
       summary = t('Upstream not tested')
     }

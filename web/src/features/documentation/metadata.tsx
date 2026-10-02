@@ -25,7 +25,11 @@ export function DocumentationMetadata(props: {
   canonical: string
 }) {
   const { t } = useTranslation()
-  const title = `${props.title} · ${t('New API Documentation')}`
+  const documentationTitle = t('New API Documentation')
+  const title =
+    props.title === documentationTitle
+      ? documentationTitle
+      : `${props.title} · ${documentationTitle}`
   useEffect(() => {
     // React hoists its own tags, but does not adopt head tags from the SPA template.
     // Temporarily remove those defaults and restore them when leaving documentation.

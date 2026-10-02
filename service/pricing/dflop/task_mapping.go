@@ -10,6 +10,13 @@ import (
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 )
 
+// completedQuantityContractModels have reviewed reservation and terminal
+// metering paths; only authenticated catalog rows can close their blockers.
+var completedQuantityContractModels = []string{
+	"tvod-midjourney-v7", "tvod-midjourney-v8.1", "voice-tts-pro", "clip-compose",
+	"dh-avatar", "dh-lipsync", "dh-lipsync-pro", "dh-lipsync-max", "dh-motion", "dh-avatar-create",
+}
+
 // pricingShape records the source contract independently of the local provider.
 // A change in this value needs a new preview even when component prices match.
 func pricingShape(source Model) string {
@@ -48,6 +55,9 @@ func videoPricesMatch(item Item, tiers map[string]string) bool {
 // classifyTaskPricing creates a candidate only for source shapes whose
 // quantities are reported by an exact task-plugin model binding.
 func classifyTaskPricing(item *Item, source Model) {
+	if slices.Contains(completedQuantityContractModels, source.ID) && item.PriceSemantics.SourcePriceKind != "AUTHENTICATED_EFFECTIVE_PRICE" {
+		return
+	}
 	if item.PriceSemantics.SourcePriceKind == "AUTHENTICATED_EFFECTIVE_PRICE" && classifyDFLOPImagePricing(item, source) {
 		return
 	}
@@ -242,6 +252,8 @@ func taskPricingCompatibility(item Item, schema map[string]jsplugin.UsageFieldSc
 				unit = "second"
 			case "completion_tokens":
 				unit = "token"
+			case "character_count":
+				unit = "character"
 			}
 			if field.Type != "number" || field.Unit != unit {
 				missing = append(missing, name)

@@ -204,7 +204,7 @@ func TestRegistryDecodesAndValidatesUsageSchema(t *testing.T) {
 		{
 			name:          "unsupported numeric unit",
 			declaration:   `{type: "number", unit: "minute"}`,
-			expectedError: "unit must be second, count, token, or credit",
+			expectedError: "unit must be second, count, token, credit, or character",
 		},
 		{
 			name:          "boolean cannot mix unit",

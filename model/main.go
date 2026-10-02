@@ -371,6 +371,8 @@ func migrateDB() error {
 		&PricingSyncRun{},
 		&PricingSyncItem{},
 		&PricingSyncManaged{},
+		&RuntimeVerificationRun{},
+		&RuntimeVerificationItem{},
 		&CasbinRule{},
 		&AuthzRole{},
 	)

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/shopspring/decimal"
 )
@@ -213,6 +214,7 @@ type EffectiveResponse struct {
 	HTTPStatus   int    `json:"http_status"`
 	ContentType  string `json:"content_type"`
 	ETag         string `json:"etag"`
+	TraceID      string `json:"trace_id,omitempty"`
 	FetchedAt    int64  `json:"fetched_at"`
 }
 
@@ -228,8 +230,13 @@ func (c Client) FetchPublic(ctx context.Context) (EffectiveResponse, error) {
 }
 
 func (c Client) FetchCurrency(ctx context.Context) ([]byte, error) {
-	result, err := c.fetchResponse(ctx, CurrencyURL, "", "", false)
+	result, err := c.FetchCurrencyResponse(ctx)
 	return result.Body, err
+}
+
+// FetchCurrencyResponse retains provider trace metadata for verification.
+func (c Client) FetchCurrencyResponse(ctx context.Context) (EffectiveResponse, error) {
+	return c.fetchResponse(ctx, CurrencyURL, "", "", false)
 }
 
 // FetchConnectivityCatalog reads only the authenticated catalog, without price
@@ -301,6 +308,9 @@ func (c Client) fetchResponse(ctx context.Context, targetURL, key, etag string, 
 	result.HTTPStatus = res.StatusCode
 	result.ContentType = res.Header.Get("Content-Type")
 	result.ETag = res.Header.Get("ETag")
+	if trace := res.Header.Get("x-gateway-trace"); len(trace) <= 128 && (key == "" || !strings.Contains(trace, key)) && !strings.HasPrefix(strings.ToLower(trace), "sk-") && strings.Trim(trace, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.:") == "" {
+		result.TraceID = trace
+	}
 	if res.StatusCode == http.StatusNotModified {
 		result.State = "NOT_MODIFIED"
 		return result, nil
@@ -718,6 +728,39 @@ func build(catalogJSON, currencyJSON []byte, cnyToUSD, markup string, authentica
 		}
 		if authenticated && item.ReasonCode == "MISSING_SERVER_TOOL_USAGE" {
 			item.ReasonCode = "LIVE_CANARY_REQUIRED"
+		}
+		// Close only the reviewed quantity contracts. Catalog authentication,
+		// an exact executable binding and compatible completion facts are all
+		// required; the existing expression and source prices stay unchanged.
+		if authenticated && item.PriceSemantics.EffectiveState == "VERIFIED" && item.TaskExpression != "" && slices.Contains(completedQuantityContractModels, source.ID) {
+			generation := jsplugin.DefaultRegistry.Generation()
+			plugin, registered := generation.Get(item.TaskPlugin)
+			endpoint, endpointErr := CatalogEndpoint(item)
+			bound := false
+			if registered && slices.Contains(plugin.Meta.Models, source.ID) && endpointErr == nil {
+				if endpoint.Protocol == "native" {
+					route, found := generation.LookupDeclaredRoute("POST", endpoint.Path)
+					bound = found && route.Plugin == plugin && slices.Contains(route.Route.Models, source.ID)
+				} else {
+					for _, binding := range generation.LookupEndpointCandidates("POST", endpoint.Path, source.ID) {
+						if binding.Plugin == plugin {
+							bound = true
+							break
+						}
+					}
+				}
+			}
+			if bound {
+				schema, _ := plugin.Meta.UsageForModel(source.ID)
+				_, _, reason := taskPricingCompatibility(item, schema)
+				if reason == "" {
+					item.Status, item.ReasonCode, item.Reason = SupportedAuto, "", ""
+				}
+			} else {
+				// Model/schema metadata alone must not let Plan promote an
+				// expression whose executable endpoint is unavailable.
+				item.TaskExpression = ""
+			}
 		}
 		if authenticated {
 			profiles := BuildEndpointBillingProfiles(item)

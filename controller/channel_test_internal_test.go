@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -14,6 +15,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1134,6 +1136,29 @@ func TestDFLOPFailureAPIDataAndCatalogSemantics(t *testing.T) {
 	assert.Equal(t, "catalog-hash", d.Checks[0].Evidence)
 }
 
+func TestDFLOPRuntimeRejectionIsFailedWithoutInventingRootCause(t *testing.T) {
+	channel := &model.Channel{Type: constant.ChannelTypeNewAPI, BaseURL: lo.ToPtr("https://api.dflop.top")}
+	for _, status := range []int{402, 403, 429, 502, 503} {
+		t.Run(strconv.Itoa(status), func(t *testing.T) {
+			upstream := service.RelayErrorHandler(context.Background(), &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(`{"message":"provider rejected request"}`))}, true)
+			result := testResult{outboundAttempted: true, upstreamStatus: status, newAPIError: kittypes.NewOpenAIError(upstream, kittypes.ErrorCodeBadResponse, 500)}
+			d := channelFailureDiagnostic(channel, result, "doubao-seed-1-6-250615", "")
+			require.NotNil(t, d)
+			assert.Equal(t, "fail", d.Outcome)
+			assert.Equal(t, "UPSTREAM_HTTP_ERROR", d.Checks[0].ReasonCode)
+			assert.False(t, d.LiveGenerationTested)
+		})
+	}
+	upstream := kittypes.WithOpenAIError(kittypes.OpenAIError{Message: "deployment unavailable", Code: "NO_HEALTHY_DEPLOYMENT"}, 503)
+	d := channelFailureDiagnostic(channel, testResult{outboundAttempted: true, upstreamStatus: 503, newAPIError: kittypes.NewOpenAIError(upstream, kittypes.ErrorCodeBadResponse, 500)}, "doubao-seed-1-6-250615", "")
+	assert.Equal(t, "DFLOP_DEPLOYMENT_POOL_UNAVAILABLE", d.Status)
+	for _, status := range []int{0, 408, 504, 524} {
+		d := channelFailureDiagnostic(channel, testResult{outboundAttempted: true, upstreamStatus: status, newAPIError: kittypes.NewOpenAIError(errors.New("network outcome unknown"), kittypes.ErrorCodeDoRequestFailed, 500)}, "chat", "")
+		assert.Equal(t, "partial", d.Outcome)
+		assert.Equal(t, "INSUFFICIENT_EVIDENCE", d.Checks[0].ReasonCode)
+	}
+}
+
 func TestDFLOPLocalFailureRemainsFailedBeforeOutbound(t *testing.T) {
 	channel := &model.Channel{Type: constant.ChannelTypeNewAPI, BaseURL: lo.ToPtr("https://api.dflop.top")}
 	err := fmt.Errorf("missing configured pricing")
@@ -1178,4 +1203,105 @@ func TestDFLOPDiagnosticKnownPricesAndBlockedQuantities(t *testing.T) {
 	assert.Equal(t, "anthropic_messages", d.Protocol)
 	assert.Equal(t, "/v1/messages", d.Endpoint)
 	assert.NotEqual(t, "fail", d.Outcome)
+}
+
+func TestRuntimeVerificationReadOnlyScopeAndEmptyEvidence(t *testing.T) {
+	previousDB, previousLog := model.DB, model.LOG_DB
+	t.Cleanup(func() { model.DB, model.LOG_DB = previousDB, previousLog })
+	db := setupModelListControllerTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.RuntimeVerificationRun{}, &model.RuntimeVerificationItem{}))
+	priorRun := &model.RuntimeVerificationRun{ChannelID: 1, Source: "dflop", CatalogHash: strings.Repeat("c", 64), CredentialFingerprint: strings.Repeat("d", 64), Mode: "prepare"}
+	priorItems := []model.RuntimeVerificationItem{{Model: "image-model", Protocol: "openai_image", Operation: "generate", Mode: "default", Endpoint: "/v1/images/generations", ConfigStatus: "PASS"}}
+	require.NoError(t, model.CreateRuntimeVerificationRun(priorRun, priorItems))
+	require.NoError(t, db.Model(&model.RuntimeVerificationItem{}).Where("run_id = ?", priorRun.ID).Updates(map[string]any{"request_body_hash": strings.Repeat("e", 64), "request_id": "prior-request", "result": "RUNTIME_AMBIGUOUS"}).Error)
+	run := &model.RuntimeVerificationRun{ChannelID: 1, Source: "dflop", CatalogHash: strings.Repeat("a", 64), CredentialFingerprint: strings.Repeat("b", 64), Mode: "prepare"}
+	items := []model.RuntimeVerificationItem{{Model: "image-model", Protocol: "openai_image", Operation: "generate", Mode: "default", Endpoint: "/v1/images/generations", ConfigStatus: "PASS", ReasonCode: "READY_FOR_PAID_AUTHORIZATION"}}
+	require.NoError(t, model.CreateRuntimeVerificationRun(run, items))
+	for _, tc := range []struct {
+		name        string
+		channelID   string
+		runID       string
+		wantSuccess bool
+		wantItems   int
+	}{
+		{"latest persisted evidence", "1", "", true, 1},
+		{"exact persisted run", "1", strconv.FormatInt(run.ID, 10), true, 1},
+		{"other channel cannot read the run", "2", strconv.FormatInt(run.ID, 10), false, 0},
+		{"missing run has no evidence", "1", "99999", false, 0},
+		{"untested channel is explicitly empty", "2", "", true, 0},
+		{"nonpositive channel is rejected", "0", "", false, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Params = gin.Params{{Key: "id", Value: tc.channelID}, {Key: "run_id", Value: tc.runID}}
+			c.Request = httptest.NewRequest(http.MethodGet, "/api/channel/"+tc.channelID+"/runtime-verification", nil)
+			GetChannelRuntimeVerification(c)
+			var response struct {
+				Success bool `json:"success"`
+				Data    struct {
+					Run   *model.RuntimeVerificationRun `json:"run"`
+					Items []struct {
+						Model              string `json:"model"`
+						Status             string `json:"status"`
+						RequestStatus      string `json:"request_status"`
+						HistoricalEvidence *struct {
+							RunID  int64  `json:"run_id"`
+							Result string `json:"result"`
+						} `json:"historical_evidence"`
+					} `json:"items"`
+				} `json:"data"`
+			}
+			require.NoError(t, common.Unmarshal(w.Body.Bytes(), &response))
+			assert.Equal(t, tc.wantSuccess, response.Success)
+			assert.Len(t, response.Data.Items, tc.wantItems)
+			if tc.wantItems > 0 {
+				assert.Equal(t, "CONFIG_READY_RUNTIME_UNTESTED", response.Data.Items[0].Status)
+				assert.Equal(t, "NOT_TESTED", response.Data.Items[0].RequestStatus)
+				if tc.runID == "" {
+					require.NotNil(t, response.Data.Items[0].HistoricalEvidence)
+					assert.Equal(t, priorRun.ID, response.Data.Items[0].HistoricalEvidence.RunID)
+					assert.Equal(t, "RUNTIME_AMBIGUOUS", response.Data.Items[0].HistoricalEvidence.Result)
+				} else {
+					assert.Nil(t, response.Data.Items[0].HistoricalEvidence)
+				}
+			}
+			assert.NotContains(t, w.Body.String(), "credential_fingerprint")
+			assert.NotContains(t, w.Body.String(), "authorization_manifest_hash")
+			assert.NotContains(t, w.Body.String(), "billing_snapshot_json")
+		})
+	}
+	stored, err := model.GetRuntimeVerificationRun(run.ID)
+	require.NoError(t, err)
+	assert.Zero(t, stored.PaidRequests)
+}
+
+func TestRuntimeVerificationPrepareRejectsClientEvidenceAndPaidOverrides(t *testing.T) {
+	oldDB, oldTransport := model.DB, http.DefaultTransport
+	calls := 0
+	model.DB = nil
+	http.DefaultTransport = diagnosticTripwireTransport{calls: &calls}
+	t.Cleanup(func() { model.DB, http.DefaultTransport = oldDB, oldTransport })
+	for _, body := range []string{
+		`{"model":"image-model","mode":"paid"}`,
+		`{"model":"image-model","input":{}}`,
+		`{"model":"image-model","config_status":"PASS"}`,
+		`{"model":"image-model","approved":true}`,
+		`{"model":123}`,
+		`{"model":"` + strings.Repeat("a", 129) + `"}`,
+		strings.Repeat("x", 4097),
+		`null`,
+	} {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Params = gin.Params{{Key: "id", Value: "1"}}
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/channel/1/runtime-verification", strings.NewReader(body))
+		PrepareChannelRuntimeVerification(c)
+		var response struct {
+			Success bool `json:"success"`
+		}
+		require.NoError(t, common.Unmarshal(w.Body.Bytes(), &response))
+		assert.False(t, response.Success, body)
+	}
+	assert.Zero(t, calls)
 }

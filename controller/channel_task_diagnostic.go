@@ -322,6 +322,15 @@ func channelFailureDiagnostic(channel *model.Channel, result testResult, request
 		d.MappedModel = result.upstreamModel
 	}
 	code := string(result.newAPIError.GetErrorCode())
+	// The channel tester wraps provider errors in a local BadResponse error.
+	// Recover structured provider evidence without interpreting translated text.
+	var providerError *types.NewAPIError
+	if errors.As(result.newAPIError.Unwrap(), &providerError) {
+		code = string(providerError.GetErrorCode())
+	}
+	if status == 503 && code == "NO_HEALTHY_DEPLOYMENT" {
+		code = "deployment_pool_unavailable"
+	}
 	if status == 503 && strings.Contains(message, "no healthy channel for model") {
 		code = "no_channel_available"
 	}
@@ -329,6 +338,11 @@ func channelFailureDiagnostic(channel *model.Channel, result testResult, request
 		code = "deployment_pool_unavailable"
 	}
 	reason := service.ClassifyChannelFailure(service.ChannelFailureEvidence{HTTPStatus: status, ProviderCode: code})
+	// An observed rejection is a failed test even if its root cause is unknown.
+	// Transport failures and timeout responses still need exact reconciliation.
+	if reason == "INSUFFICIENT_EVIDENCE" && result.upstreamStatus >= 300 && status != 408 && status != 504 && status != 524 {
+		reason = "UPSTREAM_HTTP_ERROR"
+	}
 	if code == "PROTOCOL_MISMATCH" {
 		reason = code
 		d.RuntimeAttempted = false

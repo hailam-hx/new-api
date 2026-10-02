@@ -79,6 +79,7 @@ const contracts = {
   "voice-clone-pro": {"shape": "fixed", "endpoint": "/v1/audio/voices", "tiers": []},
   "dh-avatar-create": {"shape": "fixed", "endpoint": "/v1/videos/avatars", "tiers": []}
 };
+const partialClosureModels = ["clip-compose", "dh-avatar", "dh-lipsync", "dh-lipsync-pro", "dh-lipsync-max", "dh-motion", "dh-avatar-create"];
 const models = Object.keys(contracts);
 const videoModels = models.filter(model => contracts[model].endpoint === "/v1/videos/generations");
 const musicModels = models.filter(model => contracts[model].shape === "music");
@@ -122,7 +123,8 @@ export const meta = {
       schema.completion_tokens = tokenField;
       schema.input_mode = { enum: ["default", "with_video_input"], description: { en: "Reference video mode", zh: "参考视频模式" } };
     }
-    if (contract.tiers.length) schema.resolution = { enum: contract.tiers, description: { en: "Output video resolution", zh: "输出视频分辨率" } };
+    if (model === "dh-motion") schema.duration_sec = inputDurationField;
+    if (contract.tiers.length) schema.resolution = { enum: contract.tiers, description: model === "dh-motion" ? { en: "Motion quality tier", zh: "动作质量档位" } : { en: "Output video resolution", zh: "输出视频分辨率" } };
     if (contract.shape === "fixed") schema.count = Object.assign({}, countField, { unitLabel: { en: model === "voice-clone-pro" ? "voice" : model === "dh-avatar-create" ? "avatar" : "task", zh: model === "voice-clone-pro" ? "声音" : model === "dh-avatar-create" ? "数字人" : "任务" } });
     if (contract.shape === "music") schema.generation_count = { type: "number", unit: "count", unitLabel: { en: "generation", zh: "生成" }, description: { en: "Music generation unit price", zh: "音乐生成单价" } };
     const profile = { models: [model], schema };
@@ -250,6 +252,26 @@ function requestIntent(ctx, endpoint) {
     if (videoInput && !requestBody.resolution) throw new Error("Reference video requires explicit resolution");
     if (!requestBody.resolution) requestBody.resolution = "720p";
   }
+  if (partialClosureModels.includes(model)) {
+    requestBody["async"] = true;
+    if (model === "dh-avatar") {
+      const audio = typeof requestBody.audio_url === "string" && /^https?:\/\//.test(requestBody.audio_url);
+      const speech = typeof requestBody.voice === "string" && requestBody.voice && typeof requestBody.text === "string" && requestBody.text;
+      if (typeof requestBody.avatar_id !== "string" || !requestBody.avatar_id || (!audio && !speech)) throw new Error("Avatar and driving audio or voice/text required");
+    }
+    if (["clip-compose", "dh-lipsync", "dh-lipsync-pro", "dh-lipsync-max", "dh-motion"].includes(model) && (typeof requestBody.source_video_url !== "string" || !/^https?:\/\//.test(requestBody.source_video_url))) throw new Error("Public source video URL required");
+    if (model.startsWith("dh-lipsync") && (typeof requestBody.audio_url !== "string" || !/^https?:\/\//.test(requestBody.audio_url))) throw new Error("Public driving audio URL required");
+    if (model === "dh-motion") {
+      if (requestBody.resolution === undefined) requestBody.resolution = "standard";
+      if (!Number.isSafeInteger(requestBody.face_count) || requestBody.face_count < 1 || requestBody.face_count > 7) throw new Error("Motion face_count must be 1 to 7");
+      if (!Array.isArray(requestBody.content) || requestBody.content.length !== requestBody.face_count || requestBody.content.some(item => !item || item.type !== "image_url" || !item.image_url || typeof item.image_url.url !== "string" || !/^https?:\/\//.test(item.image_url.url))) throw new Error("Motion requires one public portrait per face");
+    }
+    if (model === "dh-avatar-create") {
+      if (Array.from(requestBody.name).length > 20) throw new Error("Avatar name must contain at most 20 characters");
+      if (requestBody.source_kind === undefined) requestBody.source_kind = "image";
+      if (!["image", "video"].includes(requestBody.source_kind)) throw new Error("Unknown avatar source kind");
+    }
+  }
   if (contract.tiers.length && !contract.tiers.includes(requestBody.resolution)) throw new Error("MISSING_SELECTED_TIER: explicit supported resolution required");
   return { kind: "submit", model: ctx.model || source.model, action: endpoint, requestBody };
 }
@@ -272,10 +294,10 @@ export function buildSubmitRequest(ctx) {
     subtitleOperations(ctx.requestBody || {});
     throw new Error("MISSING_AUTHORITATIVE_SOURCE_VIDEO_DURATION");
   }
-  const body = Object.assign({}, ctx.requestBody, { model: ctx.upstreamModel || ctx.model });
+  let body = Object.assign({}, ctx.requestBody, { model: ctx.upstreamModel || ctx.model });
   // Revalidate normalized body immediately before any billed upstream request.
   const normalized = requestIntent({ body: { kind: "json", value: body } }, contract.endpoint);
-  body.model = normalized.requestBody.model;
+  body = normalized.requestBody;
   const headers = ctx.requestHeaders || {};
   const key = headers["Idempotency-Key"] || headers["idempotency-key"];
   if (typeof key !== "string" || !/^[\x20-\x7e]{1,200}$/.test(key)) throw new Error("A valid Idempotency-Key is required");
@@ -324,6 +346,10 @@ export function parseSubmitResponse(ctx, resp) {
     state.requested_duration_sec = facts.duration_sec;
     state.reference_mode = wanReferenceMode(ctx.requestBody || {}, contract);
   }
+  if (partialClosureModels.includes(canonicalModel(ctx.upstreamModel || ctx.model))) {
+    state.billing_contract = "DFLOP_PARTIAL_CLOSURE_V1";
+    state.reservation = facts;
+  }
   if (facts.resolution !== undefined) state.resolution = facts.resolution;
   if (facts.input_mode !== undefined) state.input_mode = facts.input_mode;
   const result = { taskId: body.id, taskData: body, state };
@@ -352,7 +378,14 @@ export function extractUsageOnComplete(ctx, result, body) {
     if (!Array.isArray(body.tracks) || !body.tracks.some(track => track && typeof track.audio_url === "string" && track.audio_url)) throw new Error("MISSING_SUCCESSFUL_SONG");
     return { generation_count: 1 };
   }
-  if (["seconds", "input_output", "token_lite"].includes(contract.shape)) facts.duration_sec = nonNegativeFact(body.duration_sec, "MISSING_FINAL_DURATION", 3600, false);
+  const model = canonicalModel(ctx.upstreamModel || ctx.model);
+  if (partialClosureModels.includes(model) && contract.shape === "seconds") {
+    if ((ctx.state || {}).billing_contract !== "DFLOP_PARTIAL_CLOSURE_V1") throw new Error("MISSING_FROZEN_BILLING_CONTRACT");
+    // Motion charges source processing seconds; delivered output length is not evidence of this quantity.
+    const value = model === "dh-motion" ? body.source_duration_sec : body.duration_sec;
+    facts.duration_sec = nonNegativeFact(value, model === "dh-motion" ? "MISSING_AUTHORITATIVE_SOURCE_VIDEO_DURATION" : "MISSING_FINAL_DURATION", 3600, false);
+    if (facts.duration_sec <= 0) throw new Error("Invalid authoritative video duration");
+  } else if (["seconds", "input_output", "token_lite"].includes(contract.shape)) facts.duration_sec = nonNegativeFact(body.duration_sec, "MISSING_FINAL_DURATION", 3600, false);
   if (contract.maxDuration) {
     const state = ctx.state || {};
     const ceiling = nonNegativeFact(state.requested_duration_sec, "MISSING_FROZEN_DURATION_CEILING", contract.maxDuration, false);

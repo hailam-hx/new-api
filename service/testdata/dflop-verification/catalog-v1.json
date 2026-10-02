@@ -1,0 +1,6559 @@
+[
+  {
+    "model_id": "clip-compose",
+    "canonical_id": "clip-compose",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_task"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "count"
+    ],
+    "raw": {
+      "id": "clip-compose",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "clip_compose",
+          "modes": {
+            "t2v": false,
+            "i2v": false,
+            "flf": false,
+            "r2v": false
+          },
+          "resolutions": [],
+          "default_resolution": null,
+          "mode_resolutions": {},
+          "ratios": [],
+          "mode_ratios": {},
+          "ratio_follows_source": [],
+          "duration": {
+            "min": 0,
+            "max": 0,
+            "values": [],
+            "default": null,
+            "follows_source": true
+          },
+          "refs": {
+            "images": 0,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [],
+          "audio": "always",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "avatar"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": null,
+          "rank": {}
+        }
+      }
+    }
+  },
+  {
+    "model_id": "dh-avatar",
+    "canonical_id": "dh-avatar",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec"
+    ],
+    "raw": {
+      "id": "dh-avatar",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "avatar",
+          "modes": {
+            "t2v": false,
+            "i2v": false,
+            "flf": false,
+            "r2v": false
+          },
+          "resolutions": [],
+          "default_resolution": null,
+          "mode_resolutions": {},
+          "ratios": [],
+          "mode_ratios": {},
+          "ratio_follows_source": [],
+          "duration": {
+            "min": 0,
+            "max": 0,
+            "values": [],
+            "default": null,
+            "follows_source": true
+          },
+          "refs": {
+            "images": 0,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [],
+          "audio": "always",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "avatar"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": null,
+          "rank": {}
+        }
+      }
+    }
+  },
+  {
+    "model_id": "dh-avatar-create",
+    "canonical_id": "dh-avatar-create",
+    "category": "video",
+    "endpoint_type": "avatar_create",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "avatar"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "count"
+    ],
+    "raw": {
+      "id": "dh-avatar-create",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": null,
+        "surfaces": [
+          "avatar"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": null,
+          "rank": {}
+        }
+      }
+    }
+  },
+  {
+    "model_id": "dh-lipsync",
+    "canonical_id": "dh-lipsync",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec"
+    ],
+    "raw": {
+      "id": "dh-lipsync",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "lipsync",
+          "modes": {
+            "t2v": false,
+            "i2v": false,
+            "flf": false,
+            "r2v": false
+          },
+          "resolutions": [],
+          "default_resolution": null,
+          "mode_resolutions": {},
+          "ratios": [],
+          "mode_ratios": {},
+          "ratio_follows_source": [],
+          "duration": {
+            "min": 0,
+            "max": 0,
+            "values": [],
+            "default": null,
+            "follows_source": true
+          },
+          "refs": {
+            "images": 0,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [],
+          "audio": "always",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "avatar"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": null,
+          "rank": {}
+        }
+      }
+    }
+  },
+  {
+    "model_id": "dh-lipsync-max",
+    "canonical_id": "dh-lipsync-max",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec"
+    ],
+    "raw": {
+      "id": "dh-lipsync-max",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "lipsync",
+          "modes": {
+            "t2v": false,
+            "i2v": false,
+            "flf": false,
+            "r2v": false
+          },
+          "resolutions": [],
+          "default_resolution": null,
+          "mode_resolutions": {},
+          "ratios": [],
+          "mode_ratios": {},
+          "ratio_follows_source": [],
+          "duration": {
+            "min": 0,
+            "max": 0,
+            "values": [],
+            "default": null,
+            "follows_source": true
+          },
+          "refs": {
+            "images": 0,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [],
+          "audio": "always",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "avatar"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": null,
+          "rank": {}
+        }
+      }
+    }
+  },
+  {
+    "model_id": "dh-lipsync-pro",
+    "canonical_id": "dh-lipsync-pro",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec"
+    ],
+    "raw": {
+      "id": "dh-lipsync-pro",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "lipsync",
+          "modes": {
+            "t2v": false,
+            "i2v": false,
+            "flf": false,
+            "r2v": false
+          },
+          "resolutions": [],
+          "default_resolution": null,
+          "mode_resolutions": {},
+          "ratios": [],
+          "mode_ratios": {},
+          "ratio_follows_source": [],
+          "duration": {
+            "min": 0,
+            "max": 0,
+            "values": [],
+            "default": null,
+            "follows_source": true
+          },
+          "refs": {
+            "images": 0,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [],
+          "audio": "always",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "avatar"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": null,
+          "rank": {}
+        }
+      }
+    }
+  },
+  {
+    "model_id": "dh-motion",
+    "canonical_id": "dh-motion",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "dh-motion",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "motion",
+          "modes": {
+            "t2v": false,
+            "i2v": false,
+            "flf": false,
+            "r2v": false
+          },
+          "resolutions": [],
+          "default_resolution": null,
+          "mode_resolutions": {},
+          "ratios": [],
+          "mode_ratios": {},
+          "ratio_follows_source": [],
+          "duration": {
+            "min": 0,
+            "max": 0,
+            "values": [],
+            "default": null,
+            "follows_source": true
+          },
+          "refs": {
+            "images": 0,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "avatar"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": null,
+          "rank": {}
+        }
+      }
+    }
+  },
+  {
+    "model_id": "doubao-seedance-2.0",
+    "canonical_id": "doubao-seedance-2.0",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers",
+      "video_token",
+      "video_token_formula_seedance_2_0"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "completion_tokens",
+      "resolution",
+      "input_mode"
+    ],
+    "raw": {
+      "id": "doubao-seedance-2.0",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "480p",
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9",
+            "adaptive"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [],
+          "duration": {
+            "min": 4,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 3,
+            "audios": 3,
+            "total": 12,
+            "audio_alone": false,
+            "video_min_pixels": 409600,
+            "audio_min_sec": 1.8
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "toggle",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5b57\u8282 Seedance",
+          "rank": {
+            "video_order": 2
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "doubao-seedance-2.0-fast",
+    "canonical_id": "doubao-seedance-2.0-fast",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers",
+      "video_token",
+      "video_token_formula_seedance_2_0"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "completion_tokens",
+      "resolution",
+      "input_mode"
+    ],
+    "raw": {
+      "id": "doubao-seedance-2.0-fast",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "480p",
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9",
+            "adaptive"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [],
+          "duration": {
+            "min": 4,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 3,
+            "audios": 3,
+            "total": 12,
+            "audio_alone": false,
+            "video_min_pixels": 409600,
+            "audio_min_sec": 1.8
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "toggle",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": "Seedance 2.0 \u6781\u901f",
+          "vendor_group": "\u5b57\u8282 Seedance",
+          "rank": {
+            "video_order": 3
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "doubao-seedance-2.0-fast-lite",
+    "canonical_id": "doubao-seedance-2.0-fast-lite",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers",
+      "video_token",
+      "video_token_formula_seedance_2_0",
+      "video_two_stage"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "completion_tokens",
+      "resolution",
+      "input_mode",
+      "duration_sec"
+    ],
+    "raw": {
+      "id": "doubao-seedance-2.0-fast-lite",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9",
+            "adaptive"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [],
+          "duration": {
+            "min": 4,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 3,
+            "audios": 3,
+            "total": 12,
+            "audio_alone": false,
+            "video_min_pixels": 409600,
+            "audio_min_sec": 1.8
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "toggle",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5b57\u8282 Seedance",
+          "rank": {
+            "video_order": 6
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "doubao-seedance-2.0-lite",
+    "canonical_id": "doubao-seedance-2.0-lite",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers",
+      "video_token",
+      "video_token_formula_seedance_2_0",
+      "video_two_stage"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "completion_tokens",
+      "resolution",
+      "input_mode",
+      "duration_sec"
+    ],
+    "raw": {
+      "id": "doubao-seedance-2.0-lite",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9",
+            "adaptive"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [],
+          "duration": {
+            "min": 4,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 3,
+            "audios": 3,
+            "total": 12,
+            "audio_alone": false,
+            "video_min_pixels": 409600,
+            "audio_min_sec": 1.8
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "toggle",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5b57\u8282 Seedance",
+          "rank": {
+            "video_order": 5
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "doubao-seedance-2.0-mini",
+    "canonical_id": "doubao-seedance-2.0-mini",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers",
+      "video_token",
+      "video_token_formula_seedance_2_0"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "completion_tokens",
+      "resolution",
+      "input_mode"
+    ],
+    "raw": {
+      "id": "doubao-seedance-2.0-mini",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "480p",
+            "720p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9",
+            "adaptive"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [],
+          "duration": {
+            "min": 4,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 3,
+            "audios": 3,
+            "total": 12,
+            "audio_alone": false,
+            "video_min_pixels": 409600,
+            "audio_min_sec": 1.8
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "toggle",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5b57\u8282 Seedance",
+          "rank": {
+            "video_order": 4
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "doubao-seedance-2.0-mini-lite",
+    "canonical_id": "doubao-seedance-2.0-mini-lite",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers",
+      "video_token",
+      "video_token_formula_seedance_2_0",
+      "video_two_stage"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "completion_tokens",
+      "resolution",
+      "input_mode",
+      "duration_sec"
+    ],
+    "raw": {
+      "id": "doubao-seedance-2.0-mini-lite",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9",
+            "adaptive"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [],
+          "duration": {
+            "min": 4,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 3,
+            "audios": 3,
+            "total": 12,
+            "audio_alone": false,
+            "video_min_pixels": 409600,
+            "audio_min_sec": 1.8
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "toggle",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5b57\u8282 Seedance",
+          "rank": {
+            "video_order": 7
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "doubao-seedance-2.5",
+    "canonical_id": "doubao-seedance-2.5",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers",
+      "video_token",
+      "video_token_formula_seedance_2_5"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "completion_tokens",
+      "resolution",
+      "input_mode"
+    ],
+    "raw": {
+      "id": "doubao-seedance-2.5",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "480p",
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9",
+            "adaptive"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 4,
+            "max": 30,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 30,
+            "videos": 10,
+            "audios": 10,
+            "total": null,
+            "audio_alone": true,
+            "video_min_pixels": 409600,
+            "audio_min_sec": 1.8
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "toggle",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5b57\u8282 Seedance",
+          "rank": {
+            "canvas_agent_video": 1,
+            "video_order": 1
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "doubao-seedance-2.5-lite",
+    "canonical_id": "doubao-seedance-2.5-lite",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers",
+      "video_token",
+      "video_token_formula_seedance_2_5",
+      "video_two_stage"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "completion_tokens",
+      "resolution",
+      "input_mode",
+      "duration_sec"
+    ],
+    "raw": {
+      "id": "doubao-seedance-2.5-lite",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9",
+            "adaptive"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 4,
+            "max": 30,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 30,
+            "videos": 10,
+            "audios": 10,
+            "total": null,
+            "audio_alone": true,
+            "video_min_pixels": 409600,
+            "audio_min_sec": 1.8
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "toggle",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5b57\u8282 Seedance",
+          "rank": {
+            "video_order": 8
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "doubao-seedream-4-0-250828",
+    "canonical_id": "doubao-seedream-4-0-250828",
+    "category": "image",
+    "endpoint_type": "images_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "per_image"
+    ],
+    "task_plugin": "dflop-image",
+    "required_facts": [
+      "image_count"
+    ],
+    "raw": {
+      "id": "doubao-seedream-4-0-250828",
+      "caps": {
+        "chat": null,
+        "image": {
+          "path": "images_api",
+          "ratios": [
+            "1:1",
+            "2:3",
+            "3:2",
+            "9:16",
+            "16:9",
+            "3:4",
+            "4:3",
+            "21:9",
+            "auto"
+          ],
+          "size": {
+            "mode": "wxh",
+            "tiers": [
+              "1K",
+              "2K",
+              "4K"
+            ],
+            "min_pixels": 921600,
+            "max_pixels": 16777216,
+            "max_side": 4096,
+            "align": null,
+            "min_long_edge": null,
+            "min_short_edge": null,
+            "custom": true,
+            "default_size": "1024x1024",
+            "preset_tier": null
+          },
+          "max_outputs": 15,
+          "fixed_outputs": null,
+          "max_refs": 14,
+          "refs_plus_outputs_max": 15
+        },
+        "video": null,
+        "surfaces": [
+          "chat",
+          "image_studio",
+          "canvas_image"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": null,
+          "rank": {
+            "image": 4,
+            "image_featured": 5
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "doubao-seedream-4-5-251128",
+    "canonical_id": "doubao-seedream-4-5-251128",
+    "category": "image",
+    "endpoint_type": "images_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "per_image"
+    ],
+    "task_plugin": "dflop-image",
+    "required_facts": [
+      "image_count"
+    ],
+    "raw": {
+      "id": "doubao-seedream-4-5-251128",
+      "caps": {
+        "chat": null,
+        "image": {
+          "path": "images_api",
+          "ratios": [
+            "1:1",
+            "2:3",
+            "3:2",
+            "9:16",
+            "16:9",
+            "3:4",
+            "4:3",
+            "21:9",
+            "auto"
+          ],
+          "size": {
+            "mode": "wxh",
+            "tiers": [
+              "2K",
+              "4K"
+            ],
+            "min_pixels": 3686400,
+            "max_pixels": 16777216,
+            "max_side": 4096,
+            "align": null,
+            "min_long_edge": null,
+            "min_short_edge": null,
+            "custom": true,
+            "default_size": "2048x2048",
+            "preset_tier": "2K"
+          },
+          "max_outputs": 15,
+          "fixed_outputs": null,
+          "max_refs": 14,
+          "refs_plus_outputs_max": 15
+        },
+        "video": null,
+        "surfaces": [
+          "chat",
+          "image_studio",
+          "canvas_image"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": null,
+          "rank": {
+            "image_featured": 4
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "doubao-seedream-5-0-260128",
+    "canonical_id": "doubao-seedream-5-0-260128",
+    "category": "image",
+    "endpoint_type": "images_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "per_image"
+    ],
+    "task_plugin": "dflop-image",
+    "required_facts": [
+      "image_count"
+    ],
+    "raw": {
+      "id": "doubao-seedream-5-0-260128",
+      "caps": {
+        "chat": null,
+        "image": {
+          "path": "images_api",
+          "ratios": [
+            "1:1",
+            "2:3",
+            "3:2",
+            "9:16",
+            "16:9",
+            "3:4",
+            "4:3",
+            "21:9",
+            "auto"
+          ],
+          "size": {
+            "mode": "wxh",
+            "tiers": [
+              "2K",
+              "4K"
+            ],
+            "min_pixels": 3686400,
+            "max_pixels": 16777216,
+            "max_side": 4096,
+            "align": null,
+            "min_long_edge": null,
+            "min_short_edge": null,
+            "custom": true,
+            "default_size": "2048x2048",
+            "preset_tier": "2K"
+          },
+          "max_outputs": 15,
+          "fixed_outputs": null,
+          "max_refs": 14,
+          "refs_plus_outputs_max": 15
+        },
+        "video": null,
+        "surfaces": [
+          "chat",
+          "image_studio",
+          "canvas_image"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": null,
+          "rank": {
+            "image_featured": 2
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "grok-imagine-video",
+    "canonical_id": "grok-imagine-video",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec"
+    ],
+    "raw": {
+      "id": "grok-imagine-video",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": false,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {
+            "r2v": [
+              "720p"
+            ]
+          },
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "3:2",
+            "2:3"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "edit",
+            "extend"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 7,
+            "videos": 1,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [
+            {
+              "op": "edit",
+              "min_sec": null,
+              "max_sec": null
+            },
+            {
+              "op": "extend",
+              "min_sec": 2,
+              "max_sec": 10
+            }
+          ],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": "Grok \u89c6\u9891 (\u5168\u80fd)",
+          "vendor_group": "xAI Grok",
+          "rank": {
+            "video_order": 9
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "grok-imagine-video-1.5-preview",
+    "canonical_id": "grok-imagine-video-1.5-preview",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec"
+    ],
+    "raw": {
+      "id": "grok-imagine-video-1.5-preview",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": false,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {
+            "r2v": [
+              "720p"
+            ]
+          },
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "3:2",
+            "2:3"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "edit",
+            "extend"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 7,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": "Grok \u89c6\u9891 1.5",
+          "vendor_group": "xAI Grok",
+          "rank": {
+            "video_order": 10
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "happyhorse-1.0-i2v",
+    "canonical_id": "happyhorse-1.0-i2v",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "happyhorse-1.0-i2v",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": false,
+            "i2v": true,
+            "flf": false,
+            "r2v": false
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v"
+          ],
+          "duration": {
+            "min": 3,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 0,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [
+            "ref_image"
+          ],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u901a\u4e49\u5feb\u4e50\u9a6c",
+          "rank": {}
+        }
+      }
+    }
+  },
+  {
+    "model_id": "happyhorse-1.0-r2v",
+    "canonical_id": "happyhorse-1.0-r2v",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "happyhorse-1.0-r2v",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": false,
+            "i2v": true,
+            "flf": false,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v"
+          ],
+          "duration": {
+            "min": 3,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [
+            "ref_image"
+          ],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u901a\u4e49\u5feb\u4e50\u9a6c",
+          "rank": {
+            "video_order": 12
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "happyhorse-1.0-t2v",
+    "canonical_id": "happyhorse-1.0-t2v",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "happyhorse-1.0-t2v",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": false,
+            "r2v": false
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v"
+          ],
+          "duration": {
+            "min": 3,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 0,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": "\u5feb\u4e50\u9a6c 1.0 (\u6587/\u56fe\u751f)",
+          "vendor_group": "\u901a\u4e49\u5feb\u4e50\u9a6c",
+          "rank": {
+            "video_order": 11
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "happyhorse-1.0-video-edit",
+    "canonical_id": "happyhorse-1.0-video-edit",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "happyhorse-1.0-video-edit",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": false,
+            "i2v": false,
+            "flf": false,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "r2v"
+          ],
+          "duration": {
+            "min": 3,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": true
+          },
+          "refs": {
+            "images": 5,
+            "videos": 1,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [
+            "ref_video"
+          ],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u901a\u4e49\u5feb\u4e50\u9a6c",
+          "rank": {
+            "video_order": 13
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "happyhorse-1.1-i2v",
+    "canonical_id": "happyhorse-1.1-i2v",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "happyhorse-1.1-i2v",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": false,
+            "i2v": true,
+            "flf": false,
+            "r2v": false
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v"
+          ],
+          "duration": {
+            "min": 3,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 0,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [
+            "ref_image"
+          ],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u901a\u4e49\u5feb\u4e50\u9a6c",
+          "rank": {}
+        }
+      }
+    }
+  },
+  {
+    "model_id": "happyhorse-1.1-r2v",
+    "canonical_id": "happyhorse-1.1-r2v",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "happyhorse-1.1-r2v",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": false,
+            "i2v": true,
+            "flf": false,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v"
+          ],
+          "duration": {
+            "min": 3,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [
+            "ref_image"
+          ],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u901a\u4e49\u5feb\u4e50\u9a6c",
+          "rank": {
+            "video_order": 15
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "happyhorse-1.1-t2v",
+    "canonical_id": "happyhorse-1.1-t2v",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "happyhorse-1.1-t2v",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": false,
+            "r2v": false
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v"
+          ],
+          "duration": {
+            "min": 3,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 0,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": "\u5feb\u4e50\u9a6c 1.1 (\u6587/\u56fe\u751f)",
+          "vendor_group": "\u901a\u4e49\u5feb\u4e50\u9a6c",
+          "rank": {
+            "video_order": 14
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "minimax-h3",
+    "canonical_id": "minimax-h3",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_input_seconds",
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "minimax-h3",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "768p",
+            "2k"
+          ],
+          "default_resolution": "768p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9",
+            "adaptive"
+          ],
+          "mode_ratios": {
+            "t2v": [
+              "16:9",
+              "9:16",
+              "1:1",
+              "4:3",
+              "3:4",
+              "21:9"
+            ]
+          },
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 4,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 5,
+            "videos": 3,
+            "audios": 3,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u6d77\u87ba MiniMax",
+          "rank": {
+            "video_order": 32
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "minimax-h3-max",
+    "canonical_id": "minimax-h3-max",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "minimax-h3-max",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": false
+          },
+          "resolutions": [
+            "480p",
+            "768p"
+          ],
+          "default_resolution": "480p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9",
+            "adaptive"
+          ],
+          "mode_ratios": {
+            "t2v": [
+              "16:9",
+              "9:16",
+              "1:1",
+              "4:3",
+              "3:4",
+              "21:9"
+            ]
+          },
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 5,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 0,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": "\u6d77\u87ba H3 Max (\u6781\u901f)",
+          "vendor_group": "\u6d77\u87ba MiniMax",
+          "rank": {
+            "video_order": 33
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "qwen-image-3.0",
+    "canonical_id": "qwen-image-3.0",
+    "category": "image",
+    "endpoint_type": "images_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "input_images",
+      "per_image"
+    ],
+    "task_plugin": "dflop-image",
+    "required_facts": [
+      "image_count",
+      "input_image_count"
+    ],
+    "raw": {
+      "id": "qwen-image-3.0",
+      "caps": {
+        "chat": null,
+        "image": {
+          "path": "images_api",
+          "ratios": [
+            "1:1",
+            "2:3",
+            "3:2",
+            "9:16",
+            "16:9",
+            "3:4",
+            "4:3",
+            "21:9",
+            "auto"
+          ],
+          "size": {
+            "mode": "wxh",
+            "tiers": [
+              "1K",
+              "2K",
+              "4K"
+            ],
+            "min_pixels": 3686400,
+            "max_pixels": 16777216,
+            "max_side": 4096,
+            "align": null,
+            "min_long_edge": null,
+            "min_short_edge": null,
+            "custom": true,
+            "default_size": null,
+            "preset_tier": null
+          },
+          "max_outputs": 9,
+          "fixed_outputs": null,
+          "max_refs": 50,
+          "refs_plus_outputs_max": null
+        },
+        "video": null,
+        "surfaces": [
+          "chat",
+          "image_studio",
+          "canvas_image"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": null,
+          "rank": {}
+        }
+      }
+    }
+  },
+  {
+    "model_id": "suno-v3.5",
+    "canonical_id": "suno-v3.5",
+    "category": "audio",
+    "endpoint_type": "music_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "music"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "generation_count"
+    ],
+    "raw": {
+      "id": "suno-v3.5",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": null,
+        "surfaces": [
+          "music"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": null,
+          "rank": {}
+        }
+      }
+    }
+  },
+  {
+    "model_id": "suno-v4",
+    "canonical_id": "suno-v4",
+    "category": "audio",
+    "endpoint_type": "music_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "music"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "generation_count"
+    ],
+    "raw": {
+      "id": "suno-v4",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": null,
+        "surfaces": [
+          "music"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": null,
+          "rank": {}
+        }
+      }
+    }
+  },
+  {
+    "model_id": "suno-v4.5",
+    "canonical_id": "suno-v4.5",
+    "category": "audio",
+    "endpoint_type": "music_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "music"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "generation_count"
+    ],
+    "raw": {
+      "id": "suno-v4.5",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": null,
+        "surfaces": [
+          "music"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": null,
+          "rank": {}
+        }
+      }
+    }
+  },
+  {
+    "model_id": "suno-v5",
+    "canonical_id": "suno-v5",
+    "category": "audio",
+    "endpoint_type": "music_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "music"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "generation_count"
+    ],
+    "raw": {
+      "id": "suno-v5",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": null,
+        "surfaces": [
+          "music"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": null,
+          "rank": {}
+        }
+      }
+    }
+  },
+  {
+    "model_id": "suno-v5.5",
+    "canonical_id": "suno-v5.5",
+    "category": "audio",
+    "endpoint_type": "music_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "music"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "generation_count"
+    ],
+    "raw": {
+      "id": "suno-v5.5",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": null,
+        "surfaces": [
+          "music"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": null,
+          "rank": {}
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-hailuo-02",
+    "canonical_id": "tvod-hailuo-02",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-hailuo-02",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 6,
+            "max": 10,
+            "values": [
+              6,
+              10
+            ],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u6d77\u87ba MiniMax",
+          "rank": {
+            "video_order": 35
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-hailuo-2.3",
+    "canonical_id": "tvod-hailuo-2.3",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-hailuo-2.3",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 6,
+            "max": 10,
+            "values": [
+              6,
+              10
+            ],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u6d77\u87ba MiniMax",
+          "rank": {
+            "video_order": 36
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-hailuo-2.3-fast",
+    "canonical_id": "tvod-hailuo-2.3-fast",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-hailuo-2.3-fast",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 6,
+            "max": 10,
+            "values": [
+              6,
+              10
+            ],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u6d77\u87ba MiniMax",
+          "rank": {
+            "video_order": 37
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-hailuo-h3",
+    "canonical_id": "tvod-hailuo-h3",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-hailuo-h3",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "2k",
+            "4k"
+          ],
+          "default_resolution": "2k",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 5,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u6d77\u87ba MiniMax",
+          "rank": {
+            "video_order": 34
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-hunyuan-video-1.0",
+    "canonical_id": "tvod-hunyuan-video-1.0",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-hunyuan-video-1.0",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p",
+            "4k"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u817e\u8baf\u6df7\u5143",
+          "rank": {
+            "video_order": 52
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-hunyuan-video-1.1",
+    "canonical_id": "tvod-hunyuan-video-1.1",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-hunyuan-video-1.1",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p",
+            "4k"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u817e\u8baf\u6df7\u5143",
+          "rank": {
+            "video_order": 51
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-jimeng-1.0-lite-i2v",
+    "canonical_id": "tvod-jimeng-1.0-lite-i2v",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-jimeng-1.0-lite-i2v",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5b57\u8282\u5373\u68a6",
+          "rank": {
+            "video_order": 62
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-jimeng-1.0-pro",
+    "canonical_id": "tvod-jimeng-1.0-pro",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-jimeng-1.0-pro",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5b57\u8282\u5373\u68a6",
+          "rank": {
+            "video_order": 60
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-jimeng-1.0-pro-fast",
+    "canonical_id": "tvod-jimeng-1.0-pro-fast",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-jimeng-1.0-pro-fast",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5b57\u8282\u5373\u68a6",
+          "rank": {
+            "video_order": 61
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-jimeng-1.5-pro",
+    "canonical_id": "tvod-jimeng-1.5-pro",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-jimeng-1.5-pro",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5b57\u8282\u5373\u68a6",
+          "rank": {
+            "video_order": 59
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-jimeng-3.0",
+    "canonical_id": "tvod-jimeng-3.0",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-jimeng-3.0",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5b57\u8282\u5373\u68a6",
+          "rank": {
+            "video_order": 57
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-jimeng-3.0-pro",
+    "canonical_id": "tvod-jimeng-3.0-pro",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-jimeng-3.0-pro",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5b57\u8282\u5373\u68a6",
+          "rank": {
+            "video_order": 58
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-jimeng-4.0",
+    "canonical_id": "tvod-jimeng-4.0",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-jimeng-4.0",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5b57\u8282\u5373\u68a6",
+          "rank": {
+            "video_order": 56
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-kling-video-1.6",
+    "canonical_id": "tvod-kling-video-1.6",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-kling-video-1.6",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 3,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5feb\u624b\u53ef\u7075",
+          "rank": {
+            "video_order": 24
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-kling-video-2.0",
+    "canonical_id": "tvod-kling-video-2.0",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-kling-video-2.0",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 3,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5feb\u624b\u53ef\u7075",
+          "rank": {
+            "video_order": 25
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-kling-video-2.1",
+    "canonical_id": "tvod-kling-video-2.1",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-kling-video-2.1",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 3,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5feb\u624b\u53ef\u7075",
+          "rank": {
+            "video_order": 26
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-kling-video-2.5-turbo",
+    "canonical_id": "tvod-kling-video-2.5-turbo",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-kling-video-2.5-turbo",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 3,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5feb\u624b\u53ef\u7075",
+          "rank": {
+            "video_order": 27
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-kling-video-2.6",
+    "canonical_id": "tvod-kling-video-2.6",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-kling-video-2.6",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 3,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5feb\u624b\u53ef\u7075",
+          "rank": {
+            "video_order": 28
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-kling-video-3.0",
+    "canonical_id": "tvod-kling-video-3.0",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-kling-video-3.0",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p",
+            "4k"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 3,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5feb\u624b\u53ef\u7075",
+          "rank": {
+            "video_order": 29
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-kling-video-3.0-omni",
+    "canonical_id": "tvod-kling-video-3.0-omni",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-kling-video-3.0-omni",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p",
+            "4k"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 3,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5feb\u624b\u53ef\u7075",
+          "rank": {
+            "video_order": 30
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-kling-video-master",
+    "canonical_id": "tvod-kling-video-master",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-kling-video-master",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 3,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5feb\u624b\u53ef\u7075",
+          "rank": {
+            "video_order": 31
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-kling-video-o1",
+    "canonical_id": "tvod-kling-video-o1",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-kling-video-o1",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 3,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u5feb\u624b\u53ef\u7075",
+          "rank": {
+            "video_order": 23
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-midjourney-v7",
+    "canonical_id": "tvod-midjourney-v7",
+    "category": "image",
+    "endpoint_type": "images_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "fixed_output_count",
+      "per_image"
+    ],
+    "task_plugin": "dflop-image",
+    "required_facts": [
+      "image_count"
+    ],
+    "raw": {
+      "id": "tvod-midjourney-v7",
+      "caps": {
+        "chat": null,
+        "image": {
+          "path": "images_api",
+          "ratios": [
+            "1:1",
+            "2:3",
+            "3:2",
+            "9:16",
+            "16:9",
+            "3:4",
+            "4:3",
+            "21:9",
+            "auto"
+          ],
+          "size": {
+            "mode": "ratio_only",
+            "tiers": [
+              "1K",
+              "2K",
+              "4K"
+            ],
+            "min_pixels": 3686400,
+            "max_pixels": 16777216,
+            "max_side": 4096,
+            "align": null,
+            "min_long_edge": null,
+            "min_short_edge": null,
+            "custom": true,
+            "default_size": null,
+            "preset_tier": null
+          },
+          "max_outputs": 4,
+          "fixed_outputs": 4,
+          "max_refs": 50,
+          "refs_plus_outputs_max": null
+        },
+        "video": null,
+        "surfaces": [
+          "chat",
+          "image_studio",
+          "canvas_image"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": null,
+          "rank": {}
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-midjourney-v8.1",
+    "canonical_id": "tvod-midjourney-v8.1",
+    "category": "image",
+    "endpoint_type": "images_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "fixed_output_count",
+      "per_image"
+    ],
+    "task_plugin": "dflop-image",
+    "required_facts": [
+      "image_count"
+    ],
+    "raw": {
+      "id": "tvod-midjourney-v8.1",
+      "caps": {
+        "chat": null,
+        "image": {
+          "path": "images_api",
+          "ratios": [
+            "1:1",
+            "2:3",
+            "3:2",
+            "9:16",
+            "16:9",
+            "3:4",
+            "4:3",
+            "21:9",
+            "auto"
+          ],
+          "size": {
+            "mode": "ratio_only",
+            "tiers": [
+              "1K",
+              "2K",
+              "4K"
+            ],
+            "min_pixels": 3686400,
+            "max_pixels": 16777216,
+            "max_side": 4096,
+            "align": null,
+            "min_long_edge": null,
+            "min_short_edge": null,
+            "custom": true,
+            "default_size": null,
+            "preset_tier": null
+          },
+          "max_outputs": 4,
+          "fixed_outputs": 4,
+          "max_refs": 50,
+          "refs_plus_outputs_max": null
+        },
+        "video": null,
+        "surfaces": [
+          "chat",
+          "image_studio",
+          "canvas_image"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": null,
+          "rank": {}
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-pixverse-c1",
+    "canonical_id": "tvod-pixverse-c1",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-pixverse-c1",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9",
+            "3:2",
+            "2:3"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u7231\u8bd7 PixVerse",
+          "rank": {
+            "video_order": 54
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-pixverse-v5.6",
+    "canonical_id": "tvod-pixverse-v5.6",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-pixverse-v5.6",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9",
+            "3:2",
+            "2:3"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u7231\u8bd7 PixVerse",
+          "rank": {
+            "video_order": 55
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-pixverse-v6",
+    "canonical_id": "tvod-pixverse-v6",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-pixverse-v6",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p",
+            "4k"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9",
+            "3:2",
+            "2:3"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u7231\u8bd7 PixVerse",
+          "rank": {
+            "video_order": 53
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-sora-2",
+    "canonical_id": "tvod-sora-2",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-sora-2",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 8,
+            "max": 8,
+            "values": [
+              8
+            ],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "OpenAI Sora",
+          "rank": {
+            "video": 2,
+            "video_order": 22
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-veo-3.1",
+    "canonical_id": "tvod-veo-3.1",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-veo-3.1",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p",
+            "4k"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 8,
+            "max": 8,
+            "values": [
+              8
+            ],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "Google Veo",
+          "rank": {
+            "video": 1,
+            "video_order": 19
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-veo-3.1-fast",
+    "canonical_id": "tvod-veo-3.1-fast",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-veo-3.1-fast",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 8,
+            "max": 8,
+            "values": [
+              8
+            ],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "Google Veo",
+          "rank": {
+            "video_order": 20
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-veo-3.1-lite",
+    "canonical_id": "tvod-veo-3.1-lite",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-veo-3.1-lite",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 8,
+            "max": 8,
+            "values": [
+              8
+            ],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "Google Veo",
+          "rank": {
+            "video_order": 21
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-vidu-video-2.0",
+    "canonical_id": "tvod-vidu-video-2.0",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-vidu-video-2.0",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 10,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u751f\u6570 Vidu",
+          "rank": {
+            "video_order": 50
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-vidu-video-q1",
+    "canonical_id": "tvod-vidu-video-q1",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-vidu-video-q1",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 10,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u751f\u6570 Vidu",
+          "rank": {
+            "video_order": 48
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-vidu-video-q1-classic",
+    "canonical_id": "tvod-vidu-video-q1-classic",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-vidu-video-q1-classic",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 10,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u751f\u6570 Vidu",
+          "rank": {
+            "video_order": 49
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-vidu-video-q2",
+    "canonical_id": "tvod-vidu-video-q2",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-vidu-video-q2",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 10,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u751f\u6570 Vidu",
+          "rank": {
+            "video_order": 44
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-vidu-video-q2-pro",
+    "canonical_id": "tvod-vidu-video-q2-pro",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-vidu-video-q2-pro",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 10,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u751f\u6570 Vidu",
+          "rank": {
+            "video_order": 46
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-vidu-video-q2-pro-fast",
+    "canonical_id": "tvod-vidu-video-q2-pro-fast",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-vidu-video-q2-pro-fast",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 10,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u751f\u6570 Vidu",
+          "rank": {
+            "video_order": 47
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-vidu-video-q2-turbo",
+    "canonical_id": "tvod-vidu-video-q2-turbo",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-vidu-video-q2-turbo",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 10,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u751f\u6570 Vidu",
+          "rank": {
+            "video_order": 45
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-vidu-video-q3",
+    "canonical_id": "tvod-vidu-video-q3",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-vidu-video-q3",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p",
+            "4k"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 10,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u751f\u6570 Vidu",
+          "rank": {
+            "video_order": 38
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-vidu-video-q3-ad",
+    "canonical_id": "tvod-vidu-video-q3-ad",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-vidu-video-q3-ad",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p",
+            "4k"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 10,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u751f\u6570 Vidu",
+          "rank": {
+            "video_order": 41
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-vidu-video-q3-drama",
+    "canonical_id": "tvod-vidu-video-q3-drama",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-vidu-video-q3-drama",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p",
+            "4k"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 10,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u751f\u6570 Vidu",
+          "rank": {
+            "video_order": 42
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-vidu-video-q3-pro",
+    "canonical_id": "tvod-vidu-video-q3-pro",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-vidu-video-q3-pro",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p",
+            "4k"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 10,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u751f\u6570 Vidu",
+          "rank": {
+            "video_order": 39
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "tvod-vidu-video-q3-turbo",
+    "canonical_id": "tvod-vidu-video-q3-turbo",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "tvod-vidu-video-q3-turbo",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 1,
+            "max": 10,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 9,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "top_level"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": "\u751f\u6570 Vidu",
+          "rank": {
+            "video_order": 40
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "voice-clone-pro",
+    "canonical_id": "voice-clone-pro",
+    "category": "audio",
+    "endpoint_type": "voice_clone",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "voice_clone"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "count"
+    ],
+    "raw": {
+      "id": "voice-clone-pro",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": null,
+        "surfaces": [
+          "voice"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": null,
+          "rank": {}
+        }
+      }
+    }
+  },
+  {
+    "model_id": "voice-tts-pro",
+    "canonical_id": "voice-tts-pro",
+    "category": "audio",
+    "endpoint_type": "tts_synthesize",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "tts_char"
+    ],
+    "task_plugin": "dflop-tts",
+    "required_facts": [
+      "character_count"
+    ],
+    "raw": {
+      "id": "voice-tts-pro",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": null,
+        "surfaces": [
+          "voice"
+        ],
+        "ui": {
+          "label": null,
+          "vendor_group": null,
+          "rank": {}
+        }
+      }
+    }
+  },
+  {
+    "model_id": "wan2.7-t2v",
+    "canonical_id": "wan2.7-t2v",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution"
+    ],
+    "raw": {
+      "id": "wan2.7-t2v",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": false,
+            "r2v": false
+          },
+          "resolutions": [
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 2,
+            "max": 15,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 0,
+            "videos": 0,
+            "audios": 0,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": "\u4e07\u76f8 2.7 (\u6587/\u56fe\u751f)",
+          "vendor_group": "\u901a\u4e49\u4e07\u76f8",
+          "rank": {
+            "video_order": 16
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "wan3.0-video",
+    "canonical_id": "wan3.0-video",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_input_seconds",
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution",
+      "input_video_duration_sec"
+    ],
+    "raw": {
+      "id": "wan3.0-video",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "480p",
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9",
+            "adaptive"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 2,
+            "max": 30,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 10,
+            "videos": 5,
+            "audios": 5,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": "\u4e07\u76f8 3.0 (\u6587/\u56fe\u751f)",
+          "vendor_group": "\u901a\u4e49\u4e07\u76f8",
+          "rank": {
+            "video_order": 17
+          }
+        }
+      }
+    }
+  },
+  {
+    "model_id": "wan3.0-video-prime",
+    "canonical_id": "wan3.0-video-prime",
+    "category": "video",
+    "endpoint_type": "videos_generations",
+    "callable": true,
+    "supported_protocols": [],
+    "billing_features": [
+      "video_input_seconds",
+      "video_second",
+      "video_tiers"
+    ],
+    "task_plugin": "dflop-media",
+    "required_facts": [
+      "duration_sec",
+      "resolution",
+      "input_video_duration_sec"
+    ],
+    "raw": {
+      "id": "wan3.0-video-prime",
+      "caps": {
+        "chat": null,
+        "image": null,
+        "video": {
+          "family": "generic",
+          "modes": {
+            "t2v": true,
+            "i2v": true,
+            "flf": true,
+            "r2v": true
+          },
+          "resolutions": [
+            "480p",
+            "720p",
+            "1080p"
+          ],
+          "default_resolution": "720p",
+          "mode_resolutions": {},
+          "ratios": [
+            "16:9",
+            "9:16",
+            "1:1",
+            "4:3",
+            "3:4",
+            "21:9",
+            "adaptive"
+          ],
+          "mode_ratios": {},
+          "ratio_follows_source": [
+            "i2v",
+            "flf"
+          ],
+          "duration": {
+            "min": 2,
+            "max": 30,
+            "values": [],
+            "default": null,
+            "follows_source": false
+          },
+          "refs": {
+            "images": 10,
+            "videos": 5,
+            "audios": 5,
+            "total": null,
+            "audio_alone": false,
+            "video_min_pixels": null,
+            "audio_min_sec": null
+          },
+          "ref_video_ops": [],
+          "enhance_forced_at": [
+            "2k",
+            "4k"
+          ],
+          "audio": "none",
+          "requires": [],
+          "last_frame_transport": "role"
+        },
+        "surfaces": [
+          "video_workbench",
+          "canvas_video"
+        ],
+        "ui": {
+          "label": "\u4e07\u76f8 3.0 Prime (\u52a0\u901f)",
+          "vendor_group": "\u901a\u4e49\u4e07\u76f8",
+          "rank": {
+            "video_order": 18
+          }
+        }
+      }
+    }
+  }
+]

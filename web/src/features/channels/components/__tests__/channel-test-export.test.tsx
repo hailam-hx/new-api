@@ -66,7 +66,7 @@ test('exports every model with complete errors and distinguishes unknown cost fr
   expect(csv).toContain('"Bad response, body: ""failure""\nFull detail"')
   expect(csv).toContain('"model-1","Not tested"')
   expect(csv).toContain('"0"')
-  expect(csv).toContain('"Unknown"')
+  expect(csv).not.toContain('"Unknown"')
   expect(csv).toContain('2026-10-01T04:00:00.000Z')
   expect(csv).toContain('"anthropic","false"')
 })
@@ -123,4 +123,125 @@ test('downloads CSV without a network request and disables export during testing
     </I18nextProvider>
   )
   expect(screen.getByRole('button', { name: 'Export CSV' })).toBeDisabled()
+})
+
+test('exports persisted verification layers, exact evidence, and blank unknown costs without secrets', () => {
+  const csv = createChannelTestCSV(
+    {
+      channelId: 1,
+      channelName: 'DFLOP',
+      models: ['model-a', 'model-b'],
+      results: {},
+      verification: {
+        run: {
+          id: 7,
+          channel_id: 1,
+          catalog_hash: 'catalog-hash',
+          started_at: 1790827200,
+          status: 'PARTIAL',
+          source: 'DFLOP',
+        },
+        items: [
+          {
+            model: 'model-a',
+            protocol: 'openai_image',
+            operation: 'generate',
+            mode: 'text',
+            fixture_id: 'image-v1',
+            endpoint: '/v1/images/generations',
+            config_status: 'PASS',
+            connectivity_status: 'PASS',
+            request_status: 'NOT_TESTED',
+            generation_status: 'NOT_TESTED',
+            parser_status: 'NOT_TESTED',
+            billing_status: 'BLOCKED',
+            ledger_status: 'NOT_TESTED',
+            status: 'PARTIAL',
+            reason_code: 'READY_FOR_PAID_AUTHORIZATION',
+            pricing_snapshot_hash: 'pricing-hash',
+            billing_expr_hash: 'expr-hash',
+            idempotency_key_hash: 'idempotency-hash',
+            request_id: 'req-1',
+            task_id: 'task-1',
+            trace_id: 'trace-1',
+            terminal_status: 'succeeded',
+            normalized_usage_json: '{"image_count":1,"api_key":"usage-secret"}',
+            provider_usage_json:
+              '{"unit_count":1,"Authorization":"Bearer bearer-secret"}',
+            provider_unit_count: '1',
+            provider_cost_points: '0.100000000000000001',
+            newapi_raw_cost: '0.00001',
+            newapi_quota: 5,
+            wallet_delta: -5,
+            correlation_quality: 'EXACT_TRACE_ID',
+            verified_at: 1790827200,
+            evidence_json:
+              '{"headers":{"cookie":"session-secret"},"result":"https://example.invalid/output?token=url-secret","secret":"evidence-secret"}',
+            historical_evidence: {
+              run_id: 6,
+              model: 'model-a',
+              protocol: 'openai_image',
+              operation: 'generate',
+              mode: 'text',
+              fixture_id: 'image-v1',
+              endpoint: '/v1/images/generations',
+              catalog_hash: 'historical-catalog',
+              config_status: 'PASS',
+              connectivity_status: 'PASS',
+              request_status: 'PASS',
+              generation_status: 'PASS',
+              parser_status: 'PASS',
+              billing_status: 'PASS',
+              ledger_status: 'PASS',
+              status: 'RUNTIME_VERIFIED',
+            },
+          },
+        ],
+      },
+    },
+    i18n.t
+  )
+  for (const column of [
+    'evidence_scope',
+    'config_state',
+    'connectivity_state',
+    'runtime_state',
+    'billing_state',
+    'ledger_state',
+    'catalog_hash',
+    'pricing_snapshot_hash',
+    'billing_expr_hash',
+    'request_id',
+    'task_id',
+    'trace_id',
+    'terminal_status',
+    'normalized_usage',
+    'provider_unit_count',
+    'provider_cost_points',
+    'newapi_quota',
+    'newapi_cost',
+    'correlation_quality',
+    'verified_at',
+  ]) {
+    expect(csv).toContain(`"${column}"`)
+  }
+  expect(csv).toContain('"0.100000000000000001"')
+  expect(csv).toContain('"READY_FOR_PAID_AUTHORIZATION"')
+  expect(csv).toContain('"catalog-hash"')
+  expect(csv).toContain('"EXACT_TRACE_ID"')
+  const currentRow = csv.split('\r\n').find((row) => row.includes('"current"'))
+  const historicalRow = csv
+    .split('\r\n')
+    .find((row) => row.includes('"historical"'))
+  expect(currentRow).toContain('"NOT_TESTED"')
+  expect(currentRow).not.toContain('"RUNTIME_VERIFIED"')
+  expect(historicalRow).toContain('"RUNTIME_VERIFIED"')
+  expect(historicalRow).toContain('"historical-catalog"')
+  expect(historicalRow).toContain('"6"')
+  expect(csv).not.toMatch(
+    /usage-secret|bearer-secret|session-secret|url-secret|evidence-secret/
+  )
+  const unknownRow = csv.split('\r\n').find((row) => row.includes('"model-b"'))
+  expect(unknownRow).toBeDefined()
+  expect(unknownRow).not.toContain('"0"')
 })

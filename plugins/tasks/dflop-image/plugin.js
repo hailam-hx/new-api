@@ -55,7 +55,7 @@ function imageDimensions(value) {
 }
 
 // Reusable output-count rule: authoritative unit_count first; valid image
-// payloads next; a fixed-output contract only for the exact Midjourney SKUs.
+// payloads next. The nominal fixed-output contract reserves submission only.
 // OpenAI-compatible split url/b64 entries represent one image, not two.
 function actualOutputCount(body, contract) {
   const entries = Array.isArray(body.data) ? body.data : body.data && typeof body.data === "object" ? [body.data] : [];
@@ -64,13 +64,15 @@ function actualOutputCount(body, contract) {
   const payloadCount = Math.max(urls.length, base64.length);
   const usage = body.usage || {};
   const reported = body.unit_count !== undefined ? body.unit_count : usage.unit_count !== undefined ? usage.unit_count : usage.output_image_count;
-  if (usage.output_image_count !== undefined && reported !== usage.output_image_count) throw new Error("authoritative output counts disagree");
+  for (const count of [body.unit_count, usage.unit_count, usage.output_image_count]) {
+    if (count !== undefined && count !== reported) throw new Error("authoritative output counts disagree");
+  }
   if (reported !== undefined) {
     if (!Number.isSafeInteger(reported) || reported < 1 || reported > contract.max_outputs || payloadCount === 0 || payloadCount > contract.max_outputs || reported < payloadCount) throw new Error("invalid authoritative output count");
     return { count: reported, images: urls.length >= base64.length ? urls : base64 };
   }
   if (!payloadCount || payloadCount > contract.max_outputs) throw new Error("authoritative image output count is missing");
-  return { count: contract.fixed_outputs || payloadCount, images: urls.length >= base64.length ? urls : base64 };
+  return { count: payloadCount, images: urls.length >= base64.length ? urls : base64 };
 }
 
 function imageUsage(ctx, body) {
@@ -207,7 +209,7 @@ export function parseTaskResult(ctx, body, response) {
   if (body.model !== undefined && body.model !== (ctx.upstreamModel || ctx.model)) throw new Error("DFLOP image model mismatch");
   if (response && response.status >= 400 || ["failed", "expired", "cancelled"].includes(body.status)) return { status: "FAILURE", reason: String((body.error || {}).message || "image generation failed") };
   if (["queued", "running"].includes(body.status)) return { status: body.status === "queued" ? "QUEUED" : "IN_PROGRESS" };
-  if (Array.isArray(body.data) && body.data.length === 0 && (body.unit_count === undefined || body.unit_count === 0)) return { status: "FAILURE", reason: "image generation returned zero outputs" };
+  if (!["completed", "succeeded"].includes(body.status) && Array.isArray(body.data) && body.data.length === 0 && (body.unit_count === undefined || body.unit_count === 0)) return { status: "FAILURE", reason: "image generation returned zero outputs" };
   if (body.data !== undefined || ["completed", "succeeded"].includes(body.status)) {
     try { imageUsage(ctx, body); }
     catch (error) {

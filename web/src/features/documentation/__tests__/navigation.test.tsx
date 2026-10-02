@@ -25,7 +25,10 @@ import {
 } from '@tanstack/react-router'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import i18next from 'i18next'
 import { describe, expect, it } from 'vitest'
+
+import vi from '@/i18n/locales/vi.json'
 
 import { DocsNavigation, DocsSearch } from '../navigation'
 
@@ -61,7 +64,7 @@ describe('documentation navigation', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     )
   })
-  it('finds the short Text / Chat guide without exposing endpoint inventories', async () => {
+  it('finds the short Chat guide without exposing endpoint inventories', async () => {
     const user = userEvent.setup()
     const router = await renderNavigation(<DocsSearch models={[]} />)
     await user.click(
@@ -74,7 +77,7 @@ describe('documentation navigation', () => {
     expect(
       screen.queryByRole('link', { name: /POST \/v1\/chat\/completions/ })
     ).not.toBeInTheDocument()
-    await user.click(screen.getByRole('link', { name: /^Text \/ Chat/ }))
+    await user.click(screen.getByRole('link', { name: /^Chat/ }))
     await waitFor(() =>
       expect(router.state.location.pathname).toBe('/docs/text-chat')
     )
@@ -102,3 +105,30 @@ it('keeps the primary sidebar to eighteen user guides and hides administration e
   ).not.toBeInTheDocument()
   expect(screen.queryByText('Administration')).not.toBeInTheDocument()
 })
+
+it.each([false, true])(
+  'uses bilingual Vietnamese media labels in navigation (mobile: %s)',
+  async (mobile) => {
+    i18next.addResourceBundle('vi', 'translation', vi.translation, true, true)
+    await i18next.changeLanguage('vi')
+    try {
+      await renderNavigation(<DocsNavigation slug='image' mobile={mobile} />)
+      if (mobile)
+        {await userEvent
+          .setup()
+          .click(
+            screen.getByRole('button', {
+              name: vi.translation['Documentation menu'],
+            })
+          )}
+      expect(
+        screen.getByRole('link', { name: 'Hình ảnh (Image)' })
+      ).toHaveAttribute('href', '/docs/image')
+      expect(
+        screen.getByRole('link', { name: 'Âm thanh (Audio)' })
+      ).toHaveAttribute('href', '/docs/audio')
+    } finally {
+      await i18next.changeLanguage('en')
+    }
+  }
+)

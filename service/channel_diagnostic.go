@@ -113,7 +113,7 @@ func EvaluateTaskChannelConfiguration(d *TaskChannelDiagnostic, plugin *jsplugin
 	}
 	d.Checks = append(d.Checks,
 		TaskDiagnosticCheck{Check: "request_constructibility", Status: "not_tested", Reason: "live_canary_requires_input"},
-		TaskDiagnosticCheck{Check: "connectivity", Status: "not_tested", Reason: "connectivity_unavailable"},
+		TaskDiagnosticCheck{Check: "connectivity", Status: "not_tested", Reason: "connectivity_not_tested"},
 		TaskDiagnosticCheck{Check: "live_generation", Status: "not_tested", Reason: "live_canary_required"})
 	if d.Outcome != "fail" {
 		d.Outcome = "partial"

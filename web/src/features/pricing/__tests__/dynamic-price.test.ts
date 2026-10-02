@@ -28,6 +28,7 @@ import {
   getDynamicPricingSummary,
   getDynamicPricingTiers,
   getTaskUsagePriceUnitLabelKey,
+  getTaskUsageQuantityUnitLabelKey,
   hasTaskUsageSchema,
   isUnconfiguredTaskUsageModel,
 } from '../lib/dynamic-price'
@@ -382,6 +383,28 @@ describe('task dynamic pricing', () => {
       }),
       null
     )
+  })
+
+  test('labels speech usage and unit prices per character without token scaling', () => {
+    const model = pricingModel({
+      billing_mode: 'tiered_expr',
+      billing_expr: 'tier("base", u("characters") * 0.0003)',
+      billing_usage_schema: {
+        characters: { type: 'number', unit: 'character' },
+      },
+    })
+    const summary = getDynamicPricingSummary(model, summaryOptions)
+    expect(summary?.primaryEntries[0]).toMatchObject({
+      unit: 'character',
+      value: 0.0003,
+      formatted: '$0.0003',
+    })
+    assert.ok(summary)
+    expect(getDynamicPriceUnitLabelKey(summary.primaryEntries[0])).toBe(
+      'character'
+    )
+    expect(getTaskUsagePriceUnitLabelKey('character')).toBe('character')
+    expect(getTaskUsageQuantityUnitLabelKey('character')).toBe('character')
   })
 
   test('labels task credit usage prices as a direct per-credit rate', () => {

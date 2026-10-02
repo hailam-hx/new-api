@@ -1,0 +1,43 @@
+[
+  {
+    "url": "https://model.dflop.top/en/docs/reference/media-apis",
+    "retrieved_at": "2026-10-02T06:22:08.127952+00:00",
+    "body_sha256": "18314ef2710a8b97c19749e840ebc0d42e2206750aa94998425a4154e8737557",
+    "content_type": "text/html; charset=utf-8",
+    "bytes": 408037,
+    "conflicts": []
+  },
+  {
+    "url": "https://model.dflop.top/en/docs/reference/digital-human-apis",
+    "retrieved_at": "2026-10-02T06:22:08.501187+00:00",
+    "body_sha256": "6fdcf5dd47abe013f9b085a62524a7e9eeb796998107cd32dc46da295a7ca986",
+    "content_type": "text/html; charset=utf-8",
+    "bytes": 223422,
+    "conflicts": [
+      {
+        "model": "dh-avatar",
+        "reason_code": "PROVIDER_DOCUMENTATION_CONFLICT",
+        "documentation_field": "avatar",
+        "production_field": "avatar_id"
+      },
+      {
+        "model": "clip-compose",
+        "reason_code": "PROVIDER_DOCUMENTATION_CONFLICT",
+        "documentation_fields": [
+          "video_url",
+          "asr_id"
+        ],
+        "production_required_field": "source_video_url",
+        "documentation_prerequisite": "fresh subtitle recognition of exactly the submitted speech video"
+      }
+    ]
+  },
+  {
+    "url": "https://model.dflop.top/docs/reference/logs-api",
+    "retrieved_at": "2026-10-02T06:41:17.615118+00:00",
+    "body_sha256": "a43ebb68eda868fdc4cf680bf3207da2ffba2fa34ce9f396e5e17013ff1e1735",
+    "content_type": "text/html; charset=utf-8",
+    "bytes": 199970,
+    "conflicts": []
+  }
+]

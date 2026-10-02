@@ -88,6 +88,7 @@ export function searchDocumentation(
         [
           translate(article.title),
           translate(article.description),
+          ...(article.keywords ?? []).map((key) => translate(key)),
           ...article.sections.flatMap((section) => [
             translate(section.title),
             translateDocSection(section, translate),
@@ -208,5 +209,274 @@ const response = await client.chat.completions.create({
   messages: [{ role: 'user', content: 'Hello' }]${stream ? ',\n  stream: true' : ''}
 })
 ${stream ? "for await (const chunk of response) console.log(chunk.choices[0]?.delta?.content ?? '')" : 'console.log(response.choices[0].message.content)'}`,
+  }
+}
+
+export function buildAPIKeyExample(origin: string) {
+  const url = `${origin.replace(/\/$/, '')}/v1/models`
+  return `curl '${url.replaceAll("'", "'\\''")}' \\
+  -H "Authorization: Bearer YOUR_API_KEY"`
+}
+
+export function buildChatExample(origin: string, greeting = 'Hello!') {
+  const baseURL = `${origin.replace(/\/$/, '')}/v1`
+  const payload = JSON.stringify(
+    {
+      model: 'YOUR_MODEL_ID',
+      messages: [{ role: 'user', content: greeting }],
+    },
+    null,
+    2
+  )
+  return {
+    curl: `curl '${`${baseURL}/chat/completions`.replaceAll("'", "'\\''")}' \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '${payload.replaceAll("'", "'\\''")}'`,
+    python: `from openai import OpenAI
+
+client = OpenAI(
+    api_key="YOUR_API_KEY",
+    base_url=${JSON.stringify(baseURL)}
+)
+
+response = client.chat.completions.create(
+    model="YOUR_MODEL_ID",
+    messages=[
+        {
+            "role": "user",
+            "content": ${JSON.stringify(greeting)}
+        }
+    ]
+)
+
+print(response.choices[0].message.content)`,
+    javascript: `import OpenAI from "openai";
+
+const client = new OpenAI({
+  apiKey: "YOUR_API_KEY",
+  baseURL: ${JSON.stringify(baseURL)}
+});
+
+const response = await client.chat.completions.create({
+  model: "YOUR_MODEL_ID",
+  messages: [
+    {
+      role: "user",
+      content: ${JSON.stringify(greeting)}
+    }
+  ]
+});
+
+console.log(response.choices[0].message.content);`,
+  }
+}
+
+export function buildImageExample(
+  origin: string,
+  prompt = 'A small red house beside a lake'
+) {
+  const baseURL = `${origin.replace(/\/$/, '')}/v1`
+  const payload = JSON.stringify(
+    {
+      model: 'YOUR_MODEL_ID',
+      prompt,
+    },
+    null,
+    2
+  )
+  return {
+    curl: `curl '${`${baseURL}/images/generations`.replaceAll("'", "'\\''")}' \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '${payload.replaceAll("'", "'\\''")}'`,
+    python: `from openai import OpenAI
+
+client = OpenAI(
+    api_key="YOUR_API_KEY",
+    base_url=${JSON.stringify(baseURL)},
+    max_retries=0,
+    timeout=600
+)
+
+response = client.images.generate(
+    model="YOUR_MODEL_ID",
+    prompt=${JSON.stringify(prompt)}
+)
+
+print(response)`,
+    javascript: `import OpenAI from "openai";
+
+const client = new OpenAI({
+  apiKey: "YOUR_API_KEY",
+  baseURL: ${JSON.stringify(baseURL)},
+  maxRetries: 0,
+  timeout: 600000
+});
+
+const response = await client.images.generate({
+  model: "YOUR_MODEL_ID",
+  prompt: ${JSON.stringify(prompt)}
+});
+
+console.log(response);`,
+  }
+}
+
+export function buildVideoExample(
+  origin: string,
+  prompt = 'A paper boat drifting on a calm lake'
+) {
+  const baseURL = `${origin.replace(/\/$/, '')}/v1`
+  const payload = JSON.stringify({ model: 'YOUR_MODEL_ID', prompt }, null, 2)
+  const headers = '  -H "Authorization: Bearer YOUR_API_KEY"'
+  return {
+    curl: `curl '${`${baseURL}/videos`.replaceAll("'", "'\\''")}' \\
+${headers} \\
+  -H "Content-Type: application/json" \\
+  -d '${payload.replaceAll("'", "'\\''")}'`,
+    python: `import requests
+
+response = requests.post(
+    ${JSON.stringify(`${baseURL}/videos`)},
+    headers={
+        "Authorization": "Bearer YOUR_API_KEY",
+        "Content-Type": "application/json"
+    },
+    json={
+        "model": "YOUR_MODEL_ID",
+        "prompt": ${JSON.stringify(prompt)}
+    },
+    timeout=600
+)
+response.raise_for_status()
+result = response.json()
+print(result)`,
+    javascript: `const response = await fetch(
+  ${JSON.stringify(`${baseURL}/videos`)},
+  {
+    method: "POST",
+    headers: {
+      "Authorization": "Bearer YOUR_API_KEY",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "YOUR_MODEL_ID",
+      prompt: ${JSON.stringify(prompt)}
+    })
+  }
+);
+
+const result = await response.json();
+console.log(result);`,
+    status: `curl '${`${baseURL}/videos/TASK_ID`.replaceAll("'", "'\\''")}' \\
+${headers}`,
+    download: `curl '${`${baseURL}/videos/TASK_ID/content`.replaceAll("'", "'\\''")}' \\
+${headers} \\
+  --output video.mp4`,
+  }
+}
+
+export function buildAudioExample(
+  origin: string,
+  task: 'speech' | 'transcription',
+  input = 'Hello! Welcome to New API.',
+  saved = 'Saved speech.mp3'
+) {
+  const baseURL = `${origin.replace(/\/$/, '')}/v1`
+  if (task === 'transcription') {
+    return {
+      curl: `curl '${`${baseURL}/audio/transcriptions`.replaceAll("'", "'\\''")}' \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -F "file=@YOUR_AUDIO_FILE" \\
+  -F "model=YOUR_MODEL_ID"`,
+      python: `import requests
+
+with open("YOUR_AUDIO_FILE", "rb") as audio:
+    response = requests.post(
+        ${JSON.stringify(`${baseURL}/audio/transcriptions`)},
+        headers={"Authorization": "Bearer YOUR_API_KEY"},
+        data={"model": "YOUR_MODEL_ID"},
+        files={"file": audio},
+        timeout=600
+    )
+response.raise_for_status()
+result = response.json()
+print(result["text"])`,
+      javascript: `import { readFile } from "node:fs/promises";
+
+const form = new FormData();
+form.set("model", "YOUR_MODEL_ID");
+form.set("file", new Blob([await readFile("YOUR_AUDIO_FILE")]), "audio.mp3");
+
+const response = await fetch(
+  ${JSON.stringify(`${baseURL}/audio/transcriptions`)},
+  {
+    method: "POST",
+    headers: { "Authorization": "Bearer YOUR_API_KEY" },
+    body: form
+  }
+);
+const result = await response.json();
+console.log(result.text);`,
+    }
+  }
+  const payload = JSON.stringify(
+    {
+      model: 'YOUR_MODEL_ID',
+      input,
+      voice: 'YOUR_VOICE_ID',
+      response_format: 'mp3',
+    },
+    null,
+    2
+  )
+  return {
+    curl: `curl '${`${baseURL}/audio/speech`.replaceAll("'", "'\\''")}' \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '${payload.replaceAll("'", "'\\''")}' \\
+  --output speech.mp3`,
+    python: `import requests
+
+response = requests.post(
+    ${JSON.stringify(`${baseURL}/audio/speech`)},
+    headers={
+        "Authorization": "Bearer YOUR_API_KEY",
+        "Content-Type": "application/json"
+    },
+    json={
+        "model": "YOUR_MODEL_ID",
+        "input": ${JSON.stringify(input)},
+        "voice": "YOUR_VOICE_ID",
+        "response_format": "mp3"
+    },
+    timeout=600
+)
+response.raise_for_status()
+with open("speech.mp3", "wb") as file:
+    file.write(response.content)
+print(${JSON.stringify(saved)})`,
+    javascript: `import { writeFile } from "node:fs/promises";
+
+const response = await fetch(
+  ${JSON.stringify(`${baseURL}/audio/speech`)},
+  {
+    method: "POST",
+    headers: {
+      "Authorization": "Bearer YOUR_API_KEY",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "YOUR_MODEL_ID",
+      input: ${JSON.stringify(input)},
+      voice: "YOUR_VOICE_ID",
+      response_format: "mp3"
+    })
+  }
+);
+const audio = await response.arrayBuffer();
+await writeFile("speech.mp3", Buffer.from(audio));
+console.log(${JSON.stringify(saved)});`,
   }
 }

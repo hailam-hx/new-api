@@ -3,6 +3,7 @@ package jsplugin
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -101,6 +102,78 @@ func TestDFLOPSpeechMissingCharacters(t *testing.T) {
 	report, err := ReplayFixture(t.Context(), string(source), []byte(`{"cases":[{"name":"missing terminal characters","hook":"extractUsageOnComplete","args":[{}, {"status":"SUCCESS"}, {}],"expectedError":"MISSING_CHARACTER_COUNT"}]}`))
 	require.NoError(t, err)
 	assert.Equal(t, 1, report.Passed)
+}
+
+func TestDFLOPSpeechFrozenCharacterContract(t *testing.T) {
+	source, err := os.ReadFile("../../plugins/tasks/dflop-tts/plugin.js")
+	require.NoError(t, err)
+	plugin, err := NewRegistry().RegisterFactory(string(source), Options{Key: "dflop-tts"})
+	require.NoError(t, err)
+	ctx := map[string]any{"model": "speech-alias", "upstreamModel": "voice-tts-pro", "requestBody": map[string]any{"model": "speech-alias", "input": "Hi 世界😀", "async": true}, "baseUrl": "https://api.dflop.top", "apiKey": "test", "requestHeaders": map[string]any{"Idempotency-Key": "speech-intent"}}
+	usage, err := plugin.Engine.Call(t.Context(), "extractUsage", ctx)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"characters": int64(6), "character_count": int64(6)}, usage)
+	request, err := plugin.Engine.Call(t.Context(), "buildSubmitRequest", ctx)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"model": "voice-tts-pro", "input": "Hi 世界😀", "async": true}, request.(map[string]any)["body"])
+	acknowledgement, err := plugin.Engine.Call(t.Context(), "parseSubmitResponse", ctx, map[string]any{"body": map[string]any{"id": "speech-1", "model": "voice-tts-pro", "status": "pending", "characters": 99}})
+	require.NoError(t, err)
+	frozen := acknowledgement.(map[string]any)["state"]
+	require.NotNil(t, frozen)
+	query := map[string]any{"model": "speech-alias", "upstreamModel": "voice-tts-pro", "taskId": "speech-1", "state": frozen, "baseUrl": "https://api.dflop.top", "apiKey": "test"}
+	poll, err := plugin.Engine.Call(t.Context(), "buildQueryRequest", query)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"url": "https://api.dflop.top/v1/audio/speech/speech-1", "method": "GET", "headers": map[string]any{"Authorization": "Bearer test"}}, poll)
+	pending, err := plugin.Engine.Call(t.Context(), "parseTaskResult", query, map[string]any{"id": "speech-1", "model": "voice-tts-pro", "status": "pending", "characters": 99})
+	require.NoError(t, err)
+	assert.Equal(t, "IN_PROGRESS", pending.(map[string]any)["status"])
+	assert.Equal(t, frozen, pending.(map[string]any)["state"])
+	terminal := map[string]any{"id": "speech-1", "model": "voice-tts-pro", "status": "succeeded", "audio_url": "https://r2.dflop.top/speech.mp3", "characters": 4}
+	actual, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", query, map[string]any{"status": "SUCCESS"}, terminal)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"characters": int64(4), "character_count": int64(4)}, actual)
+	delete(terminal, "characters")
+	result, err := plugin.Engine.Call(t.Context(), "parseTaskResult", query, terminal)
+	require.NoError(t, err)
+	assert.Equal(t, "SUCCESS", result.(map[string]any)["status"])
+	state := result.(map[string]any)["state"].(map[string]any)
+	assert.Equal(t, true, state["billingPending"])
+	assert.Equal(t, int64(6), state["reservedCharacters"])
+	delete(terminal, "audio_url")
+	_, err = plugin.Engine.Call(t.Context(), "parseTaskResult", query, terminal)
+	assert.ErrorContains(t, err, "audio_url")
+	failure, err := plugin.Engine.Call(t.Context(), "parseTaskResult", query, map[string]any{"id": "speech-1", "model": "voice-tts-pro", "status": "failed", "error": map[string]any{"message": "synthesis rejected"}})
+	require.NoError(t, err)
+	assert.Equal(t, "FAILURE", failure.(map[string]any)["status"])
+	refunded, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", query, failure, map[string]any{})
+	require.NoError(t, err)
+	assert.Nil(t, refunded)
+}
+
+func TestDFLOPSpeechValidationAndTerminalQuantity(t *testing.T) {
+	source, err := os.ReadFile("../../plugins/tasks/dflop-tts/plugin.js")
+	require.NoError(t, err)
+	cases := []any{
+		map[string]any{"name": "synchronous request rejects", "hook": "protocols", "path": []any{"openai_audio_speech", "decodeRequest"}, "args": []any{map[string]any{"model": "voice-tts-pro", "body": map[string]any{"kind": "json", "value": map[string]any{"model": "voice-tts-pro", "input": "hello", "async": false}}}}, "expectedError": "async=true"},
+		map[string]any{"name": "unknown acknowledgement status rejects", "hook": "parseSubmitResponse", "args": []any{map[string]any{"model": "voice-tts-pro", "requestBody": map[string]any{"model": "voice-tts-pro", "input": "hello", "async": true}}, map[string]any{"body": map[string]any{"id": "speech-1", "model": "voice-tts-pro", "status": "queued"}}}, "expectedError": "acknowledgement"},
+		map[string]any{"name": "zero terminal quantity remains explicit", "hook": "extractUsageOnComplete", "args": []any{map[string]any{}, map[string]any{"status": "SUCCESS"}, map[string]any{"characters": 0, "audio_url": "https://r2.dflop.top/speech.mp3"}}, "expected": map[string]any{"characters": 0, "character_count": 0}},
+		map[string]any{"name": "wrong task id rejects", "hook": "parseTaskResult", "args": []any{map[string]any{"taskId": "speech-1"}, map[string]any{"id": "speech-2", "model": "voice-tts-pro", "status": "succeeded", "audio_url": "https://r2.dflop.top/speech.mp3", "characters": 3}}, "expectedError": "task response"},
+		map[string]any{"name": "unrecognized poll status remains unknown", "hook": "parseTaskResult", "args": []any{map[string]any{"taskId": "speech-1"}, map[string]any{"id": "speech-1", "model": "voice-tts-pro", "status": "other"}}, "expected": map[string]any{"taskId": "speech-1", "status": "UNKNOWN"}},
+	}
+	for _, quantity := range []any{nil, "3", -1, 0.5, 5001} {
+		cases = append(cases, map[string]any{"name": "invalid quantity", "hook": "extractUsageOnComplete", "args": []any{map[string]any{}, map[string]any{"status": "SUCCESS"}, map[string]any{"characters": quantity}}, "expectedError": "invalid authoritative characters"})
+	}
+	cases = append(cases,
+		map[string]any{"name": "full input character ceiling", "hook": "extractUsage", "args": []any{map[string]any{"model": "voice-tts-pro", "requestBody": map[string]any{"model": "voice-tts-pro", "input": strings.Repeat("😀", 5000), "async": true}}}, "expected": map[string]any{"characters": 5000, "character_count": 5000}},
+		map[string]any{"name": "full terminal character ceiling", "hook": "extractUsageOnComplete", "args": []any{map[string]any{}, map[string]any{"status": "SUCCESS"}, map[string]any{"characters": 5000, "audio_url": "https://r2.dflop.top/speech.mp3"}}, "expected": map[string]any{"characters": 5000, "character_count": 5000}},
+		map[string]any{"name": "zero without deliverable rejects", "hook": "extractUsageOnComplete", "args": []any{map[string]any{}, map[string]any{"status": "SUCCESS"}, map[string]any{"characters": 0}}, "expectedError": "audio_url"},
+	)
+
+	fixture, err := common.Marshal(map[string]any{"cases": cases})
+	require.NoError(t, err)
+	report, err := ReplayFixture(t.Context(), string(source), fixture)
+	require.NoError(t, err)
+	assert.Equal(t, len(cases), report.Passed)
 }
 
 func TestDFLOPMediaSubmitIdentityAndReplay(t *testing.T) {

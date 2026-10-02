@@ -65,7 +65,9 @@ export function DocsNavigation(props: { slug: string; mobile?: boolean }) {
                     )}
                   >
                     {t(
-                      article.slug === 'overview' ? 'Overview' : article.title
+                      article.slug === 'overview'
+                        ? 'Overview'
+                        : (article.navigationTitle ?? article.title)
                     )}
                   </Link>
                 </li>

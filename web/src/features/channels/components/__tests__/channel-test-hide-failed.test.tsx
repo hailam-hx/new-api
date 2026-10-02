@@ -251,9 +251,9 @@ test('mixed task batch keeps partial and untested rows out of hide/delete and ne
   const put = vi
     .spyOn(api, 'put')
     .mockResolvedValue({ data: { success: true } })
-  const get = vi
-    .spyOn(api, 'get')
-    .mockRejectedValue(new Error('No legacy upstream test allowed'))
+  const get = vi.spyOn(api, 'get').mockResolvedValue({
+    data: { success: true, data: { run: null, items: [] } },
+  })
   const info = vi.spyOn(toast, 'info')
   vi.mocked(loadChannelModels).mockResolvedValue([
     { id: 1, model_name: 'partial', name_rule: 0, square_state: 'visible' },
@@ -282,7 +282,11 @@ test('mixed task batch keeps partial and untested rows out of hide/delete and ne
   expect(await screen.findByText(/LIVE_CANARY_REQUIRED/)).toBeInTheDocument()
   expect(screen.getByText(/offline metadata/)).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button', { name: 'Close' }))
-  expect(get).not.toHaveBeenCalled()
+  expect(
+    get.mock.calls.every(
+      ([url]) => url === '/api/channel/99/runtime-verification'
+    )
+  ).toBe(true)
   expect(put).not.toHaveBeenCalled()
   expect(info).toHaveBeenCalledWith(
     expect.stringContaining('1 partial, 1 untested, 1 failed')
@@ -351,9 +355,9 @@ test('explicit connectivity appears only for reviewed capability, preserves cata
   const put = vi
     .spyOn(api, 'put')
     .mockResolvedValue({ data: { success: true } })
-  const get = vi
-    .spyOn(api, 'get')
-    .mockRejectedValue(new Error('unexpected generic GET'))
+  const get = vi.spyOn(api, 'get').mockResolvedValue({
+    data: { success: true, data: { run: null, items: [] } },
+  })
   render(
     <QueryClientProvider client={client}>
       <I18nextProvider i18n={i18n}>
@@ -391,7 +395,11 @@ test('explicit connectivity appears only for reviewed capability, preserves cata
     expect.objectContaining({ mode: 'connectivity', model: 'partial' }),
     expect.anything()
   )
-  expect(get).not.toHaveBeenCalled()
+  expect(
+    get.mock.calls.every(
+      ([url]) => url === '/api/channel/99/runtime-verification'
+    )
+  ).toBe(true)
   expect(put).not.toHaveBeenCalled()
   expect(
     screen.queryByRole('button', { name: /Hide failed models/ })
@@ -464,4 +472,73 @@ test('multi-key connectivity requires explicit enabled key selection before any 
     }),
     expect.anything()
   )
+})
+
+test('ambiguous runtime result explains missing evidence instead of displaying an internal status', async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  vi.mocked(loadChannelModelVisibility).mockResolvedValue({})
+  vi.spyOn(api, 'post').mockResolvedValue({
+    data: {
+      success: true,
+      data: {
+        kind: 'ordinary',
+        mode: 'preflight',
+        status: 'preflight_partial',
+        outcome: 'partial',
+        checks: [],
+      },
+    },
+  })
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: {
+      success: false,
+      message: 'network outcome unknown',
+      diagnostic: {
+        kind: 'ordinary',
+        mode: 'runtime',
+        status: 'runtime_failure_unclassified',
+        outcome: 'partial',
+        model: 'partial',
+        mapped_model: 'partial',
+        runtime_attempted: true,
+        connectivity_tested: false,
+        live_generation_tested: false,
+        checks: [
+          {
+            check: 'runtime_evidence',
+            status: 'not_tested',
+            reason_code: 'INSUFFICIENT_EVIDENCE',
+            message: 'network outcome unknown',
+          },
+        ],
+      },
+    },
+  })
+  render(
+    <QueryClientProvider client={client}>
+      <I18nextProvider i18n={i18n}>
+        <ChannelsProvider>
+          <DiagnosticDialogFixture />
+        </ChannelsProvider>
+      </I18nextProvider>
+    </QueryClientProvider>
+  )
+  fireEvent.click(
+    await screen.findByRole('button', { name: /Test all 3 models/ })
+  )
+  expect(
+    (
+      await screen.findAllByText(
+        'Upstream result is inconclusive; exact request evidence is required'
+      )
+    ).length
+  ).toBe(3)
+  expect(
+    screen.queryByText('runtime_failure_unclassified')
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: /Hide failed models/ })
+  ).not.toBeInTheDocument()
 })

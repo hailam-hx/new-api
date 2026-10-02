@@ -23,6 +23,7 @@ import { useTranslation } from 'react-i18next'
 import { CopyButton } from '@/components/copy-button'
 import { StaticDataTable } from '@/components/data-table'
 import { EmptyState } from '@/components/empty-state'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ModelPriceCell } from '@/features/pricing/components/model-price-cell'
@@ -46,6 +47,7 @@ import {
 } from '@/features/pricing/lib/task-price-display'
 import type { PricingModel } from '@/features/pricing/types'
 import { toIntlLocale } from '@/i18n/languages'
+import { getCurrencyLabel } from '@/lib/currency'
 import { formatNumber } from '@/lib/format'
 import { useAuthStore } from '@/stores/auth-store'
 import { useSystemConfigStore } from '@/stores/system-config-store'
@@ -53,8 +55,10 @@ import { useSystemConfigStore } from '@/stores/system-config-store'
 import {
   filterDocumentationModels,
   getDocumentationModelKinds,
-  type DocumentationModelKind,
+  getDocumentationProvider,
+  type DocumentationModelFilter,
 } from './model-kind'
+import { getDocumentationPrice } from './pricing-display'
 
 type CatalogData = {
   models: PricingModel[]
@@ -62,33 +66,46 @@ type CatalogData = {
   usdExchangeRate: number
 }
 
-export function ModelCatalog(props: { data: CatalogData; matrix?: boolean }) {
+export function ModelCatalog(props: {
+  data: CatalogData
+  matrix?: boolean
+  pricing?: boolean
+}) {
   const { t, i18n } = useTranslation()
   const [query, setQuery] = useState('')
-  const [kind, setKind] = useState<DocumentationModelKind | 'all'>('all')
+  const [kind, setKind] = useState<DocumentationModelFilter>('all')
   const [page, setPage] = useState(0)
   const models = useMemo(
     () => filterDocumentationModels(props.data.models, query, kind),
     [props.data.models, query, kind]
   )
   const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
-  const unknown = t('Not provided')
-  const lastPage = Math.max(0, Math.ceil(models.length / 40) - 1)
+  const unknown = t('Unknown type')
+  const lastPage = Math.max(0, Math.ceil(models.length / 25) - 1)
   const currentPage = Math.min(page, lastPage)
   const labels = {
     all: t('All'),
-    text: t('Text'),
+    text: t('Chat'),
+    embeddings: t('Embeddings'),
+    rerank: t('Rerank'),
+    moderation: t('Moderation'),
     image: t('Image'),
     video: t('Video'),
     audio: t('Audio'),
   }
 
   return (
-    <section className='mt-8 min-w-0 space-y-4' id='live-catalog'>
-      <h2 className='text-xl font-semibold'>{t('Models')}</h2>
+    <section
+      className='mt-8 min-w-0 space-y-4'
+      id={props.pricing ? 'price-table' : 'live-catalog'}
+    >
       <Input
         aria-label={t('Search models')}
-        placeholder={t('Search models')}
+        placeholder={t(
+          props.pricing
+            ? 'Search by name or Model ID...'
+            : 'Search by Model ID or provider'
+        )}
         value={query}
         onChange={(event) => {
           setQuery(event.target.value)
@@ -115,77 +132,122 @@ export function ModelCatalog(props: { data: CatalogData; matrix?: boolean }) {
           </Button>
         ))}
       </div>
-      <p className='text-muted-foreground text-xs'>
-        {t(
-          'Copy a model ID to use it in your app. Check that your API key can access it.'
-        )}
+      {!props.pricing && (
+        <p className='text-muted-foreground text-xs'>
+          {t(
+            'Use the exact Model ID in the model field. Your API key must have access to it.'
+          )}
+        </p>
+      )}
+      <p className='text-muted-foreground text-sm' role='status'>
+        {formatNumber(models.length, locale)} {t('Models')}
       </p>
-      <StaticDataTable
-        data={models.slice(currentPage * 40, (currentPage + 1) * 40)}
-        getRowKey={(model) => model.model_name}
-        emptyContent={t('No models found')}
-        tableClassName='min-w-[640px]'
-        columns={[
-          {
-            id: 'model',
-            header: t('Model'),
-            cell: (model) => (
-              <div className='flex items-start gap-1'>
-                <Link
-                  to='/docs/models/$modelId'
-                  params={{ modelId: model.model_name }}
-                  className='max-w-64 font-mono text-xs break-all underline underline-offset-4'
-                >
-                  {model.model_name}
-                </Link>
-                <CopyButton
-                  value={model.model_name}
-                  size='sm'
-                  aria-label={t('Copy model ID')}
-                />
-              </div>
-            ),
-          },
-          {
-            id: 'provider',
-            header: t('Provider'),
-            cell: (model) => model.vendor_name || unknown,
-          },
-          {
-            id: 'type',
-            header: t('Type'),
-            cell: (model) =>
-              getDocumentationModelKinds(model)
-                .map((value) => labels[value])
-                .join(', ') || unknown,
-          },
-          {
-            id: 'context',
-            header: t('Context'),
-            cell: (model) =>
-              model.context_length &&
-              Number.isFinite(model.context_length) &&
-              model.context_length > 0
-                ? formatNumber(model.context_length, locale)
-                : unknown,
-          },
-          {
-            id: 'price',
-            header: t('Price'),
-            cell: (model) => (
-              <DocumentationModelPrice model={model} data={props.data} />
-            ),
-          },
-        ]}
-      />
-      <p className='text-muted-foreground text-xs'>
-        {t(
-          'From shows the lowest available price. Your API key and request options can affect the cost. Check Usage Logs for the amount charged.'
-        )}
-      </p>
+      {models.length === 0 ? (
+        <EmptyState
+          title={t('No models found')}
+          description={t('Try another keyword or reset the filters.')}
+          action={
+            <Button
+              variant='outline'
+              onClick={() => {
+                setQuery('')
+                setKind('all')
+                setPage(0)
+              }}
+            >
+              {t('Reset filters')}
+            </Button>
+          }
+        />
+      ) : (
+        <StaticDataTable
+          data={models.slice(currentPage * 25, (currentPage + 1) * 25)}
+          getRowKey={(model) => model.model_name}
+          emptyContent={t('No models found')}
+          tableClassName='w-full table-fixed [&_tbody]:block md:[&_tbody]:table-row-group [&_tbody>tr]:h-auto [&_thead]:hidden md:[&_thead]:table-header-group [&_tr]:block md:[&_tr]:table-row [&_td]:block [&_td]:whitespace-normal [&_td]:break-words md:[&_td]:table-cell'
+          getRowClassName={() => 'border-b'}
+          columns={[
+            {
+              id: 'model',
+              header: t(props.pricing ? 'Model' : 'Model ID'),
+              className: 'md:w-[32%]',
+              cell: (model) => (
+                <div className='flex items-start gap-1'>
+                  <Link
+                    to='/docs/models/$modelId'
+                    params={{ modelId: model.model_name }}
+                    className='max-w-64 font-mono text-xs break-all underline underline-offset-4'
+                  >
+                    {model.model_name}
+                  </Link>
+                  <CopyButton
+                    value={model.model_name}
+                    size='sm'
+                    aria-label={t('Copy model ID')}
+                    tooltip={t('Copy model ID')}
+                  />
+                </div>
+              ),
+            },
+            ...(props.pricing
+              ? []
+              : [
+                  {
+                    id: 'provider',
+                    header: t('Provider'),
+                    cell: (model: PricingModel) => (
+                      <>
+                        <span className='text-muted-foreground mr-2 text-xs md:hidden'>
+                          {t('Provider')}
+                        </span>
+                        {getDocumentationProvider(model) || '—'}
+                      </>
+                    ),
+                  },
+                ]),
+            {
+              id: 'type',
+              header: t('Type'),
+              cell: (model) => (
+                <div className='flex flex-wrap gap-1'>
+                  {getDocumentationModelKinds(model).length ? (
+                    getDocumentationModelKinds(model).map((value) => (
+                      <Badge key={value} variant='secondary'>
+                        {labels[value]}
+                      </Badge>
+                    ))
+                  ) : (
+                    <span className='text-muted-foreground text-xs'>
+                      {unknown}
+                    </span>
+                  )}
+                </div>
+              ),
+            },
+            {
+              id: 'price',
+              header: t('Price'),
+              cell: (model) =>
+                props.pricing ? (
+                  <PricingListPrice model={model} data={props.data} />
+                ) : (
+                  <DocumentationModelPrice model={model} data={props.data} />
+                ),
+            },
+          ]}
+        />
+      )}
+      {!props.pricing && (
+        <p className='text-muted-foreground text-xs'>
+          {t(
+            'From shows the lowest available price. Your API key and request options can affect the cost. Check Usage Logs for the amount charged.'
+          )}
+        </p>
+      )}
       <div className='flex items-center justify-between gap-2'>
         <p className='text-muted-foreground text-xs'>
-          {formatNumber(models.length, locale)} {t('Models')}
+          {formatNumber(currentPage + 1, locale)} /{' '}
+          {formatNumber(lastPage + 1, locale)}
         </p>
         <div className='flex gap-2'>
           <Button
@@ -234,7 +296,10 @@ export function ModelDocument(props: { modelId: string; data: CatalogData }) {
     )
   }
   const labels = {
-    text: t('Text'),
+    text: t('Chat'),
+    embeddings: t('Embeddings'),
+    rerank: t('Rerank'),
+    moderation: t('Moderation'),
     image: t('Image'),
     video: t('Video'),
     audio: t('Audio'),
@@ -254,29 +319,35 @@ export function ModelDocument(props: { modelId: string; data: CatalogData }) {
     caching: t('Caching'),
     embeddings: t('Embeddings'),
   }
-  const unknown = t('Not provided')
+  const unknown = t('Unknown type')
   const fields = [
     { label: t('Model ID'), value: model.model_name },
-    { label: t('Provider'), value: model.vendor_name || unknown },
+    {
+      label: t('Provider'),
+      value: getDocumentationProvider(model) || '—',
+    },
     {
       label: t('Used for'),
       value: types.map((kind) => labels[kind]).join(', ') || unknown,
     },
-    {
-      label: t('Context'),
-      value:
-        model.context_length &&
-        Number.isFinite(model.context_length) &&
-        model.context_length > 0
-          ? formatNumber(model.context_length, locale)
-          : unknown,
-    },
+    ...(model.context_length &&
+    Number.isFinite(model.context_length) &&
+    model.context_length > 0
+      ? [
+          {
+            label: t('Context'),
+            value: formatNumber(model.context_length, locale),
+          },
+        ]
+      : []),
     {
       label: t('Capabilities'),
       value:
         model.capabilities
-          ?.map((capability) => capabilityLabels[capability] ?? unknown)
-          .join(', ') || unknown,
+          ?.map(
+            (capability) => capabilityLabels[capability] ?? t('Not provided')
+          )
+          .join(', ') || t('Not provided'),
     },
   ]
   return (
@@ -285,7 +356,11 @@ export function ModelDocument(props: { modelId: string; data: CatalogData }) {
         <h1 className='min-w-0 font-mono text-2xl font-semibold break-all'>
           {model.model_name}
         </h1>
-        <CopyButton value={model.model_name} aria-label={t('Copy model ID')} />
+        <CopyButton
+          value={model.model_name}
+          aria-label={t('Copy model ID')}
+          tooltip={t('Copy model ID')}
+        />
       </div>
       <dl className='divide-border divide-y'>
         {fields.map((field) => (
@@ -314,14 +389,15 @@ export function ModelDocument(props: { modelId: string; data: CatalogData }) {
             'Copy the model ID above, then follow the request example for its supported API.'
           )}
         </p>
-        {model.supported_endpoint_types?.includes('openai') && (
-          <Button
-            variant='outline'
-            render={<Link to='/docs/$slug' params={{ slug: 'quickstart' }} />}
-          >
-            {t('Quickstart')}
-          </Button>
-        )}
+        {types.includes('text') &&
+          model.supported_endpoint_types?.includes('openai') && (
+            <Button
+              variant='outline'
+              render={<Link to='/docs/$slug' params={{ slug: 'quickstart' }} />}
+            >
+              {t('Quickstart')}
+            </Button>
+          )}
         {model.supported_endpoint_types?.includes('image-generation') && (
           <Button
             variant='outline'
@@ -405,6 +481,7 @@ export function DocumentationModelPrice(props: {
             priceRate: props.data.priceRate,
             usdExchangeRate: props.data.usdExchangeRate,
             selectedGroup,
+            tokenUnit: 'M',
           }}
           showExpression={false}
         />
@@ -443,7 +520,11 @@ export function DocumentationModelPrice(props: {
           const label =
             entry.labelKind === 'schema'
               ? taskPriceLabel(entry.description, t('Price'), i18n.language)
-              : t(entry.label)
+              : t(
+                  entry.label === 'Completion price'
+                    ? 'Output price'
+                    : entry.label
+                )
           return (
             <div key={entry.key} className='flex flex-wrap gap-x-2 text-xs'>
               <dt className='text-muted-foreground'>{label}</dt>
@@ -521,7 +602,11 @@ export function DocumentationModelPrice(props: {
                               t('Price'),
                               i18n.language
                             )
-                          : t(entry.label)
+                          : t(
+                              entry.label === 'Completion price'
+                                ? 'Output price'
+                                : entry.label
+                            )
                       return (
                         <div
                           key={entry.key}
@@ -540,6 +625,99 @@ export function DocumentationModelPrice(props: {
             })}
           </div>
         )}
+    </div>
+  )
+}
+
+export function PricingListPrice({
+  model,
+  data,
+}: {
+  model: PricingModel
+  data: CatalogData
+}) {
+  const { t, i18n } = useTranslation()
+  const userGroup = useAuthStore((state) => state.auth.user?.group)
+  useSystemConfigStore((state) => state.config.currency)
+  const billingTime = useBillingTime(model.billing_expr)
+  const selectedGroup =
+    userGroup && model.enable_groups.includes(userGroup) ? userGroup : undefined
+  const price = getDocumentationPrice(model, {
+    tokenUnit: 'M',
+    showCurrencySymbol: false,
+    groupRatioMultiplier: getDynamicDisplayGroupRatio(model, selectedGroup),
+    priceRate: data.priceRate,
+    usdExchangeRate: data.usdExchangeRate,
+    now: billingTime === undefined ? undefined : new Date(billingTime),
+    selectedGroup,
+  })
+  const currency = getCurrencyLabel()
+  const groupVariable =
+    !selectedGroup &&
+    new Set(
+      model.enable_groups
+        .map((group) => model.group_ratio?.[group])
+        .filter((value) => typeof value === 'number')
+    ).size > 1
+  const unitLabels: Record<string, string> = {
+    token: t('1M token'),
+    image: t('image'),
+    second: t('second'),
+    request: t('request'),
+    count: t('unit'),
+    credit: t('credit'),
+    character: t('character'),
+  }
+  const details = (
+    <Link
+      to='/docs/models/$modelId'
+      params={{ modelId: model.model_name }}
+      className='text-primary inline-block text-xs underline underline-offset-4'
+    >
+      {t('View pricing details')}
+    </Link>
+  )
+  if (price.state === 'missing') {
+    return (
+      <span className='text-muted-foreground text-xs'>
+        {t('Price not configured')}
+      </span>
+    )
+  }
+  if (price.state === 'details') return details
+  return (
+    <div className='space-y-2'>
+      <dl className='space-y-1'>
+        {price.entries.map((entry) => {
+          let label = t('Price')
+          if (entry.field === 'inputPrice') label = t('Input')
+          else if (entry.field === 'outputPrice') label = t('Output')
+          else if (entry.labelKind === 'schema') {
+            label = taskPriceLabel(entry.description, t('Price'), i18n.language)
+          } else if (entry.field === 'constant') label = t('Additional charge')
+          const unit = taskUsageUnitLabel(
+            entry,
+            i18n.language,
+            unitLabels[entry.unit] ?? t('Model-specific unit')
+          )
+          const from =
+            groupVariable ||
+            (entry.minValue !== undefined && entry.minValue !== entry.maxValue)
+          return (
+            <div
+              key={entry.key}
+              className='flex flex-wrap gap-x-3 gap-y-1 text-sm'
+            >
+              <dt className='text-muted-foreground'>{label}</dt>
+              <dd className='tabular-nums'>
+                {from ? `${t('From')} ` : ''}
+                {entry.formatted} {currency} / {unit}
+              </dd>
+            </div>
+          )
+        })}
+      </dl>
+      {(price.variable || groupVariable) && details}
     </div>
   )
 }

@@ -139,10 +139,16 @@ type TaskPrivateData struct {
 }
 
 type TaskExecutionSnapshot struct {
-	Passive     *RuntimeEvidence    `json:"passive_runtime_binding,omitempty"`
-	RequestID   string              `json:"request_id,omitempty"`
-	RequestPath string              `json:"request_path,omitempty"`
-	TaskPlugin  *TaskPluginSnapshot `json:"task_plugin,omitempty"`
+	RuntimeVerificationTraceID   string `json:"runtime_verification_trace_id,omitempty"`
+	RuntimeVerificationRequestID string `json:"runtime_verification_request_id,omitempty"`
+	// Verification tasks are polled and settled only by the verification engine,
+	// after exact ledger reconciliation. The ordinary scheduler must not refund
+	// an uncertain canary or settle it from estimated quantities.
+	RuntimeVerificationItemID int64               `json:"runtime_verification_item_id,omitempty"`
+	Passive                   *RuntimeEvidence    `json:"passive_runtime_binding,omitempty"`
+	RequestID                 string              `json:"request_id,omitempty"`
+	RequestPath               string              `json:"request_path,omitempty"`
+	TaskPlugin                *TaskPluginSnapshot `json:"task_plugin,omitempty"`
 }
 
 // TaskPluginSnapshot contains credential-free identity only. Plugin source,

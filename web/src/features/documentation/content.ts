@@ -31,18 +31,21 @@ export type DocSection = {
   id: string
   title: string
   body: string
+  task?: string
   values?: Record<string, string | number>
 }
 export type DocArticle = {
   slug: string
   group: string
   title: string
+  navigationTitle?: string
   description: string
   sources: string[]
   sections: DocSection[]
   kind: string
   console?: string
   protocol?: string
+  keywords?: string[]
 }
 
 export const groups: string[] = beginnerData.groups
@@ -71,7 +74,8 @@ const providers: DocArticle[] = CHANNEL_TYPE_OPTIONS.map((provider) => ({
       values: {
         type: provider.value,
         provider: provider.label,
-        detail: CHANNEL_PROVIDER_PRESENTATION[provider.value]?.detailKey ?? '',
+        detail:
+          CHANNEL_PROVIDER_PRESENTATION[provider.value]?.detailKey ?? '',
       },
     },
     {

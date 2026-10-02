@@ -106,6 +106,7 @@ export function getTaskUsageQuantityUnitLabelKey(
   if (unit === 'second') return 's'
   if (unit === 'token') return 'token (unit)'
   if (unit === 'credit') return 'credit'
+  if (unit === 'character') return 'character'
   return 'unit'
 }
 
@@ -115,6 +116,7 @@ export function getTaskUsagePriceUnitLabelKey(
   if (unit === 'second') return 'second'
   if (unit === 'token') return '1M token'
   if (unit === 'credit') return 'credit'
+  if (unit === 'character') return 'character'
   return 'unit'
 }
 
@@ -124,6 +126,7 @@ export function getDynamicPriceUnitLabelKey(
   if (entry.unit === 'second') return 's'
   if (entry.unit === 'count') return 'unit'
   if (entry.unit === 'credit') return 'credit'
+  if (entry.unit === 'character') return 'character'
   // Chat token entries also use unit 'token' but keep the 1M-token label.
   if (entry.unit === 'token' && !entry.variable) return '1M token'
   if (entry.unit === 'request') return 'request'

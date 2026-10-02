@@ -38,6 +38,30 @@ func TestChannelStatusRoutesUseExpectedPermissions(t *testing.T) {
 	assertChannelRoutePermission(t, http.MethodPut, "/", authz.ChannelWrite, controller.UpdateChannel)
 }
 
+func TestChannelRuntimeVerificationRequiresAdminAndExpectedPermissions(t *testing.T) {
+	for _, route := range []struct {
+		method     string
+		path       string
+		url        string
+		permission authz.Permission
+		handler    any
+	}{
+		{http.MethodGet, "/:id/runtime-verification", "/api/channel/1/runtime-verification", authz.ChannelRead, controller.GetChannelRuntimeVerification},
+		{http.MethodGet, "/:id/runtime-verification/:run_id", "/api/channel/1/runtime-verification/2", authz.ChannelRead, controller.GetChannelRuntimeVerification},
+		{http.MethodPost, "/:id/runtime-verification", "/api/channel/1/runtime-verification", authz.ChannelOperate, controller.PrepareChannelRuntimeVerification},
+	} {
+		t.Run(route.method+route.path, func(t *testing.T) {
+			assertChannelRoutePermission(t, route.method, route.path, route.permission, route.handler)
+			gin.SetMode(gin.TestMode)
+			engine := gin.New()
+			registerChannelRoutes(engine.Group("/api"))
+			recorder := httptest.NewRecorder()
+			engine.ServeHTTP(recorder, httptest.NewRequest(route.method, route.url, nil))
+			assert.Equal(t, http.StatusUnauthorized, recorder.Code)
+		})
+	}
+}
+
 func TestChannelDeleteRoutesUseSensitiveWritePermission(t *testing.T) {
 	assertChannelRoutePermission(t, http.MethodDelete, "/:id", authz.ChannelSensitiveWrite, controller.DeleteChannel)
 	assertChannelRoutePermission(t, http.MethodPost, "/batch", authz.ChannelSensitiveWrite, controller.DeleteChannelBatch)

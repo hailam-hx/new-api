@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
@@ -386,7 +387,7 @@ func TestDFLOPTaskProfilesKeepDistinctBillingUnits(t *testing.T) {
 		{"terminal characters", Model{ID: "voice-tts-pro", Category: "audio", EndpointType: "tts_synthesize", BillingFeatures: []string{"tts_char"}, PricePerTTSChar: &unitPrice}, map[string]Price{"price_per_tts_char": {SellingUSD: "0.1"}}, map[string]any{"character_count": 26}, 2.6, "dflop-tts"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			item := Item{ModelID: tc.source.ID, Prices: tc.prices}
+			item := Item{ModelID: tc.source.ID, Prices: tc.prices, PriceSemantics: PriceSemantics{SourcePriceKind: "AUTHENTICATED_EFFECTIVE_PRICE"}}
 			classifyTaskPricing(&item, tc.source)
 			assert.Equal(t, tc.plugin, item.TaskPlugin)
 			require.NotEmpty(t, item.TaskExpression)
@@ -851,6 +852,88 @@ func TestAuthenticatedWanUsageProfilesUseExactQuantityContract(t *testing.T) {
 				}
 				assert.InDelta(t, expected, cost, 1e-12)
 			}
+		})
+	}
+}
+
+func TestAuthenticatedPartialTaskContractClosure(t *testing.T) {
+	for _, tc := range []struct {
+		id, category, endpoint, features, fields, caps, plugin, expression string
+	}{
+		{"tvod-midjourney-v7", "image", "images_generations", `"fixed_output_count","per_image"`, `"price_per_image":"12","images_per_request":4`, `"image":{"fixed_outputs":4}`, "dflop-image", `tier("image", u("image_count") * 0.2)`},
+		{"tvod-midjourney-v8.1", "image", "images_generations", `"fixed_output_count","per_image"`, `"price_per_image":"12","images_per_request":4`, `"image":{"fixed_outputs":4}`, "dflop-image", `tier("image", u("image_count") * 0.2)`},
+		{"voice-tts-pro", "audio", "tts_synthesize", `"tts_char"`, `"price_per_tts_char":"0.132066"`, "", "dflop-tts", `u("character_count") * 0.0022011`},
+		{"clip-compose", "video", "videos_generations", `"video_task"`, `"price_per_video_task":"48"`, "", "dflop-media", `tier("base", u("count") * 0.8)`},
+		{"dh-avatar", "video", "videos_generations", `"video_second"`, `"price_per_video_second":"3.6"`, "", "dflop-media", `tier("base", u("duration_sec") * 0.06)`},
+		{"dh-lipsync", "video", "videos_generations", `"video_second"`, `"price_per_video_second":"4.044"`, "", "dflop-media", `tier("base", u("duration_sec") * 0.0674)`},
+		{"dh-lipsync-pro", "video", "videos_generations", `"video_second"`, `"price_per_video_second":"6.066"`, "", "dflop-media", `tier("base", u("duration_sec") * 0.1011)`},
+		{"dh-lipsync-max", "video", "videos_generations", `"video_second"`, `"price_per_video_second":"12.132"`, "", "dflop-media", `tier("base", u("duration_sec") * 0.2022)`},
+		{"dh-motion", "video", "videos_generations", `"video_second","video_tiers"`, `"price_per_video_second":"6","video_price_tiers":{"fast":"3","max":"12","standard":"6"}`, "", "dflop-media", `u("resolution") == "fast" ? tier("fast", u("duration_sec") * 0.05) : u("resolution") == "max" ? tier("max", u("duration_sec") * 0.2) : tier("standard", u("duration_sec") * 0.1)`},
+		{"dh-avatar-create", "video", "avatar_create", `"avatar"`, `"price_per_avatar":"1"`, "", "dflop-media", `tier("base", u("count") * 0.016666666667)`},
+	} {
+		t.Run(tc.id, func(t *testing.T) {
+			catalog := fmt.Sprintf(`{"schema_version":"1.0","currency":"points","aliases":{},"models":[{"id":%q,"pricing":{"category":%q,"endpoint_type":%q,"callable":true,%s},"billing":{"features":[%s]},"caps":{%s}}]}`, tc.id, tc.category, tc.endpoint, tc.fields, tc.features, tc.caps)
+			items, _, _, err := BuildEffective([]byte(catalog), []byte(`{"points_per_cny":60}`), "1", "1")
+			require.NoError(t, err)
+			require.Len(t, items, 1)
+			assert.Equal(t, SupportedAuto, items[0].Status)
+			assert.Empty(t, items[0].ReasonCode)
+			assert.Empty(t, items[0].Reason)
+			assert.Equal(t, tc.plugin, items[0].TaskPlugin)
+			assert.Equal(t, tc.expression, items[0].TaskExpression, "closing quantity support must preserve catalog-derived expression text")
+			planned, err := Plan(items, model.DefaultDFLOPConfig(), nil, nil)
+			require.NoError(t, err)
+			assert.Equal(t, SupportedAuto, planned[0].Status)
+			assert.Equal(t, tc.expression, planned[0].Expression)
+			// Public rows cannot establish an authenticated quantity contract.
+			var parsed struct {
+				Models []struct {
+					ID      string
+					Pricing map[string]any
+					Billing struct{ Features []string }
+					Caps    map[string]any
+				}
+			}
+			require.NoError(t, common.Unmarshal([]byte(catalog), &parsed))
+			public := parsed.Models[0].Pricing
+			public["id"], public["billing_features"], public["caps"] = tc.id, parsed.Models[0].Billing.Features, parsed.Models[0].Caps
+			encoded, err := common.Marshal(map[string]any{"models": []any{public}})
+			require.NoError(t, err)
+			unverified, _, err := Build(encoded, []byte(`{"points_per_cny":60}`), "1", "1")
+			require.NoError(t, err)
+			assert.Equal(t, UnsupportedMapping, unverified[0].Status)
+			assert.NotEmpty(t, unverified[0].ReasonCode)
+			unverifiedPlan, err := Plan(unverified, model.DefaultDFLOPConfig(), nil, nil)
+			require.NoError(t, err)
+			assert.Equal(t, UnsupportedMapping, unverifiedPlan[0].Status)
+		})
+	}
+}
+
+func TestPartialTaskClosureRequiresExactBindingAndCompatibleFacts(t *testing.T) {
+	previous := jsplugin.DefaultRegistry
+	t.Cleanup(func() { jsplugin.DefaultRegistry = previous })
+	catalog := []byte(`{"schema_version":"1.0","currency":"points","aliases":{},"models":[{"id":"dh-avatar","pricing":{"category":"video","endpoint_type":"videos_generations","callable":true,"price_per_video_second":"3.6"},"billing":{"features":["video_second"]},"caps":{}}]}`)
+	source, err := builtinplugins.Source("dflop-media")
+	require.NoError(t, err)
+	for _, tc := range []struct{ name, source string }{
+		{"missing binding", ""},
+		{"missing endpoint binding", strings.Replace(source, `protocols: [{ name: "openai_video", models: videoModels }]`, `protocols: [{ name: "openai_video", models: videoModels.filter(model => model !== "dh-avatar") }]`, 1)},
+		{"incompatible duration fact", strings.ReplaceAll(source, `unit: "second"`, `unit: "count"`)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			jsplugin.DefaultRegistry = jsplugin.NewRegistry()
+			if tc.source != "" {
+				_, err := jsplugin.DefaultRegistry.RegisterFactory(tc.source, jsplugin.Options{Key: "dflop-media"})
+				require.NoError(t, err)
+			}
+			items, _, _, err := BuildEffective(catalog, []byte(`{"points_per_cny":60}`), "1", "1")
+			require.NoError(t, err)
+			assert.Equal(t, UnsupportedMapping, items[0].Status)
+			assert.NotEmpty(t, items[0].ReasonCode)
+			planned, err := Plan(items, model.DefaultDFLOPConfig(), nil, nil)
+			require.NoError(t, err)
+			assert.Equal(t, UnsupportedMapping, planned[0].Status)
 		})
 	}
 }

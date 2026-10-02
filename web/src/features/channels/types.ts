@@ -231,6 +231,75 @@ export interface TaskChannelDiagnostic {
   }[]
 }
 
+export type VerificationLayerStatus =
+  | 'PASS'
+  | 'FAIL'
+  | 'NOT_TESTED'
+  | 'BLOCKED'
+  | 'AMBIGUOUS'
+
+export interface ChannelVerificationRun {
+  id: number
+  channel_id: number
+  catalog_hash: string
+  started_at: number | string
+  status: string
+  source: string
+}
+
+/** Persisted evidence returned by the administrator verification API. */
+export interface ChannelVerificationItem {
+  id?: number
+  run_id?: number
+  model: string
+  protocol: string
+  operation: string
+  mode: string
+  fixture_id: string
+  endpoint: string
+  catalog_hash?: string
+  pricing_snapshot_hash?: string
+  billing_expr_hash?: string
+  config_status: VerificationLayerStatus
+  connectivity_status: VerificationLayerStatus
+  request_status: VerificationLayerStatus
+  generation_status: VerificationLayerStatus
+  parser_status: VerificationLayerStatus
+  billing_status: VerificationLayerStatus
+  ledger_status: VerificationLayerStatus
+  status: string
+  reason_code?: string
+  request_id?: string
+  task_id?: string
+  trace_id?: string
+  idempotency_key_hash?: string
+  terminal_status?: string
+  normalized_usage_json?: string
+  provider_usage_json?: string
+  provider_unit_count?: string
+  provider_cost_points?: string
+  newapi_raw_cost?: string
+  newapi_quota?: number | null
+  wallet_delta?: number | null
+  billing_source?: string
+  result?: string
+  evidence_json?: string
+  correlation_quality?: string
+  verified_at?: number | string
+  historical_evidence?: ChannelVerificationItem
+}
+
+export interface ChannelVerificationData {
+  run: ChannelVerificationRun | null
+  items: ChannelVerificationItem[]
+}
+
+export interface ChannelVerificationResponse {
+  success: boolean
+  message?: string
+  data: ChannelVerificationData
+}
+
 export interface ChannelTestResponse {
   diagnostic?: TaskChannelDiagnostic
   success: boolean

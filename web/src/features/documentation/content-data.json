@@ -77,7 +77,10 @@
       "group": "Getting started",
       "title": "Base URL",
       "description": "Use the gateway address for clients and the provider address for channels.",
-      "sources": ["router/relay-router.go", "web/src/hooks/use-status.ts"],
+      "sources": [
+        "router/relay-router.go",
+        "web/src/hooks/use-status.ts"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -417,7 +420,10 @@
       "group": "APIs",
       "title": "Chat Completions",
       "description": "Registered API surface with model-specific compatibility limits.",
-      "sources": ["router/relay-router.go", "relaykit/dto/openai_request.go"],
+      "sources": [
+        "router/relay-router.go",
+        "relaykit/dto/openai_request.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -470,7 +476,10 @@
       "group": "APIs",
       "title": "Embeddings",
       "description": "Registered API surface with model-specific compatibility limits.",
-      "sources": ["router/relay-router.go", "relaykit/dto/embedding.go"],
+      "sources": [
+        "router/relay-router.go",
+        "relaykit/dto/embedding.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -495,7 +504,10 @@
       "group": "APIs",
       "title": "Images",
       "description": "Registered API surface with model-specific compatibility limits.",
-      "sources": ["router/relay-router.go", "pkg/jsplugin/routing.go"],
+      "sources": [
+        "router/relay-router.go",
+        "pkg/jsplugin/routing.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -520,7 +532,10 @@
       "group": "APIs",
       "title": "Video",
       "description": "Registered API surface with model-specific compatibility limits.",
-      "sources": ["router/relay-router.go", "router/video-router.go"],
+      "sources": [
+        "router/relay-router.go",
+        "router/video-router.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -573,7 +588,10 @@
       "group": "APIs",
       "title": "Async Tasks",
       "description": "Registered API surface with model-specific compatibility limits.",
-      "sources": ["router/relay-router.go", "router/task-router.go"],
+      "sources": [
+        "router/relay-router.go",
+        "router/task-router.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -598,7 +616,10 @@
       "group": "Integrations",
       "title": "Claude Code",
       "description": "Connect a client using supported gateway protocols.",
-      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sources": [
+        "router/relay-router.go",
+        "middleware/auth.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -624,7 +645,10 @@
       "group": "Integrations",
       "title": "Cursor",
       "description": "Connect a client using supported gateway protocols.",
-      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sources": [
+        "router/relay-router.go",
+        "middleware/auth.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -650,7 +674,10 @@
       "group": "Integrations",
       "title": "Cline",
       "description": "Connect a client using supported gateway protocols.",
-      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sources": [
+        "router/relay-router.go",
+        "middleware/auth.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -676,7 +703,10 @@
       "group": "Integrations",
       "title": "Continue integration",
       "description": "Connect a client using supported gateway protocols.",
-      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sources": [
+        "router/relay-router.go",
+        "middleware/auth.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -702,7 +732,10 @@
       "group": "Integrations",
       "title": "Open WebUI",
       "description": "Connect a client using supported gateway protocols.",
-      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sources": [
+        "router/relay-router.go",
+        "middleware/auth.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -728,7 +761,10 @@
       "group": "Integrations",
       "title": "Cherry Studio",
       "description": "Connect a client using supported gateway protocols.",
-      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sources": [
+        "router/relay-router.go",
+        "middleware/auth.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -754,7 +790,10 @@
       "group": "Integrations",
       "title": "ChatBox",
       "description": "Connect a client using supported gateway protocols.",
-      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sources": [
+        "router/relay-router.go",
+        "middleware/auth.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -780,7 +819,10 @@
       "group": "Integrations",
       "title": "OpenAI-compatible applications",
       "description": "Connect a client using supported gateway protocols.",
-      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sources": [
+        "router/relay-router.go",
+        "middleware/auth.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -829,7 +871,10 @@
       "group": "Guides",
       "title": "Tool Calling",
       "description": "Practical guidance constrained by the actual protocol and provider.",
-      "sources": ["router/relay-router.go", "relaykit/dto/openai_request.go"],
+      "sources": [
+        "router/relay-router.go",
+        "relaykit/dto/openai_request.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -849,7 +894,10 @@
       "group": "Guides",
       "title": "Structured Output",
       "description": "Practical guidance constrained by the actual protocol and provider.",
-      "sources": ["router/relay-router.go", "relaykit/dto/openai_request.go"],
+      "sources": [
+        "router/relay-router.go",
+        "relaykit/dto/openai_request.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -869,7 +917,10 @@
       "group": "Guides",
       "title": "Multimodal",
       "description": "Practical guidance constrained by the actual protocol and provider.",
-      "sources": ["router/relay-router.go", "relaykit/dto/openai_request.go"],
+      "sources": [
+        "router/relay-router.go",
+        "relaykit/dto/openai_request.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -889,7 +940,10 @@
       "group": "Guides",
       "title": "Image-to-Image",
       "description": "Practical guidance constrained by the actual protocol and provider.",
-      "sources": ["router/relay-router.go", "pkg/jsplugin/routing.go"],
+      "sources": [
+        "router/relay-router.go",
+        "pkg/jsplugin/routing.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -909,7 +963,10 @@
       "group": "Guides",
       "title": "Video Generation",
       "description": "Practical guidance constrained by the actual protocol and provider.",
-      "sources": ["router/relay-router.go", "router/video-router.go"],
+      "sources": [
+        "router/relay-router.go",
+        "router/video-router.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -929,7 +986,10 @@
       "group": "Guides",
       "title": "Retry & Error Handling",
       "description": "Practical guidance constrained by the actual protocol and provider.",
-      "sources": ["router/relay-router.go", "controller/relay.go"],
+      "sources": [
+        "router/relay-router.go",
+        "controller/relay.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -949,7 +1009,10 @@
       "group": "Guides",
       "title": "Migrate from OpenAI",
       "description": "Practical guidance constrained by the actual protocol and provider.",
-      "sources": ["router/relay-router.go", "router/relay-router.go"],
+      "sources": [
+        "router/relay-router.go",
+        "router/relay-router.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -969,7 +1032,10 @@
       "group": "Guides",
       "title": "Migrate from Anthropic",
       "description": "Practical guidance constrained by the actual protocol and provider.",
-      "sources": ["router/relay-router.go", "router/relay-router.go"],
+      "sources": [
+        "router/relay-router.go",
+        "router/relay-router.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -1013,7 +1079,10 @@
       "group": "Console",
       "title": "API Keys",
       "description": "Use the current console menu and workflow.",
-      "sources": ["web/src/features/keys/index.tsx", "router/api-router.go"],
+      "sources": [
+        "web/src/features/keys/index.tsx",
+        "router/api-router.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -1034,7 +1103,10 @@
       "group": "Console",
       "title": "Model Square",
       "description": "Use the current console menu and workflow.",
-      "sources": ["web/src/features/pricing/index.tsx", "router/api-router.go"],
+      "sources": [
+        "web/src/features/pricing/index.tsx",
+        "router/api-router.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -1103,7 +1175,10 @@
       "group": "Console",
       "title": "Wallet",
       "description": "Use the current console menu and workflow.",
-      "sources": ["web/src/features/wallet/index.tsx", "router/api-router.go"],
+      "sources": [
+        "web/src/features/wallet/index.tsx",
+        "router/api-router.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -1124,7 +1199,10 @@
       "group": "Console",
       "title": "Recharge / Payment",
       "description": "Use the current console menu and workflow.",
-      "sources": ["web/src/features/wallet/index.tsx", "router/api-router.go"],
+      "sources": [
+        "web/src/features/wallet/index.tsx",
+        "router/api-router.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -1169,7 +1247,10 @@
       "group": "Console",
       "title": "Orders",
       "description": "Use the current console menu and workflow.",
-      "sources": ["web/src/features/wallet/index.tsx", "router/api-router.go"],
+      "sources": [
+        "web/src/features/wallet/index.tsx",
+        "router/api-router.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -1190,7 +1271,10 @@
       "group": "Console",
       "title": "Profile",
       "description": "Use the current console menu and workflow.",
-      "sources": ["web/src/features/profile/index.tsx", "router/api-router.go"],
+      "sources": [
+        "web/src/features/profile/index.tsx",
+        "router/api-router.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -1235,7 +1319,10 @@
       "group": "Administration",
       "title": "Administration",
       "description": "Operate the platform through its existing administrator tools.",
-      "sources": ["router/channel-router.go", "router/api-router.go"],
+      "sources": [
+        "router/channel-router.go",
+        "router/api-router.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -1280,7 +1367,10 @@
       "group": "Administration",
       "title": "Channel Configuration",
       "description": "Operate the platform through its existing administrator tools.",
-      "sources": ["model/channel.go", "router/api-router.go"],
+      "sources": [
+        "model/channel.go",
+        "router/api-router.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -1325,7 +1415,10 @@
       "group": "Administration",
       "title": "Routing",
       "description": "Operate the platform through its existing administrator tools.",
-      "sources": ["middleware/distributor.go", "router/api-router.go"],
+      "sources": [
+        "middleware/distributor.go",
+        "router/api-router.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -1370,7 +1463,10 @@
       "group": "Administration",
       "title": "Groups / Roles",
       "description": "Operate the platform through its existing administrator tools.",
-      "sources": ["service/authz/permission.go", "router/api-router.go"],
+      "sources": [
+        "service/authz/permission.go",
+        "router/api-router.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -1391,7 +1487,10 @@
       "group": "Administration",
       "title": "Users",
       "description": "Operate the platform through its existing administrator tools.",
-      "sources": ["router/api-router.go", "router/api-router.go"],
+      "sources": [
+        "router/api-router.go",
+        "router/api-router.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -1436,7 +1535,10 @@
       "group": "Administration",
       "title": "Finance",
       "description": "Operate the platform through its existing administrator tools.",
-      "sources": ["router/api-router.go", "router/api-router.go"],
+      "sources": [
+        "router/api-router.go",
+        "router/api-router.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -1555,7 +1657,10 @@
       "group": "Reference",
       "title": "Request Headers",
       "description": "Use protocol-specific headers without confusing client keys with channel credentials.",
-      "sources": ["middleware/auth.go", "relay/channel/claude/adaptor.go"],
+      "sources": [
+        "middleware/auth.go",
+        "relay/channel/claude/adaptor.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -1575,7 +1680,10 @@
       "group": "Reference",
       "title": "Error Codes",
       "description": "Generated gateway error constants with no invented status mapping.",
-      "sources": ["relaykit/types/error.go", "middleware/auth.go"],
+      "sources": [
+        "relaykit/types/error.go",
+        "middleware/auth.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -1619,7 +1727,10 @@
       "group": "Reference",
       "title": "Payment Webhooks",
       "description": "Inbound payment callbacks are distinct from asynchronous AI task polling.",
-      "sources": ["router/api-router.go", "router/task-router.go"],
+      "sources": [
+        "router/api-router.go",
+        "router/task-router.go"
+      ],
       "sections": [
         {
           "id": "section-1",
@@ -1639,7 +1750,10 @@
       "group": "Reference",
       "title": "Changelog",
       "description": "Find release history without synthesizing changes for this deployment.",
-      "sources": ["VERSION", "README.en.md"],
+      "sources": [
+        "VERSION",
+        "README.en.md"
+      ],
       "sections": [
         {
           "id": "section-1",

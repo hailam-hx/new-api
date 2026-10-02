@@ -55,14 +55,17 @@ export function ChannelTestExport(props: ChannelTestExportProps) {
         variant='outline'
         size='sm'
         onClick={handleExport}
-        disabled={props.disabled || props.models.length === 0}
+        disabled={
+          props.disabled ||
+          (props.models.length === 0 && !props.verification?.items.length)
+        }
       >
         <Download data-icon='inline-start' />
         {t('Export CSV')}
       </Button>
       <p className='text-muted-foreground text-xs'>
         {t(
-          'Export all models and full results for Excel. Test costs are unavailable from the test API.'
+          'Export all models, verification layers, and sanitized evidence for Excel. Unknown costs remain blank.'
         )}
       </p>
     </div>

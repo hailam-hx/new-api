@@ -20,7 +20,7 @@ func TestDFLOPImageAuthoritativeSettlement(t *testing.T) {
 		want        map[string]any
 		invalid     bool
 	}{
-		{"fixed grid ignores requested n", "tvod-midjourney-v7", map[string]any{"data": []any{map[string]any{"url": "https://example/grid"}}}, map[string]any{"image_count": int64(4)}, false},
+		{"single payload cannot imply four outputs", "tvod-midjourney-v7", map[string]any{"data": []any{map[string]any{"url": "https://example/grid"}}}, map[string]any{"image_count": int64(1)}, false},
 		{"provider count has priority", "tvod-midjourney-v8.1", map[string]any{"unit_count": 2, "data": []any{map[string]any{"url": "https://example/grid"}}}, map[string]any{"image_count": int64(2)}, false},
 		{"missing payload cannot prove fixed grid succeeded", "tvod-midjourney-v7", map[string]any{}, nil, true},
 		{"fractional count rejected", "tvod-midjourney-v7", map[string]any{"unit_count": 1.5, "data": []any{map[string]any{"url": "https://example/grid"}}}, nil, true},
@@ -73,7 +73,10 @@ func TestDFLOPImageBindingAndReservation(t *testing.T) {
 	}{
 		{"missing size reserves large", "qwen-image-3.0-pro", map[string]any{"prompt": "cat"}, 0, 1, 1},
 		{"exact threshold request", "qwen-image-3.0-pro", map[string]any{"prompt": "cat", "size": "2048x1024", "n": 2}, 0, 2, 2},
-		{"MJ request n is irrelevant", "tvod-midjourney-v7", map[string]any{"prompt": "cat", "n": 1}, 0, 0, 4},
+		{"MJ v7 n1 reserves four", "tvod-midjourney-v7", map[string]any{"prompt": "cat", "n": 1}, 0, 0, 4},
+		{"MJ v7 n10 reserves four", "tvod-midjourney-v7", map[string]any{"prompt": "cat", "n": 10}, 0, 0, 4},
+		{"MJ v8.1 n1 reserves four", "tvod-midjourney-v8.1", map[string]any{"prompt": "cat", "n": 1}, 0, 0, 4},
+		{"MJ v8.1 n10 reserves four", "tvod-midjourney-v8.1", map[string]any{"prompt": "cat", "n": 10}, 0, 0, 4},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			value, err := plugin.Engine.CallPath(t.Context(), "protocols", []string{"openai_image", "decodeRequest"}, map[string]any{"model": tc.model, "operation": "generate", "body": map[string]any{"kind": "json", "value": tc.req}})
@@ -187,6 +190,8 @@ func TestDFLOPImageContractProfiles(t *testing.T) {
 		{"doubao-seedream-5-0-pro-260628", "IMAGE_PIXEL_TIER", 1, 10, []string{"image_count", "small_image_count", "large_image_count", "input_image_count"}},
 		{"qwen-image-3.0", "IMAGE_PER_OUTPUT_PLUS_REFERENCE", 9, 50, []string{"image_count", "input_image_count"}},
 		{"qwen-image-3.0-pro", "IMAGE_PIXEL_TIER", 9, 50, []string{"image_count", "small_image_count", "large_image_count", "input_image_count"}},
+		{"tvod-midjourney-v7", "IMAGE_PER_OUTPUT", 10, 3, []string{"image_count"}},
+		{"tvod-midjourney-v8.1", "IMAGE_PER_OUTPUT", 10, 3, []string{"image_count"}},
 	} {
 		t.Run(tc.model, func(t *testing.T) {
 			binding, found := registry.Generation().LookupEndpoint("POST", "/v1/images/generations", tc.model)
@@ -325,4 +330,73 @@ func TestDFLOPImageFrozenContractAndMissingFacts(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, []any{map[string]any{"url": "https://example/img"}}, value.(map[string]any)["data"])
 	})
+}
+
+func TestDFLOPMidjourneyTerminalQuantity(t *testing.T) {
+	source, err := builtinplugins.Source("dflop-image")
+	require.NoError(t, err)
+	plugin, err := jsplugin.NewRegistry().RegisterFactory(source, jsplugin.Options{Key: "dflop-image"})
+	require.NoError(t, err)
+	for _, model := range []string{"tvod-midjourney-v7", "tvod-midjourney-v8.1"} {
+		for _, tc := range []struct {
+			name  string
+			body  map[string]any
+			count int64
+		}{
+			{"one payload", map[string]any{"data": map[string]any{"url": "https://example/one"}}, 1},
+			{"two payloads", map[string]any{"data": []any{map[string]any{"url": "https://example/one"}, map[string]any{"url": "https://example/two"}}}, 2},
+			{"four payloads", map[string]any{"data": []any{map[string]any{"url": "https://example/one"}, map[string]any{"url": "https://example/two"}, map[string]any{"url": "https://example/three"}, map[string]any{"url": "https://example/four"}}}, 4},
+			{"authoritative grid units", map[string]any{"unit_count": 4, "data": map[string]any{"url": "https://example/grid"}}, 4},
+			{"usage authoritative units", map[string]any{"usage": map[string]any{"unit_count": 2}, "data": map[string]any{"url": "https://example/grid"}}, 2},
+			{"missing terminal usage", map[string]any{}, 0},
+			{"empty successful output", map[string]any{"data": []any{}}, 0},
+			{"zero successful units", map[string]any{"unit_count": 0, "data": []any{}}, 0},
+			{"units without delivered payload", map[string]any{"unit_count": 4}, 0},
+			{"negative units", map[string]any{"unit_count": -1, "data": map[string]any{"url": "https://example/grid"}}, 0},
+			{"fractional units", map[string]any{"unit_count": 1.5, "data": map[string]any{"url": "https://example/grid"}}, 0},
+			{"oversized units", map[string]any{"unit_count": 11, "data": map[string]any{"url": "https://example/grid"}}, 0},
+			{"conflicting units", map[string]any{"unit_count": 4, "usage": map[string]any{"unit_count": 2}, "data": map[string]any{"url": "https://example/grid"}}, 0},
+		} {
+			t.Run(model+"/"+tc.name, func(t *testing.T) {
+				ctx := map[string]any{"model": model, "requestBody": map[string]any{"n": 10}, "state": dflopImageSubmissionState(t, plugin, model, 0)}
+				reserved, err := plugin.Engine.Call(t.Context(), "extractUsage", ctx)
+				require.NoError(t, err)
+				assert.Equal(t, map[string]any{"image_count": int64(4)}, reserved)
+				body := tc.body
+				body["status"] = "completed"
+				parsed, err := plugin.Engine.Call(t.Context(), "parseTaskResult", ctx, body, map[string]any{"status": 200})
+				require.NoError(t, err)
+				terminal := parsed.(map[string]any)
+				require.Equal(t, "SUCCESS", terminal["status"], "successful provider completion must not trigger failure refunds")
+				if _, hasData := body["data"]; hasData {
+					immediate, err := plugin.Engine.Call(t.Context(), "parseSubmitResponse", ctx, map[string]any{"statusCode": 200, "body": body})
+					require.NoError(t, err)
+					assert.Equal(t, terminal, immediate.(map[string]any)["immediate"])
+				}
+				ctx["state"] = terminal["state"]
+				facts, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", ctx, terminal, body)
+				require.NoError(t, err)
+				usage := reserved.(map[string]any)
+				if tc.count == 0 {
+					assert.Equal(t, true, terminal["state"].(map[string]any)["billingPending"])
+					assert.Equal(t, "MISSING_AUTHORITATIVE_IMAGE_USAGE", terminal["state"].(map[string]any)["blocker"])
+					assert.Empty(t, facts)
+				} else {
+					assert.Equal(t, false, terminal["state"].(map[string]any)["billingPending"])
+					assert.Equal(t, map[string]any{"image_count": tc.count}, facts)
+					usage = facts.(map[string]any)
+				}
+				// A synthetic expression verifies missing completion facts keep the
+				// four-image reservation instead of creating a zero charge.
+				expression := `tier("image", u("image_count") * 0.1)`
+				bill, err := billingexpr.ComputeTieredQuotaWithRequest(&billingexpr.BillingSnapshot{ExprString: expression, ExprHash: billingexpr.ExprHashString(expression), GroupRatio: 1, QuotaPerUnit: 500000, ExprVersion: 1, TaskUsageBilling: true}, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: usage})
+				require.NoError(t, err)
+				wantQuota := 200000
+				if tc.count != 0 {
+					wantQuota = int(tc.count) * 50000
+				}
+				assert.Equal(t, wantQuota, bill.ActualQuotaAfterGroup)
+			})
+		}
+	}
 }

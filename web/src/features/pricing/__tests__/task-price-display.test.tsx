@@ -56,6 +56,16 @@ it('shows an explicit free request price alongside token prices with distinct un
   expect(screen.getAllByText('Price per request').length).toBeGreaterThan(0)
 })
 
+it('shows the speech price with its character unit in the detailed breakdown', () => {
+  render(
+    <DynamicPricingBreakdown
+      billingExpr='tier("base", u("characters") * 0.0003)'
+      usageSchema={{ characters: { type: 'number', unit: 'character' } }}
+    />
+  )
+  expect(screen.getAllByText('$0.0003/character').length).toBeGreaterThan(0)
+})
+
 it('renders weekday and hour conditions as time windows instead of expression source', () => {
   const condition =
     'weekday("Asia/Shanghai") >= 1 && weekday("Asia/Shanghai") <= 5 && ((hour("Asia/Shanghai") >= 9 && hour("Asia/Shanghai") < 12) || (hour("Asia/Shanghai") >= 14 && hour("Asia/Shanghai") < 18))'

@@ -162,13 +162,13 @@ func TestDFLOPSpeechTaskUsageIsAuthoritativeAtCompletion(t *testing.T) {
 	usage, err := plugin.Engine.Call(t.Context(), "extractUsage", map[string]any{"requestBody": request, "usagePurpose": "facts"})
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{"characters": int64(6), "character_count": int64(6)}, usage)
-	for _, input := range []string{strings.Repeat("a", 129), strings.Repeat("语", 43)} {
+	for _, input := range []string{strings.Repeat("a", 5001), strings.Repeat("语", 5001), strings.Repeat("😀", 5001)} {
 		_, decodeErr := plugin.Engine.CallPath(t.Context(), "protocols", []string{"openai_audio_speech", "decodeRequest"}, map[string]any{
 			"body": map[string]any{"kind": "json", "value": map[string]any{"model": "voice-tts-pro", "input": input, "async": true}},
 		})
-		assert.ErrorContains(t, decodeErr, "128 billable characters")
+		assert.ErrorContains(t, decodeErr, "1 to 5000 characters")
 	}
-	for _, input := range []string{strings.Repeat("a", 128), strings.Repeat("语", 42)} {
+	for _, input := range []string{strings.Repeat("a", 5000), strings.Repeat("语", 5000), strings.Repeat("😀", 5000)} {
 		_, decodeErr := plugin.Engine.CallPath(t.Context(), "protocols", []string{"openai_audio_speech", "decodeRequest"}, map[string]any{
 			"body": map[string]any{"kind": "json", "value": map[string]any{"model": "voice-tts-pro", "input": input, "async": true}},
 		})
@@ -181,8 +181,8 @@ func TestDFLOPSpeechTaskUsageIsAuthoritativeAtCompletion(t *testing.T) {
 		body map[string]any
 		want any
 	}{
-		{"authoritative six", map[string]any{"characters": 6}, map[string]any{"characters": int64(6), "character_count": int64(6)}},
-		{"explicit zero", map[string]any{"characters": 0}, map[string]any{"characters": int64(0), "character_count": int64(0)}},
+		{"authoritative six", map[string]any{"characters": 6, "audio_url": "https://r2.dflop.top/speech.mp3"}, map[string]any{"characters": int64(6), "character_count": int64(6)}},
+		{"explicit zero", map[string]any{"characters": 0, "audio_url": "https://r2.dflop.top/speech.mp3"}, map[string]any{"characters": int64(0), "character_count": int64(0)}},
 		{"missing", map[string]any{}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

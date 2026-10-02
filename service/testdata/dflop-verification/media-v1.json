@@ -1,0 +1,32 @@
+[
+  {
+    "id": "reference-grid-v1",
+    "path": "testdata/dflop-verification/reference-grid-v1.png",
+    "mime_type": "image/png",
+    "sha256": "089c7d906d51621467b91d244e744412fbc6c7b5e6110476bc2e7a30aa225d51",
+    "bytes": 8855,
+    "synthetic": true,
+    "width": 768,
+    "height": 768
+  },
+  {
+    "id": "moving-square-v1",
+    "path": "testdata/dflop-verification/moving-square-v1.mp4",
+    "mime_type": "video/mp4",
+    "sha256": "1dfbbd71b89bdde0e96e6b1b3ee7939123bae2cd9c18bc257178c6ff87f9d25f",
+    "bytes": 9836,
+    "synthetic": true,
+    "width": 768,
+    "height": 768,
+    "seconds": 3
+  },
+  {
+    "id": "synthetic-speech-v1",
+    "path": "testdata/dflop-verification/synthetic-speech-v1.wav",
+    "mime_type": "audio/wav",
+    "sha256": "2ef8f7466281249456d06fbd1e0a42e8682afd36946595d3d29887b0731da8fd",
+    "bytes": 245586,
+    "synthetic": true,
+    "seconds": 7.5465625
+  }
+]

@@ -41,7 +41,7 @@ func TestHistoricalProductionReplayPreservesQuantityAndBindingGate(t *testing.T)
 	})
 	t.Run("terminal speech usage and log", func(t *testing.T) {
 		item := dflop.Item{ModelID: "voice-tts-pro", Prices: map[string]dflop.Price{"price_per_tts_char": {Credits: "1"}}}
-		replay, err := replayHistoricalTask(context.Background(), item, json.RawMessage(`{"id":"existing-task","model":"voice-tts-pro","status":"succeeded","characters":26}`), plan, "0.15")
+		replay, err := replayHistoricalTask(context.Background(), item, json.RawMessage(`{"id":"existing-task","model":"voice-tts-pro","status":"succeeded","characters":26,"audio_url":"https://example.test/speech.mp3"}`), plan, "0.15")
 		require.NoError(t, err)
 		assert.True(t, replay.QuantityVerified)
 		assert.True(t, replay.SettlementReplayed)

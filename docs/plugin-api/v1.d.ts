@@ -48,7 +48,7 @@ export type ImageResponseEntry = {url?: string; b64_json?: string; revised_promp
 export type LocalizedText = string | ({ en: string } & Record<string, string>);
 export type UsageFieldSchema =
   | {type: "number"; unit: "count"; unitLabel?: LocalizedText; description?: LocalizedText}
-  | {type: "number"; unit: "second" | "token" | "credit"; unitLabel?: never; description?: LocalizedText}
+  | {type: "number"; unit: "second" | "token" | "credit" | "character"; unitLabel?: never; description?: LocalizedText}
   | {type: "boolean"; unitLabel?: never; description?: LocalizedText}
   | {enum: readonly string[]; unitLabel?: never; description?: LocalizedText; enumLabels?: Readonly<Record<string, LocalizedText>>};
 export type UsageExample = {label: string; facts: Readonly<Record<string, string | number | boolean>>};

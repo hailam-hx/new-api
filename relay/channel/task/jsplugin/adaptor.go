@@ -15,7 +15,6 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -28,7 +27,6 @@ import (
 	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	kitdto "github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 )
@@ -1499,86 +1497,11 @@ func (a *TaskAdaptor) validatedCompletionUsageFacts(facts any, models ...string)
 	if !ok {
 		return nil, fmt.Errorf("plugin usage hook must return an object")
 	}
-	validated := make(map[string]any, len(values))
-	for key, value := range values {
-		validated[key] = value
-		if schema, declared := usageSchema[key]; declared {
-			number, err := validateUsageValue(value, schema, false)
-			if err != nil {
-				return nil, err
-			}
-			if schema.Type == "number" {
-				validated[key] = number
-			}
-			continue
-		}
-		if limit, canonical := canonicalUsageLimit(key); canonical {
-			number, numeric := usageNumber(value, false)
-			if !numeric {
-				return nil, fmt.Errorf("plugin usage value must be a number")
-			}
-			if err := validateUsageNumberLimit(number, limit); err != nil {
-				return nil, err
-			}
-			validated[key] = number
-			continue
-		}
-		switch key {
-		case "upstreamUnits", "completionTokens", "totalTokens":
-			number, numeric := usageNumber(value, false)
-			if !numeric || math.IsNaN(number) || math.IsInf(number, 0) || number < 0 {
-				return nil, fmt.Errorf("plugin usage value must be a finite non-negative number")
-			}
-			validated[key] = float64(common.QuotaFromFloat(number))
-		default:
-			if number, numeric := usageNumber(value, false); numeric {
-				validated[key] = number
-			}
-		}
-	}
-	return validated, nil
+	return pluginruntime.ValidateUsageFacts(values, usageSchema)
 }
 
 func validateUsageValue(value any, schema pluginruntime.UsageFieldSchema, allowNumericString bool) (float64, error) {
-	if len(schema.Enum) > 0 {
-		text, ok := value.(string)
-		if !ok {
-			return 0, fmt.Errorf("plugin usage enum must be a string")
-		}
-		if slices.Contains(schema.Enum, text) {
-			return 0, nil
-		}
-		return 0, fmt.Errorf("plugin usage enum is not an allowed value")
-	}
-	if schema.Type == "boolean" {
-		if _, ok := value.(bool); !ok {
-			return 0, fmt.Errorf("plugin usage value must be a boolean")
-		}
-		return 0, nil
-	}
-	number, ok := usageNumber(value, allowNumericString)
-	if !ok {
-		return 0, fmt.Errorf("plugin usage value must be a number")
-	}
-	if schema.Unit == "token" || schema.Unit == "credit" {
-		if math.IsNaN(number) || math.IsInf(number, 0) || number < 0 {
-			return 0, fmt.Errorf("plugin usage value must be a finite non-negative number")
-		}
-		// Bound-check with QuotaFromFloatChecked (int32 saturation) but keep
-		// the original fractional part so credit facts like 3.5 survive.
-		if quota, clamp := common.QuotaFromFloatChecked(number); clamp != nil {
-			return float64(quota), nil
-		}
-		return number, nil
-	}
-	limit := relaycommon.MaxTaskDurationSeconds
-	if schema.Unit == "count" {
-		limit = kitdto.MaxImageN
-	}
-	if err := validateUsageNumberLimit(number, limit); err != nil {
-		return 0, err
-	}
-	return number, nil
+	return pluginruntime.ValidateUsageValue(value, schema, allowNumericString)
 }
 
 func validateUsageLimit(value any, limit int, allowNumericString bool) error {
@@ -1590,44 +1513,15 @@ func validateUsageLimit(value any, limit int, allowNumericString bool) error {
 }
 
 func validateUsageNumberLimit(number float64, limit int) error {
-	if math.IsNaN(number) || math.IsInf(number, 0) || number < 0 {
-		return fmt.Errorf("plugin usage value must be a finite non-negative number")
-	}
-	if number > float64(limit) {
-		return fmt.Errorf("plugin usage value exceeds the host limit")
-	}
-	return nil
+	return pluginruntime.ValidateUsageNumberLimit(number, limit)
 }
 
 func usageNumber(value any, allowNumericString bool) (float64, bool) {
-	switch number := value.(type) {
-	case float64:
-		return number, true
-	case int64:
-		return float64(number), true
-	case int:
-		return float64(number), true
-	case string:
-		if !allowNumericString {
-			return 0, false
-		}
-		parsed, err := strconv.ParseFloat(strings.TrimSpace(number), 64)
-		return parsed, err == nil
-	default:
-		return 0, false
-	}
+	return pluginruntime.UsageNumber(value, allowNumericString)
 }
 
 func canonicalUsageLimit(key string) (int, bool) {
-	normalized := strings.NewReplacer("_", "", "-", "").Replace(strings.ToLower(key))
-	switch normalized {
-	case "duration", "durationseconds", "second", "seconds":
-		return relaycommon.MaxTaskDurationSeconds, true
-	case "n", "count", "imagecount", "samplecount", "batchcount", "numimages":
-		return kitdto.MaxImageN, true
-	default:
-		return 0, false
-	}
+	return pluginruntime.CanonicalUsageLimit(key)
 }
 
 func (a *TaskAdaptor) logRejectedUsage(hook string, _ error) {
