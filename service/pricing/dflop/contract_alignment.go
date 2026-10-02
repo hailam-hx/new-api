@@ -176,6 +176,9 @@ func EndpointBillingMatrix(items []Item) []map[string]any {
 			if verified && priceVerified {
 				status, reason = SupportedAuto, ""
 			}
+			if status == SupportedAuto && len(item.ContractOverrides) > 0 {
+				status, reason = SupportedWithProviderOverride, DocumentedContractOverride
+			}
 			matrix = append(matrix, map[string]any{
 				"model": item.ModelID, "canonical_model": item.CanonicalID, "endpoint": endpoint,
 				"protocols": item.Protocols, "executing_plugin": item.TaskPlugin,

@@ -26,6 +26,7 @@ import {
   copyChannel,
   deleteChannel,
   testChannel,
+  preflightTaskChannel,
   updateChannel,
   updateChannelStatus,
   batchUpdateChannelStatus,
@@ -40,7 +41,11 @@ import {
   updateAllChannelsBalance,
 } from '../api'
 import { CHANNEL_STATUS, ERROR_MESSAGES, SUCCESS_MESSAGES } from '../constants'
-import type { ChannelTestResponse, CopyChannelParams } from '../types'
+import type {
+  ChannelTestResponse,
+  CopyChannelParams,
+  TaskChannelDiagnostic,
+} from '../types'
 
 // ============================================================================
 // Query Keys
@@ -279,10 +284,11 @@ export async function handleTestChannel(
     silent?: boolean
   },
   onTestComplete?: (
-    success: boolean,
+    success: boolean | undefined,
     responseTime?: number,
     error?: string,
-    errorCode?: string
+    errorCode?: string,
+    diagnostic?: TaskChannelDiagnostic
   ) => void
 ): Promise<void> {
   const payload =
@@ -296,7 +302,53 @@ export async function handleTestChannel(
         }
       : undefined
 
+  let ordinaryTestStarted = false
   try {
+    const preflight = await preflightTaskChannel(
+      id,
+      options?.testModel,
+      options?.endpointType
+    )
+    if (!preflight.success || !preflight.data) {
+      throw new Error(preflight.message || i18next.t('Test failed'))
+    }
+    const diagnostic = preflight.data
+    if (
+      !['pass', 'partial', 'untested', 'fail'].includes(diagnostic.outcome) ||
+      !['ordinary', 'task_plugin'].includes(diagnostic.kind)
+    ) {
+      throw new Error('Invalid diagnostic response')
+    }
+    if (diagnostic.kind === 'task_plugin') {
+      const failed = diagnostic.outcome === 'fail'
+      const errorCode = failed
+        ? diagnostic.checks.find((check) => check.status === 'fail')?.reason
+        : undefined
+      if (!options?.silent) {
+        if (failed) toast.error(i18next.t('Preflight validation failed'))
+        else toast.info(i18next.t('Configuration checked; upstream not tested'))
+      }
+      // undefined means neutral evidence, never legacy false/error or healthy true.
+      const passed = diagnostic.outcome === 'pass'
+      onTestComplete?.(
+        failed ? false : passed || undefined,
+        undefined,
+        failed
+          ? diagnostic.checks
+              .filter((check) => check.status === 'fail')
+              .map(
+                (check) =>
+                  `${check.check_type ?? check.check}: ${check.reason_code ?? check.reason ?? diagnostic.status}${check.message ? ` — ${check.message}` : ''}`
+              )
+              .join('\n') || i18next.t('Preflight validation failed')
+          : undefined,
+        errorCode,
+        diagnostic
+      )
+      return
+    }
+    // Ordinary diagnostics do not override the synchronous tester's user pricing policy.
+    ordinaryTestStarted = true
     const response = await testChannel(id, payload)
     const responseTime = getChannelTestResponseTime(response)
     const duration = formatChannelTestDuration(responseTime)
@@ -325,9 +377,39 @@ export async function handleTestChannel(
             : errorMsg,
         })
       }
-      onTestComplete?.(false, responseTime, errorMsg, response.error_code)
+      onTestComplete?.(
+        response.diagnostic?.outcome === 'partial' ? undefined : false,
+        responseTime,
+        errorMsg,
+        response.error_code,
+        response.diagnostic
+      )
     }
   } catch (_error: unknown) {
+    if (!ordinaryTestStarted) {
+      const diagnostic: TaskChannelDiagnostic = {
+        kind: 'unclassified',
+        mode: 'preflight',
+        status: 'diagnostic_unavailable',
+        outcome: 'untested',
+        model: options?.testModel ?? '',
+        mapped_model: options?.testModel ?? '',
+        generation: 0,
+        diagnostic_duration_ms: 0,
+        connectivity_tested: false,
+        live_generation_tested: false,
+        checks: [
+          {
+            check: 'preflight',
+            status: 'not_tested',
+            reason: 'diagnostic_unavailable',
+          },
+        ],
+      }
+      if (!options?.silent) toast.info(i18next.t('Upstream not tested'))
+      onTestComplete?.(undefined, undefined, undefined, undefined, diagnostic)
+      return
+    }
     const err = _error as { response?: { data?: { message?: string } } }
     const errorMsg =
       err?.response?.data?.message || i18next.t(ERROR_MESSAGES.TEST_FAILED)
@@ -430,7 +512,9 @@ export async function handleBatchEnable(
       handleServerError(response, i18next.t('Failed to enable channels'))
     } else if (failCount > 0) {
       toast.error(
-        i18next.t('{{count}} channel(s) failed to enable', { count: failCount })
+        i18next.t('{{count}} channel(s) failed to enable', {
+          count: failCount,
+        })
       )
     }
   } catch (error) {

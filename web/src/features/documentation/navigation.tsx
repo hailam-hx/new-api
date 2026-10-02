@@ -27,16 +27,14 @@ import { Input } from '@/components/ui/input'
 import type { PricingModel } from '@/features/pricing/types'
 import { cn } from '@/lib/utils'
 
-import { articles, groups } from './content'
+import { beginnerArticles, groups } from './content'
 import reference from './generated/reference.json'
 import { searchDocumentation } from './lib'
 
 export function DocsNavigation(props: { slug: string; mobile?: boolean }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
-  const activeSlug = props.slug.startsWith('provider-')
-    ? 'admin-providers'
-    : props.slug
+  const activeSlug = props.slug
   const navigation = (
     <nav aria-label={t('Documentation navigation')} className='space-y-6 pb-10'>
       {groups.map((group) => (
@@ -45,7 +43,7 @@ export function DocsNavigation(props: { slug: string; mobile?: boolean }) {
             {t(group)}
           </p>
           <ul className='space-y-0.5'>
-            {articles
+            {beginnerArticles
               .filter(
                 (article) =>
                   article.group === group && article.kind !== 'provider'
@@ -88,7 +86,7 @@ export function DocsNavigation(props: { slug: string; mobile?: boolean }) {
         onClick={() => setOpen(true)}
       >
         <Menu className='size-4' />
-        {t('Menu')}
+        <span className='hidden sm:inline'>{t('Menu')}</span>
       </Button>
       <Dialog
         open={open}
@@ -113,9 +111,7 @@ export function DocsSearch(props: {
   const [query, setQuery] = useState('')
   const results = useMemo(
     () =>
-      searchDocumentation(query, articles, reference, props.models, (key) =>
-        t(key)
-      ),
+      searchDocumentation(query, beginnerArticles, reference, props.models, t),
     [query, props.models, t]
   )
   useEffect(() => {
@@ -145,9 +141,7 @@ export function DocsSearch(props: {
         open={open}
         onOpenChange={setOpen}
         title={t('Search documentation')}
-        description={t(
-          'Search articles, headings, endpoints, models and error codes.'
-        )}
+        description={t('Search guides and models.')}
         contentClassName='sm:max-w-2xl'
         contentHeight='min(60svh, 30rem)'
       >

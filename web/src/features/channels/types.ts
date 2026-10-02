@@ -190,7 +190,49 @@ export interface ChannelOpsResponse {
   }
 }
 
+export interface TaskChannelDiagnostic {
+  runtime_attempted?: boolean
+  overall_status?: string
+  resolved_upstream_model?: string
+  endpoint?: string
+  protocol?: string
+  pricing_state?: string
+  usage_schema_state?: string
+  credential_state?: string
+  kind: 'task_plugin' | 'ordinary' | 'unclassified'
+  mode: 'preflight' | 'connectivity' | 'runtime'
+  connectivity_available?: boolean
+  connectivity_key_indices?: number[]
+  connectivity_status?: string
+  connectivity_latency_ms?: number
+  credential_identity?: string
+  model_access?: 'confirmed' | 'not_confirmed'
+  catalog_model?: string
+  status: string
+  outcome: 'pass' | 'partial' | 'untested' | 'fail'
+  plugin?: string
+  plugin_version?: string
+  generation: number
+  model: string
+  mapped_model: string
+  operation?: string
+  connectivity_tested: boolean
+  live_generation_tested: false
+  diagnostic_duration_ms: number
+  checks: {
+    check: string
+    status: 'pass' | 'fail' | 'not_tested'
+    reason?: string
+    reason_code?: string
+    message?: string
+    check_type?: string
+    billing_source?: string
+    evidence?: string
+  }[]
+}
+
 export interface ChannelTestResponse {
+  diagnostic?: TaskChannelDiagnostic
   success: boolean
   message?: string
   error_code?: string

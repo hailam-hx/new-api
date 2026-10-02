@@ -3,6 +3,9 @@ package helper
 import (
 	"context"
 	"fmt"
+	"strings"
+
+	"github.com/QuantumNous/new-api/service/pricing/dflop"
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -32,6 +35,14 @@ func ApplyReasoningModelSuffix(c *gin.Context, info *relaycommon.RelayInfo, outb
 	}
 
 	opts := info.ConvOptions()
+	if info.ChannelMeta != nil && dflop.ApprovedCatalogOrigin(info.ChannelBaseUrl) {
+		snapshot := *opts
+		previous := opts.PreserveThinkingSuffix
+		snapshot.PreserveThinkingSuffix = func(name string) bool {
+			return strings.HasPrefix(name, "gemini-") && !strings.Contains(name, "@") || previous != nil && previous(name)
+		}
+		opts = &snapshot
+	}
 	origin := info.GetOriginModelName()
 	upstream := ""
 	if info.ChannelMeta != nil {

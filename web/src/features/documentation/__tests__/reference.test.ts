@@ -20,7 +20,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { PricingModel } from '@/features/pricing/types'
 
-import { articles, groups } from '../content'
+import { articles, beginnerArticles, groups, getArticle } from '../content'
 import reference from '../generated/reference.json'
 import { searchDocumentation, filterCatalog, buildQuickstart } from '../lib'
 
@@ -54,10 +54,12 @@ describe('documentation source contracts', () => {
         ?.middleware
     ).toContain('middleware.TokenAuth()')
   })
-  it('keeps article slugs unique and navigation in the nine actual groups', () => {
+  it('keeps article slugs unique and navigation in the six user groups while preserving legacy guide URLs', () => {
     expect(new Set(articles.map((a) => a.slug)).size).toBe(articles.length)
-    expect(groups).toHaveLength(9)
-    expect(articles.every((a) => groups.includes(a.group))).toBe(true)
+    expect(groups).toHaveLength(6)
+    expect(beginnerArticles).toHaveLength(18)
+    expect(getArticle('admin-providers')).toBeDefined()
+    expect(beginnerArticles.every((a) => groups.includes(a.group))).toBe(true)
     expect(articles.every((a) => a.sources.length > 0)).toBe(true)
   })
   it('finds an endpoint, error constant, model ID and vendor in search', () => {
@@ -75,7 +77,8 @@ describe('documentation source contracts', () => {
           articles,
           reference,
           [{ ...model, vendor_name: 'DFLOP' }],
-          (x) => x
+          (x) => x,
+          true
         ).length
       ).toBeGreaterThan(0)
     }

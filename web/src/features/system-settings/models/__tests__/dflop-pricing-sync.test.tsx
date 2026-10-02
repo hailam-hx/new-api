@@ -11,6 +11,9 @@ afterEach(() => vi.restoreAllMocks())
 
 it.each([
   ['NO_PLUGIN_USAGE_PROFILE', 'No exact plugin usage profile'],
+  ['STALE_PROVIDER_OVERRIDE', 'Provider override changed; administrator review required'],
+  ['MISSING_AUTHORITATIVE_OUTPUT_DIMENSIONS', 'Authoritative output dimensions are unavailable'],
+  ['MISSING_AUTHORITATIVE_SOURCE_VIDEO_DURATION', 'Authoritative source video duration is unavailable'],
   ['PROVIDER_CATALOG_MISSING_UPSCALE_RATE', 'Missing authenticated upscale price'],
   ['MISSING_SUBTITLE_SOURCE_DURATION', 'Source video duration is unavailable'],
   ['MISSING_FAST_SELECTOR', 'Fast mode selector is unverified'],
@@ -35,7 +38,7 @@ it.each([
     data: {
       success: true,
       data: {
-        run: { id: 'preview', status: 'preview', source_hash: 'hash', pricing_version_before: 'version', started_at: Math.floor(Date.now() / 1000), changed_count: 0, blocked_count: 1 },
+        run: { id: 'preview', status: 'preview', source_hash: 'hash', pricing_version_before: 'version', started_at: Math.floor(Date.now() / 1000) - 1, changed_count: 0, blocked_count: 1 },
         items: [{ model_id: 'video-per-second', category: 'video', status: 'UNSUPPORTED_MAPPING', action: 'SKIP', reason: 'no exact task plugin binding with a usage profile', reason_code: reasonCode, pricing_shape: 'video:video_second+video_tiers', pricing_scope: 'PLUGIN_OVERRIDE', plugin_key: 'alibaba', required_facts: '["seconds","resolution"]', available_facts: '[]', missing_facts: '["seconds","resolution"]', current_pricing: '{}', proposed_pricing: '{}', prices: '{"input_per_1m":{"unit":"token_per_1m","credits":"100","cost_cny":"1.6667","cost_usd":"0.25","selling_usd":"0.25","source_price_kind":"LIST_PRICE_WITH_VERIFIED_MULTIPLIER","promotion_multiplier":"0.3","promotion_rule_id":"dflop-gpt-text-2026-09","promotion_state":"VERIFIED","effective_credits":"30","effective_cost_cny":"0.5","effective_cost_usd":"0.075","effective_selling_usd":"0.075"}}', expression: '', delta_percent: '' }],
       },
     },
@@ -75,7 +78,7 @@ it('shows source channel and catalog integrity without exposing its credential',
     return { data: { success: true, data } }
   })
   vi.spyOn(api, 'post').mockResolvedValue({ data: { success: true, data: {
-    run: { id: 'effective-preview', status: 'preview', source_hash: 'hash', pricing_version_before: 'version', started_at: Math.floor(Date.now() / 1000), changed_count: 0, blocked_count: 0,
+    run: { id: 'effective-preview', status: 'preview', source_hash: 'hash', pricing_version_before: 'version', started_at: Math.floor(Date.now() / 1000) - 1, changed_count: 0, blocked_count: 0,
       currency_snapshot: JSON.stringify({ source_mode: 'AUTHENTICATED_EFFECTIVE', source_channel: { id: 7, name: 'DFLOP channel', status: 1, base_url: 'https://api.dflop.top' }, catalog_schema_version: '1.0', effective_count: 212, callable_count: 212, public_count: 106, integrity: ['PUBLIC_CATALOG_ANOMALY'], effective: { etag: '"cat1"', fetched_at: 1, state: 'FRESH' } }) },
     items: [],
   } } })
@@ -126,7 +129,7 @@ it.each(['SUPPORTED_AUTO', 'MANUAL_OVERRIDE'])('requires an explicit manual conf
     max_auto_decrease_percent: '50', allow_auto_apply_new_models: false,
   } : [] } }))
   const post = vi.spyOn(api, 'post').mockImplementation(async (url) => ({ data: { success: true, data: url.endsWith('/preview') ? {
-    run: { id: 'warning-preview', status: 'preview', trigger: 'manual', source_hash: 'effective-hash', pricing_version_before: 'version', started_at: Math.floor(Date.now() / 1000), changed_count: 1, blocked_count: 0,
+    run: { id: 'warning-preview', status: 'preview', trigger: 'manual', source_hash: 'effective-hash', pricing_version_before: 'version', started_at: Math.floor(Date.now() / 1000) - 1, changed_count: 1, blocked_count: 0,
       currency_snapshot: JSON.stringify({ source_mode: 'AUTHENTICATED_EFFECTIVE', integrity: ['PUBLIC_CATALOG_ANOMALY'], policy: { auto_block_reason: 'PUBLIC_CATALOG_ANOMALY', manual_confirmation_required: true } }) },
     items: [{ model_id: 'text', category: 'text', status, action: 'UPDATE', reason: '', reason_code: status === 'MANUAL_OVERRIDE' ? 'MANUAL_ADOPTION_REQUIRED' : '', pricing_scope: 'MODEL', current_pricing: '{}', proposed_pricing: '{}', prices: '{}', expression: 'tier("dflop", p * 1)', delta_percent: '' }],
   } : { id: 'warning-preview', status: 'applied' } } }))
@@ -152,5 +155,37 @@ it.each(['SUPPORTED_AUTO', 'MANUAL_OVERRIDE'])('requires an explicit manual conf
   expect(post.mock.calls.some(([url]) => url.endsWith('/apply'))).toBe(false)
   await user.click(screen.getByRole('button', { name: 'Continue' }))
   await waitFor(() => expect(post).toHaveBeenCalledWith('/api/option/model_pricing/dflop/apply', expect.objectContaining({ acknowledge_public_catalog_anomaly: true, models: ['text'], adopt: status === 'MANUAL_OVERRIDE' })))
+  client.clear()
+})
+
+
+it('requires selecting documented fallback explicitly and displays its provenance', async () => {
+  vi.spyOn(api, 'get').mockImplementation(async (url) => ({ data: { success: true, data: url.endsWith('/config') ? {
+    enabled: true, source_channel_id: 1, auto_apply_enabled: false, sync_interval_hours: 6,
+    cny_to_usd: '0.15', markup_multiplier: '1', sync_video: true, include_new_callable_models: true,
+  } : [] } }))
+  vi.spyOn(api, 'post').mockResolvedValue({ data: { success: true, data: {
+    run: { id: 'manual', currency_snapshot: JSON.stringify({ source_mode: 'AUTHENTICATED_EFFECTIVE', policy: { manual_confirmation_required: false } }), status: 'preview', source_hash: 'hash', pricing_version_before: 'version', started_at: Math.floor(Date.now() / 1000) - 1, changed_count: 1, blocked_count: 0 },
+    items: [{ model_id: 'minimax-h3', category: 'video', status: 'SUPPORTED_WITH_PROVIDER_OVERRIDE', action: 'ADD', reason_code: 'DFLOP_DOCUMENTED_CONTRACT_OVERRIDE', prices: JSON.stringify({ output: {
+      source_price_kind: 'AUTHENTICATED_EFFECTIVE', credits: '30', cost_cny: '0.5', cost_usd: '0.075', selling_usd: '0.075',
+      contract_overrides: [{ feature: 'billing_basis', source_url: 'https://model.dflop.top/models/minimax-h3', observed_at: '2026-10-01', version: '2026-10-01-v1', catalog_conflict: 'video_bills_input_seconds=true', value: 'OUTPUT_DELIVERED_SECONDS_ONLY' }],
+    } }), current_pricing: '{}', proposed_pricing: '{}', expression: 'tier("output", u("duration_sec") * 0.075)' }],
+  } } })
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  render(<QueryClientProvider client={client}><DflopPricingSync /></QueryClientProvider>)
+  const user = userEvent.setup()
+  await user.click(await screen.findByRole('button', { name: 'Sync Now / Preview' }))
+  const select = await screen.findByRole('checkbox', { name: 'Select minimax-h3' })
+  expect(select).not.toBeChecked()
+  expect(select).toBeEnabled()
+  expect(screen.getByRole('button', { name: 'Apply selected prices' })).toBeDisabled()
+  await user.click(select)
+  expect(screen.getByRole('button', { name: 'Apply selected prices' })).toBeEnabled()
+  await user.click(screen.getByRole('button', { name: 'Details for minimax-h3' }))
+  const dialog = screen.getByRole('dialog')
+  expect(dialog).toHaveTextContent('Official DFLOP contract fallback')
+  expect(dialog).toHaveTextContent('OUTPUT_DELIVERED_SECONDS_ONLY')
+  expect(dialog).toHaveTextContent('2026-10-01-v1')
+  expect(dialog).toHaveTextContent('Manual apply only; automatic apply is forbidden')
   client.clear()
 })

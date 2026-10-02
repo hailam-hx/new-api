@@ -49,9 +49,9 @@ it('publishes semantic article text, SDK examples and one set of page metadata b
   expect(html).toContain('data-docs-head')
   expect(html).toContain('data-docs-prerender')
   expect(html).toContain('<h1')
-  expect(html).toContain('Choose a chat model')
+  expect(html).toContain('3. Choose a model')
   expect(html).toContain('NEW_API_KEY')
-  expect(html).toContain('/v1/models')
+  expect(html).toContain('/v1/chat/completions')
   expect(html).not.toContain('sk-')
 })
 it('indexes every canonical article once and publishes provider navigation with no duplicate overview route', () => {

@@ -1689,6 +1689,26 @@
       }
     },
     {
+      "method": "POST",
+      "path": "/api/channel/test/{id}/task",
+      "middleware": [
+        "middleware.RouteTag(\"api\")",
+        "gzip.Gzip(gzip.DefaultCompression)",
+        "middleware.AccessTokenAudit()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.GlobalAPIRateLimit()",
+        "middleware.AdminAuth()",
+        "middleware.RequirePermission(authz.ChannelOperate)"
+      ],
+      "source": "router/channel-router.go:32",
+      "handler": "controller.TestTaskChannel",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
       "method": "GET",
       "path": "/api/channel/update_balance",
       "middleware": [
@@ -12921,6 +12941,26 @@
       ],
       "source": "router/video-router.go:31",
       "handler": "controller.RelayTask",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/v1/videos/generations",
+      "middleware": [
+        "middleware.RouteTag(\"relay\")",
+        "middleware.TokenAuth()",
+        "middleware.SystemPerformanceCheck()",
+        "middleware.PinTaskPluginEndpoint()",
+        "middleware.TaskPluginEndpointOnly(middleware.ModelRequestRateLimit())",
+        "middleware.PrepareTaskPluginEndpoint()",
+        "middleware.Distribute()"
+      ],
+      "source": "router/task-plugin-protocol-router.go:57",
+      "handler": "controller.RelayTaskPluginEndpoint, controller.RelayTask",
       "summary": "",
       "schemaSource": "",
       "parameters": [],

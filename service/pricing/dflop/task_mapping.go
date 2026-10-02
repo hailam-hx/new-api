@@ -48,6 +48,9 @@ func videoPricesMatch(item Item, tiers map[string]string) bool {
 // classifyTaskPricing creates a candidate only for source shapes whose
 // quantities are reported by an exact task-plugin model binding.
 func classifyTaskPricing(item *Item, source Model) {
+	if item.PriceSemantics.SourcePriceKind == "AUTHENTICATED_EFFECTIVE_PRICE" && classifyDFLOPImagePricing(item, source) {
+		return
+	}
 	if classifyDFLOPMediaPricing(item, source) {
 		return
 	}
@@ -269,7 +272,7 @@ func taskPricingCompatibility(item Item, schema map[string]jsplugin.UsageFieldSc
 // Subtitle ASR/translation tiers are operations, not output resolutions; its
 // authoritative source duration contract remains unavailable.
 func classifyDFLOPMediaPricing(item *Item, source Model) bool {
-	if slices.Contains([]string{"wan2.7-t2v", "wan3.0-video", "wan3.0-video-prime", "tvod-subtitle-soft"}, source.ID) {
+	if item.PriceSemantics.SourcePriceKind != "AUTHENTICATED_EFFECTIVE_PRICE" && slices.Contains([]string{"wan2.7-t2v", "wan3.0-video", "wan3.0-video-prime", "tvod-subtitle-soft"}, source.ID) {
 		return false
 	}
 	plugin, exists := jsplugin.DefaultRegistry.Generation().Get("dflop-media")
@@ -380,14 +383,14 @@ func classifyDFLOPMediaPricing(item *Item, source Model) bool {
 		}
 		// The final leaf covers the last validated enum combination.
 		quantity = expression.String()
-	case source.Category == "video" && source.EndpointType == "videos_generations" && source.PricePerVideoSecond != nil && (shape == "video_second" || shape == "video_second+video_tiers") && (source.VideoBillsInputSeconds == nil || !*source.VideoBillsInputSeconds):
+	case source.Category == "video" && source.EndpointType == "videos_generations" && source.PricePerVideoSecond != nil && ((shape == "video_second" || shape == "video_second+video_tiers") && (source.VideoBillsInputSeconds == nil || !*source.VideoBillsInputSeconds) || shape == "video_input_seconds+video_second+video_tiers" && source.VideoBillsInputSeconds != nil && *source.VideoBillsInputSeconds):
 		facts = []string{"duration_sec"}
 		requiredPrices = []string{"price_per_video_second"}
 		if shape == "video_second" && len(source.VideoPriceTiers) == 0 {
 			quantity = "u(\"duration_sec\") * " + price("price_per_video_second")
 			break
 		}
-		if shape != "video_second+video_tiers" || len(source.VideoPriceTiers) == 0 {
+		if (shape != "video_second+video_tiers" && shape != "video_input_seconds+video_second+video_tiers") || len(source.VideoPriceTiers) == 0 {
 			return false
 		}
 		tiers := make([]string, 0, len(source.VideoPriceTiers))
@@ -397,6 +400,16 @@ func classifyDFLOPMediaPricing(item *Item, source Model) bool {
 		}
 		slices.Sort(tiers)
 		facts = append(facts, "resolution")
+		duration := `u("duration_sec")`
+		if shape == "video_input_seconds+video_second+video_tiers" {
+			// Only the exact DFLOP Wan3 contract bills reference-video input.
+			if !slices.Contains([]string{"wan3.0-video", "wan3.0-video-prime"}, source.ID) || source.VideoMaxInputSeconds == nil || *source.VideoMaxInputSeconds != 15 {
+				item.ReasonCode = "PROVIDER_CONTRACT_REQUIRED"
+				return true
+			}
+			facts = append(facts, "input_video_duration_sec")
+			duration = `(u("duration_sec") + u("input_video_duration_sec"))`
+		}
 		var expression strings.Builder
 		for index, tier := range tiers {
 			if index > 0 {
@@ -405,7 +418,7 @@ func classifyDFLOPMediaPricing(item *Item, source Model) bool {
 			if index < len(tiers)-1 {
 				fmt.Fprintf(&expression, "u(\"resolution\") == %q ? ", tier)
 			}
-			fmt.Fprintf(&expression, "tier(%q, u(\"duration_sec\") * %s)", tier, price("video_tier:"+tier))
+			fmt.Fprintf(&expression, "tier(%q, %s * %s)", tier, duration, price("video_tier:"+tier))
 		}
 		quantity = expression.String()
 	default:
@@ -421,6 +434,71 @@ func classifyDFLOPMediaPricing(item *Item, source Model) bool {
 	} else {
 		item.TaskExpression = "tier(\"base\", " + quantity + ")"
 	}
-	item.ReasonCode = "NO_PLUGIN_USAGE_PROFILE"
+	_, _, reason := taskPricingCompatibility(*item, schema)
+	item.ReasonCode = reason
+	if reason == "" {
+		item.Reason = ""
+	}
+	return true
+}
+
+// classifyDFLOPImagePricing binds authenticated image contracts to the DFLOP
+// executor. Prices and reference exemptions come only from that source row.
+func classifyDFLOPImagePricing(item *Item, source Model) bool {
+	plugin, ok := jsplugin.DefaultRegistry.Generation().Get("dflop-image")
+	if !ok || !slices.Contains(plugin.Meta.Models, source.ID) || source.Category != "image" || source.EndpointType != "images_generations" {
+		return false
+	}
+	features := slices.Clone(source.BillingFeatures)
+	slices.Sort(features)
+	shape := strings.Join(features, "+")
+	if !slices.Contains([]string{"per_image", "input_images+per_image", "image_size_bands+input_images+per_image"}, shape) {
+		return false
+	}
+	// Midjourney's fixed-output rule is handled by its existing exact contract.
+	if source.PricePerImage == nil {
+		return false
+	}
+	item.TaskPlugin = "dflop-image"
+	item.RequiredFacts = []string{"image_count"}
+	quantity := fmt.Sprintf(`u("image_count") * %s`, item.Prices["price_per_image"].SellingUSD)
+	required := []string{"price_per_image"}
+	if slices.Contains(features, "input_images") {
+		if source.PricePerInputImage == nil {
+			return false
+		}
+		required = append(required, "price_per_input_image")
+		item.RequiredFacts = append(item.RequiredFacts, "input_image_count")
+		free := 0
+		if source.FreeInputImages != nil {
+			free = *source.FreeInputImages
+		}
+		if free < 0 || free > 128 {
+			item.ReasonCode = "PROVIDER_CONTRACT_REQUIRED"
+			return true
+		}
+		quantity += fmt.Sprintf(` + max(u("input_image_count") - %d, 0) * %s`, free, item.Prices["price_per_input_image"].SellingUSD)
+	}
+	if slices.Contains(features, "image_size_bands") {
+		// Public threshold disagreement is retained as evidence, never as a price
+		// override. A tiered binding exists, while terminal dimensions stay blocked.
+		item.RequiredFacts = append(item.RequiredFacts, "small_image_count", "large_image_count")
+		item.ReasonCode = "MISSING_AUTHORITATIVE_OUTPUT_DIMENSIONS"
+		item.Reason = "authenticated image rates are known; authoritative delivered output dimensions are required"
+		if source.LargePixelThreshold == nil || *source.LargePixelThreshold <= 0 || source.PricePerImageLarge == nil {
+			item.ReasonCode = "PROVIDER_CONTRACT_IMAGE_THRESHOLD_CONFLICT"
+			item.Reason = "authenticated catalog lacks authoritative tier threshold; public docs cannot resolve it"
+		}
+		item.Status = UnsupportedMapping
+		item.Expression = ""
+		item.TaskExpression = ""
+		return true
+	}
+	if !mediaPricesMatch(*item, required...) {
+		item.ReasonCode = "UNKNOWN_BILLING_FEATURE"
+		return true
+	}
+	item.TaskExpression = `tier("image", ` + quantity + `)`
+	item.ReasonCode = ""
 	return true
 }

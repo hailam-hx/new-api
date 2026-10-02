@@ -296,6 +296,13 @@ func HasModelBillingConfig(modelName string) bool {
 	return ok && strings.TrimSpace(expr) != ""
 }
 
+// HasRequestModelBillingConfig applies the production request billing identity
+// rules (including modifiers) before inspecting local configuration. It does
+// not estimate quota, acquire credentials, or perform I/O.
+func HasRequestModelBillingConfig(modelName string) bool {
+	return HasModelBillingConfig(resolveBillingModelName(modelName))
+}
+
 // HasPriceOrRatioEntry reports whether name has a configured price, ratio, or
 // tiered billing-mode entry after a single wildcard normalization. Self-use
 // fallback does not count as a configured ratio.

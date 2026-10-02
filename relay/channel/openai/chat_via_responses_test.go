@@ -278,3 +278,17 @@ func requireOrderedSubstrings(t *testing.T, s string, parts ...string) {
 		offset += idx + len(part)
 	}
 }
+
+func TestDFLOPModelSuffixSurvivesOutboundConversion(t *testing.T) {
+	for _, name := range []string{"gemini-3.1-pro-low", "gemini-3.1-flash-lite", "gemini-3.1-pro-thinking"} {
+		t.Run(name, func(t *testing.T) {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			info := &relaycommon.RelayInfo{OriginModelName: name, ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://api.dflop.top", UpstreamModelName: name, ChannelType: constant.ChannelTypeNewAPI}}
+			request := &dto.GeneralOpenAIRequest{Model: name}
+			converted, err := (&Adaptor{}).ConvertOpenAIRequest(c, info, request)
+			require.NoError(t, err)
+			assert.Equal(t, name, converted.(*dto.GeneralOpenAIRequest).Model)
+			assert.Equal(t, name, info.UpstreamModelName)
+		})
+	}
+}

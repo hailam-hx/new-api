@@ -3,10 +3,12 @@ package dflop
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"slices"
 	"sort"
@@ -62,6 +64,8 @@ type Model struct {
 	CachedInputPer1MLong      *string           `json:"cached_input_per_1m_long"`
 	FastModeMultiplier        *string           `json:"fast_mode_multiplier"`
 	LargePixelThreshold       *int              `json:"large_pixel_threshold"`
+	FreeInputImages           *int              `json:"free_input_images"`
+	VideoMaxInputSeconds      *int              `json:"video_max_input_seconds"`
 	ImagesPerRequest          *int              `json:"images_per_request"`
 	VideoBillsInputSeconds    *bool             `json:"video_bills_input_seconds"`
 }
@@ -86,20 +90,21 @@ const (
 )
 
 type Price struct {
-	Unit                PricingUnit `json:"unit"`
-	Credits             string      `json:"credits"`
-	CostCNY             string      `json:"cost_cny"`
-	CostUSD             string      `json:"cost_usd"`
-	SellingUSD          string      `json:"selling_usd"`
-	SourcePriceKind     string      `json:"source_price_kind"`
-	PromotionMultiplier string      `json:"promotion_multiplier,omitempty"`
-	PromotionRuleID     string      `json:"promotion_rule_id,omitempty"`
-	PromotionSource     string      `json:"promotion_source,omitempty"`
-	PromotionState      string      `json:"promotion_state"`
-	EffectiveCredits    string      `json:"effective_credits,omitempty"`
-	EffectiveCostCNY    string      `json:"effective_cost_cny,omitempty"`
-	EffectiveCostUSD    string      `json:"effective_cost_usd,omitempty"`
-	EffectiveSellingUSD string      `json:"effective_selling_usd,omitempty"`
+	ContractOverrides   []ContractOverride `json:"contract_overrides,omitempty"`
+	Unit                PricingUnit        `json:"unit"`
+	Credits             string             `json:"credits"`
+	CostCNY             string             `json:"cost_cny"`
+	CostUSD             string             `json:"cost_usd"`
+	SellingUSD          string             `json:"selling_usd"`
+	SourcePriceKind     string             `json:"source_price_kind"`
+	PromotionMultiplier string             `json:"promotion_multiplier,omitempty"`
+	PromotionRuleID     string             `json:"promotion_rule_id,omitempty"`
+	PromotionSource     string             `json:"promotion_source,omitempty"`
+	PromotionState      string             `json:"promotion_state"`
+	EffectiveCredits    string             `json:"effective_credits,omitempty"`
+	EffectiveCostCNY    string             `json:"effective_cost_cny,omitempty"`
+	EffectiveCostUSD    string             `json:"effective_cost_usd,omitempty"`
+	EffectiveSellingUSD string             `json:"effective_selling_usd,omitempty"`
 }
 
 type PriceSemantics struct {
@@ -171,25 +176,27 @@ func classifyPriceSemantics(source Model) PriceSemantics {
 }
 
 type Item struct {
-	ModelID         string           `json:"model_id"`
-	CanonicalID     string           `json:"canonical_id"`
-	Category        string           `json:"category"`
-	EndpointType    string           `json:"endpoint_type"`
-	Callable        bool             `json:"callable"`
-	Protocols       []string         `json:"supported_protocols"`
-	BillingFeatures []string         `json:"billing_features"`
-	Discount        *string          `json:"discount,omitempty"`
-	PriceSemantics  PriceSemantics   `json:"price_semantics"`
-	Status          string           `json:"status"`
-	Reason          string           `json:"reason,omitempty"`
-	Prices          map[string]Price `json:"prices"`
-	Expression      string           `json:"expression,omitempty"`
-	TaskExpression  string           `json:"task_expression,omitempty"`
-	PricingShape    string           `json:"pricing_shape,omitempty"`
-	ReasonCode      string           `json:"reason_code,omitempty"`
-	RequiredFacts   []string         `json:"required_facts,omitempty"`
-	TaskPlugin      string           `json:"task_plugin,omitempty"`
-	Raw             json.RawMessage  `json:"raw"`
+	ContractOverrides []ContractOverride `json:"contract_overrides,omitempty"`
+	OverrideStale     bool               `json:"override_stale,omitempty"`
+	ModelID           string             `json:"model_id"`
+	CanonicalID       string             `json:"canonical_id"`
+	Category          string             `json:"category"`
+	EndpointType      string             `json:"endpoint_type"`
+	Callable          bool               `json:"callable"`
+	Protocols         []string           `json:"supported_protocols"`
+	BillingFeatures   []string           `json:"billing_features"`
+	Discount          *string            `json:"discount,omitempty"`
+	PriceSemantics    PriceSemantics     `json:"price_semantics"`
+	Status            string             `json:"status"`
+	Reason            string             `json:"reason,omitempty"`
+	Prices            map[string]Price   `json:"prices"`
+	Expression        string             `json:"expression,omitempty"`
+	TaskExpression    string             `json:"task_expression,omitempty"`
+	PricingShape      string             `json:"pricing_shape,omitempty"`
+	ReasonCode        string             `json:"reason_code,omitempty"`
+	RequiredFacts     []string           `json:"required_facts,omitempty"`
+	TaskPlugin        string             `json:"task_plugin,omitempty"`
+	Raw               json.RawMessage    `json:"raw"`
 }
 
 type Source interface {
@@ -213,19 +220,52 @@ func (c Client) FetchEffective(ctx context.Context, key, etag string) (Effective
 	if strings.TrimSpace(key) == "" {
 		return EffectiveResponse{RequestedURL: EffectiveCatalogURL, State: "FETCH_FAILED"}, errors.New("SOURCE_CHANNEL_UNAVAILABLE: missing credential")
 	}
-	return c.fetchResponse(ctx, EffectiveCatalogURL, key, etag)
+	return c.fetchResponse(ctx, EffectiveCatalogURL, key, etag, false)
 }
 
 func (c Client) FetchPublic(ctx context.Context) (EffectiveResponse, error) {
-	return c.fetchResponse(ctx, CatalogURL, "", "")
+	return c.fetchResponse(ctx, CatalogURL, "", "", false)
 }
 
 func (c Client) FetchCurrency(ctx context.Context) ([]byte, error) {
-	result, err := c.fetchResponse(ctx, CurrencyURL, "", "")
+	result, err := c.fetchResponse(ctx, CurrencyURL, "", "", false)
 	return result.Body, err
 }
 
-func (c Client) fetchResponse(ctx context.Context, targetURL, key, etag string) (EffectiveResponse, error) {
+// FetchConnectivityCatalog reads only the authenticated catalog, without price
+// normalization, imports, or mutations. Its stricter policy is probe-specific.
+func (c Client) FetchConnectivityCatalog(ctx context.Context, key string) (EffectiveResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	// Connectivity never inherits the gateway's TLS_INSECURE_SKIP_VERIFY override.
+	client := http.Client{}
+	if c.HTTP != nil {
+		client = *c.HTTP
+	}
+	transport := client.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	if base, ok := transport.(*http.Transport); ok {
+		strict := base.Clone()
+		strict.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+		if base.TLSClientConfig != nil {
+			strict.TLSClientConfig = base.TLSClientConfig.Clone()
+			strict.TLSClientConfig.InsecureSkipVerify = false
+			strict.TLSClientConfig.ServerName = ""
+			strict.TLSClientConfig.MinVersion = max(strict.TLSClientConfig.MinVersion, tls.VersionTLS12)
+		}
+		client.Transport = strict
+		defer strict.CloseIdleConnections()
+	}
+	c.HTTP = &client
+	if strings.TrimSpace(key) == "" {
+		return EffectiveResponse{}, errors.New("missing credential")
+	}
+	return c.fetchResponse(ctx, EffectiveCatalogURL, key, "", true)
+}
+
+func (c Client) fetchResponse(ctx context.Context, targetURL, key, etag string, connectivity bool) (EffectiveResponse, error) {
 	result := EffectiveResponse{RequestedURL: targetURL, FetchedAt: time.Now().Unix(), State: "FETCH_FAILED"}
 	httpClient := c.HTTP
 	if httpClient == nil {
@@ -233,6 +273,9 @@ func (c Client) fetchResponse(ctx context.Context, targetURL, key, etag string) 
 	}
 	client := *httpClient
 	client.CheckRedirect = func(req *http.Request, _ []*http.Request) error {
+		if connectivity {
+			return http.ErrUseLastResponse
+		}
 		if req.URL.Scheme != "https" || req.URL.Host != "api.dflop.top" || (key != "" && req.URL.Path != "/v1/catalog") {
 			return errors.New("DFLOP redirected outside the source host")
 		}
@@ -262,10 +305,11 @@ func (c Client) fetchResponse(ctx context.Context, targetURL, key, etag string) 
 		result.State = "NOT_MODIFIED"
 		return result, nil
 	}
-	if res.StatusCode != http.StatusOK {
+	if (connectivity && (res.StatusCode < 200 || res.StatusCode >= 300)) || (!connectivity && res.StatusCode != http.StatusOK) {
 		return result, fmt.Errorf("DFLOP %s: HTTP %d", targetURL, res.StatusCode)
 	}
-	if !strings.HasPrefix(strings.ToLower(result.ContentType), "application/json") {
+	mediaType, _, mediaErr := mime.ParseMediaType(result.ContentType)
+	if (connectivity && (mediaErr != nil || mediaType != "application/json")) || (!connectivity && !strings.HasPrefix(strings.ToLower(result.ContentType), "application/json")) {
 		return result, errors.New("DFLOP catalog has non-JSON content type")
 	}
 	result.Body, err = io.ReadAll(io.LimitReader(res.Body, 4<<20+1))
@@ -575,6 +619,9 @@ func build(catalogJSON, currencyJSON []byte, cnyToUSD, markup string, authentica
 				return nil, "", err
 			}
 		}
+		if authenticated {
+			applyDocumentedContract(&item, &source, points, rate, multiplier)
+		}
 		item.Status, item.Reason = UnsupportedMapping, "pricing unit or billing feature needs manual mapping"
 		item.ReasonCode = "UNSUPPORTED_PRICE_SHAPE"
 		item.PricingShape = pricingShape(source)
@@ -637,6 +684,12 @@ func build(catalogJSON, currencyJSON []byte, cnyToUSD, markup string, authentica
 				classifyUnsupportedReason(&item, source)
 			}
 		}
+		// Per-image rows already have a host expression. Authenticated DFLOP
+		// bindings still require the provider's quantity schema, not a native
+		// provider selected from model-name similarity.
+		if authenticated {
+			classifyDFLOPImagePricing(&item, source)
+		}
 		if authenticated && item.Status == UnsupportedMapping && item.ReasonCode == "UNSUPPORTED_PRICE_SHAPE" && source.Category == "text" {
 			switch {
 			case source.CacheCreationPer1M != nil && strings.Contains(strings.ToLower(source.ID), "claude"):
@@ -684,6 +737,27 @@ func build(catalogJSON, currencyJSON []byte, cnyToUSD, markup string, authentica
 				}
 			}
 		}
+		if len(item.ContractOverrides) > 0 {
+			if item.OverrideStale {
+				item.Status, item.ReasonCode, item.Reason = UnsupportedMapping, "STALE_PROVIDER_OVERRIDE", "catalog override precondition changed; fresh administrator contract review required"
+				item.Expression, item.TaskExpression = "", ""
+			} else if source.ID == "qwen-image-3.0-pro" {
+				item.Status, item.ReasonCode, item.Reason = UnsupportedMapping, "MISSING_AUTHORITATIVE_OUTPUT_DIMENSIONS", "official threshold established; authoritative output dimensions are not guaranteed"
+				item.Expression, item.TaskExpression = "", ""
+			}
+		}
+		if source.ID == "tvod-subtitle-soft" && authenticated {
+			item.TaskExpression = ""
+			item.TaskPlugin = "dflop-media"
+			item.RequiredFacts = []string{"source_duration_sec", "translation_units"}
+			item.ReasonCode = "MISSING_AUTHORITATIVE_SOURCE_VIDEO_DURATION"
+			item.Reason = "source seconds * (ASR rate + translation rate * unique target language count); authoritative source duration unavailable"
+			if asr, ok := item.Prices["video_tier:asr"]; ok {
+				if translation, ok := item.Prices["video_tier:translate"]; ok {
+					item.Expression = fmt.Sprintf(`tier("subtitle", u("source_duration_sec") * (%s + u("translation_units") * %s))`, asr.SellingUSD, translation.SellingUSD)
+				}
+			}
+		}
 		items = append(items, item)
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].ModelID < items[j].ModelID })
@@ -700,6 +774,10 @@ func build(catalogJSON, currencyJSON []byte, cnyToUSD, markup string, authentica
 		slices.Sort(protocols)
 		slices.Sort(features)
 		projection[i] = map[string]any{"id": item.ModelID, "category": item.Category, "endpoint_type": item.EndpointType, "callable": item.Callable, "protocols": protocols, "billing_features": features, "prices": prices, "price_semantics": item.PriceSemantics}
+		if len(item.ContractOverrides) > 0 {
+			projection[i]["contract_overrides"] = item.ContractOverrides
+			projection[i]["override_stale"] = item.OverrideStale
+		}
 		if item.Discount != nil {
 			projection[i]["discount"] = *item.Discount
 		}

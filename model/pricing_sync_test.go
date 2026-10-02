@@ -46,8 +46,8 @@ func verifyPricingSyncLifecycle(t *testing.T) {
 	proposed := PricingValues{"billing_setting.billing_mode": "tiered_expr", "billing_setting.billing_expr": `tier("dflop", p * 1 + c * 2)`}
 	encoded, err := common.Marshal(proposed)
 	require.NoError(t, err)
-	run := PricingSyncRun{ID: fmt.Sprintf("pricing-sync-test-%d", unique), Provider: "dflop", Status: "preview", ConfigHash: config.Hash(), SourceHash: "source", PricingVersionBefore: batchVersion}
-	item := PricingSyncItem{RunID: run.ID, ModelID: name, Status: "SUPPORTED_AUTO", Action: "ADD", ExpectedVersion: version, ProposedPricing: string(encoded)}
+	run := PricingSyncRun{ID: fmt.Sprintf("pricing-sync-test-%d", unique), Provider: "dflop", Trigger: "manual", Status: "preview", ConfigHash: config.Hash(), SourceHash: "source", PricingVersionBefore: batchVersion}
+	item := PricingSyncItem{RunID: run.ID, ModelID: name, Status: "SUPPORTED_WITH_PROVIDER_OVERRIDE", Action: "ADD", ExpectedVersion: version, ProposedPricing: string(encoded), Prices: `{"upscale":{"source_price_kind":"DFLOP_DOCUMENTED_CONTRACT_OVERRIDE","contract_overrides":[{"provider":"dflop","feature":"second_stage_upscale_rate","source":"official_dflop_contract","version":"2026-10-01-v1","auto_apply_allowed":false}]}}`}
 	require.NoError(t, CreatePricingSyncPreview(&run, []PricingSyncItem{item}))
 	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -59,9 +59,22 @@ func verifyPricingSyncLifecycle(t *testing.T) {
 	failedPreview, _, err := GetPricingSyncPreview(run.ID)
 	require.NoError(t, err)
 	assert.Contains(t, failedPreview.ErrorMessage, ErrModelPricingConflict.Error())
+	require.NoError(t, DB.Model(&PricingSyncRun{}).Where("id = ?", run.ID).Update("trigger", "automatic").Error)
+	_, err = ApplyPricingSync(run.ID, config.Hash(), "source", []string{name}, false, 5)
+	require.ErrorContains(t, err, "explicit manual apply required")
+	require.NoError(t, DB.Model(&PricingSyncRun{}).Where("id = ?", run.ID).Update("trigger", "manual").Error)
+	_, err = ApplyPricingSync(run.ID, config.Hash(), "source", []string{name}, false, 0)
+	require.ErrorContains(t, err, "explicit manual apply required")
+	require.NoError(t, DB.Model(&PricingSyncItem{}).Where("run_id = ?", run.ID).Update("status", "MANUAL_OVERRIDE").Error)
+	_, err = ApplyPricingSync(run.ID, config.Hash(), "source", []string{name}, true, 0)
+	require.ErrorContains(t, err, "explicit manual apply required")
+	require.NoError(t, DB.Model(&PricingSyncItem{}).Where("run_id = ?", run.ID).Update("status", "SUPPORTED_WITH_PROVIDER_OVERRIDE").Error)
 	applied, err := ApplyPricingSync(run.ID, config.Hash(), "source", []string{name}, false, 5)
 	require.NoError(t, err)
 	assert.Equal(t, 5, applied.AppliedBy)
+	var provenance PricingSyncManaged
+	require.NoError(t, DB.Where("model_id = ?", name).First(&provenance).Error)
+	assert.JSONEq(t, item.Prices, provenance.Prices)
 	after, err := GetModelPricingSnapshot([]string{name})
 	require.NoError(t, err)
 	assert.Equal(t, proposed["billing_setting.billing_expr"], after.Entries[0].Configured["billing_setting.billing_expr"])
@@ -72,9 +85,13 @@ func verifyPricingSyncLifecycle(t *testing.T) {
 	restored, err := GetModelPricingSnapshot([]string{name})
 	require.NoError(t, err)
 	assert.Equal(t, version, restored.Entries[0].Version)
+	var provenanceCount int64
+	require.NoError(t, DB.Model(&PricingSyncManaged{}).Where("model_id = ?", name).Count(&provenanceCount).Error)
+	assert.Zero(t, provenanceCount)
 	assert.False(t, errors.Is(err, ErrModelPricingConflict))
 	second := PricingSyncRun{ID: run.ID + "-second", Provider: "dflop", Status: "preview", ConfigHash: config.Hash(), SourceHash: "source", PricingVersionBefore: batchVersion}
 	item.RunID = second.ID
+	item.Status, item.Prices = "SUPPORTED_AUTO", ""
 	require.NoError(t, CreatePricingSyncPreview(&second, []PricingSyncItem{item}))
 	firstPage, err := ListPricingSyncRunsPage(1, 0)
 	require.NoError(t, err)

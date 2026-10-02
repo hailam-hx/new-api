@@ -12,7 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
-	_ "github.com/QuantumNous/new-api/plugins"
+	builtinplugins "github.com/QuantumNous/new-api/plugins"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -603,4 +603,254 @@ func TestProviderContractAuditRequiresLiteBindingAndIgnoresNullProfilePrices(t *
 	assert.NotEqual(t, "RESOLVED_BY_CATALOG", report.Blockers[0].Status)
 	assert.Empty(t, report.Blockers[5].Models)
 	assert.Empty(t, report.Blockers[6].Models)
+}
+
+func TestDocumentedContractOverridesAndRuntimeQuantities(t *testing.T) {
+	source, err := builtinplugins.Source("dflop-media")
+	require.NoError(t, err)
+	plugin, err := jsplugin.NewRegistry().RegisterFactory(source, jsplugin.Options{Key: "dflop-media"})
+	require.NoError(t, err)
+	for _, id := range []string{"doubao-seedance-2.0-fast-lite", "doubao-seedance-2.0-lite", "doubao-seedance-2.0-mini-lite", "doubao-seedance-2.5-lite"} {
+		t.Run(id, func(t *testing.T) {
+			catalog := fmt.Sprintf(`{"schema_version":"1.0","currency":"points","aliases":{},"models":[{"id":%q,"pricing":{"category":"video","endpoint_type":"videos_generations","callable":true,"price_per_video_second":"60","video_price_tiers":{"720p":"60","1080p":"120"},"video_token_price_per_1m":{"default@720p":"60","default@1080p":"120","with_video_input@720p":"30","with_video_input@1080p":"90"},"video_second_stage_per_second":null},"billing":{"features":["video_second","video_tiers","video_token","video_token_formula_seedance_%s","video_two_stage"]},"caps":{}}]}`, id, map[bool]string{false: "2_0", true: "2_5"}[strings.Contains(id, "2.5")])
+			items, hash, _, err := BuildEffective([]byte(catalog), []byte(`{"points_per_cny":60}`), "1", "1")
+			require.NoError(t, err)
+			require.Len(t, items, 1)
+			item := items[0]
+			_, err = plugin.Engine.CallPath(t.Context(), "protocols", []string{"openai_video", "decodeRequest"}, map[string]any{"body": map[string]any{"kind": "json", "value": map[string]any{"model": id, "duration": 5, "prompt": "test"}}})
+			require.ErrorContains(t, err, "MISSING_ORDERED_DELIVERY_TIER")
+			require.NotEmpty(t, item.TaskExpression)
+			assert.Equal(t, DocumentedContractOverride, item.Prices["video_second_stage:720p"].SourcePriceKind)
+			assert.Equal(t, "60", item.Prices["video_token_tier:default@720p"].Credits)
+			assert.NotEqual(t, DocumentedContractOverride, item.Prices["video_token_tier:default@720p"].SourcePriceKind)
+			require.Len(t, item.ContractOverrides, 1)
+			assert.False(t, item.ContractOverrides[0].AutoApplyAllowed)
+			assert.NotEmpty(t, item.ContractOverrides[0].SourceURL)
+			config := model.DefaultDFLOPConfig()
+			config.IncludeNewCallableModels = true
+			plan, err := Plan(items, config, nil, nil)
+			require.NoError(t, err)
+			assert.Equal(t, SupportedWithProviderOverride, plan[0].Status)
+			assert.Equal(t, "ADD", plan[0].Action)
+			for _, tc := range []struct {
+				tier, mode     string
+				token, upscale float64
+			}{
+				{"720p", "default", 1, 2.5 / 60}, {"1080p", "default", 2, 5.0 / 60},
+				{"720p", "with_video_input", 0.5, 2.5 / 60}, {"1080p", "with_video_input", 1.5, 5.0 / 60},
+			} {
+				ctx := map[string]any{"model": id, "state": map[string]any{"resolution": tc.tier, "input_mode": tc.mode}}
+				body := map[string]any{"duration_sec": 3.5, "input_video_duration_sec": 999, "resolution": tc.tier, "usage": map[string]any{"completion_tokens": 1000}}
+				facts, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", ctx, map[string]any{"status": "SUCCESS"}, body)
+				require.NoError(t, err)
+				assert.NotContains(t, facts.(map[string]any), "input_video_duration_sec")
+				cost, _, err := billingexpr.RunExprWithRequest(item.TaskExpression, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: facts.(map[string]any)})
+				require.NoError(t, err)
+				assert.InDelta(t, tc.token*0.001+3.5*tc.upscale, cost, 1e-10)
+			}
+			for _, missing := range []string{"duration_sec", "usage", "resolution"} {
+				body := map[string]any{"duration_sec": 3, "resolution": "720p", "usage": map[string]any{"completion_tokens": 1000}}
+				delete(body, missing)
+				_, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", map[string]any{"model": id, "state": map[string]any{"resolution": "720p", "input_mode": "default"}}, map[string]any{"status": "SUCCESS"}, body)
+				require.Error(t, err, missing)
+			}
+			_, err = plugin.Engine.Call(t.Context(), "extractUsageOnComplete", map[string]any{"model": id, "state": map[string]any{"resolution": "unknown", "input_mode": "default"}}, map[string]any{"status": "SUCCESS"}, map[string]any{"duration_sec": 0, "resolution": "720p", "usage": map[string]any{"completion_tokens": 0}})
+			require.Error(t, err)
+			zero, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", map[string]any{"model": id, "state": map[string]any{"resolution": "720p", "input_mode": "default"}}, map[string]any{"status": "SUCCESS"}, map[string]any{"duration_sec": 0, "resolution": "720p", "usage": map[string]any{"completion_tokens": 0}})
+			require.NoError(t, err)
+			assert.EqualValues(t, 0, zero.(map[string]any)["duration_sec"])
+			for _, status := range []string{"failed", "cancelled"} {
+				result, err := plugin.Engine.Call(t.Context(), "parseTaskResult", map[string]any{"model": id, "taskId": "exact-task"}, map[string]any{"id": "exact-task", "model": id, "status": status})
+				require.NoError(t, err)
+				assert.Equal(t, "FAILURE", result.(map[string]any)["status"])
+			}
+			stale := strings.Replace(catalog, `"video_second_stage_per_second":null`, `"video_second_stage_per_second":{"720p":"2.5","1080p":"5"}`, 1)
+			changed, nextHash, _, err := BuildEffective([]byte(stale), []byte(`{"points_per_cny":60}`), "1", "1")
+			require.NoError(t, err)
+			assert.NotEqual(t, hash, nextHash)
+			assert.Equal(t, "STALE_PROVIDER_OVERRIDE", changed[0].ReasonCode)
+			assert.Empty(t, changed[0].TaskExpression)
+		})
+	}
+	for _, id := range []string{"minimax-h3", "wan3.0-video", "wan3.0-video-prime"} {
+		t.Run(id, func(t *testing.T) {
+			resolution := "720p"
+			if id == "minimax-h3" {
+				resolution = "768p"
+			}
+			body := map[string]any{"duration_sec": 4.5, "input_video_duration_sec": 7, "resolution": resolution}
+			facts, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", map[string]any{"model": id, "state": map[string]any{"resolution": resolution, "requested_duration_sec": 10, "reference_mode": "video"}}, map[string]any{"status": "SUCCESS"}, body)
+			require.NoError(t, err)
+			if id == "minimax-h3" {
+				assert.NotContains(t, facts.(map[string]any), "input_video_duration_sec")
+			} else {
+				assert.EqualValues(t, 7, facts.(map[string]any)["input_video_duration_sec"])
+			}
+		})
+	}
+	alias, err := plugin.Engine.CallPath(t.Context(), "protocols", []string{"openai_video", "decodeRequest"}, map[string]any{"body": map[string]any{"kind": "json", "value": map[string]any{"model": "MiniMax-H3", "duration": 6, "resolution": "768p", "prompt": "test"}}})
+	require.NoError(t, err)
+	assert.Equal(t, "minimax-h3", alias.(map[string]any)["requestBody"].(map[string]any)["model"])
+	aliasCtx := map[string]any{"model": "MiniMax-H3", "upstreamModel": "MiniMax-H3", "baseUrl": "https://api.dflop.top", "requestHeaders": map[string]any{"Idempotency-Key": "test"}, "requestBody": alias.(map[string]any)["requestBody"]}
+	descriptor, err := plugin.Engine.Call(t.Context(), "buildSubmitRequest", aliasCtx)
+	require.NoError(t, err)
+	assert.Equal(t, "minimax-h3", descriptor.(map[string]any)["rewriteModel"])
+	ack, err := plugin.Engine.Call(t.Context(), "parseSubmitResponse", aliasCtx, map[string]any{"body": map[string]any{"id": "exact-task", "model": "minimax-h3", "status": "queued"}})
+	require.NoError(t, err)
+	aliasCtx["taskId"], aliasCtx["state"] = "exact-task", ack.(map[string]any)["state"]
+	result, err := plugin.Engine.Call(t.Context(), "parseTaskResult", aliasCtx, map[string]any{"id": "exact-task", "model": "minimax-h3", "status": "succeeded", "duration_sec": 4.5, "resolution": "768p"})
+	require.NoError(t, err)
+	assert.False(t, result.(map[string]any)["state"].(map[string]any)["billingPending"].(bool))
+}
+
+func TestSubtitleUniqueOperationsNeverInventSourceDuration(t *testing.T) {
+	source, err := builtinplugins.Source("dflop-media")
+	require.NoError(t, err)
+	plugin, err := jsplugin.NewRegistry().RegisterFactory(source, jsplugin.Options{Key: "dflop-media"})
+	require.NoError(t, err)
+	for _, targets := range [][]any{{}, {"en"}, {"en", "vi"}, {"en", "en", "vi"}} {
+		value, err := plugin.Engine.CallPath(t.Context(), "protocols", []string{"openai_video", "decodeRequest"}, map[string]any{"body": map[string]any{"kind": "json", "value": map[string]any{"model": "tvod-subtitle-soft", "source_language": "zh", "target_languages": targets, "source_video_url": "https://example.test/source.mp4", "duration": 999}}})
+		require.NoError(t, err)
+		req := value.(map[string]any)["requestBody"].(map[string]any)
+		assert.NotContains(t, req, "duration")
+		ctx := map[string]any{"model": "tvod-subtitle-soft", "requestBody": req, "taskId": "exact-task", "baseUrl": "https://api.dflop.top", "apiKey": "test"}
+		ack, err := plugin.Engine.Call(t.Context(), "parseSubmitResponse", ctx, map[string]any{"statusCode": 202, "body": map[string]any{"id": "exact-task"}})
+		require.NoError(t, err)
+		state := ack.(map[string]any)["state"].(map[string]any)
+		expected := len(targets)
+		if expected == 3 {
+			expected = 2
+		}
+		assert.EqualValues(t, 1, state["asr_units"])
+		assert.EqualValues(t, expected, state["translation_units"])
+		_, err = plugin.Engine.Call(t.Context(), "extractUsageOnComplete", ctx, map[string]any{"status": "SUCCESS"}, map[string]any{"duration_sec": 10, "unit_count": 10})
+		require.ErrorContains(t, err, "MISSING_AUTHORITATIVE_SOURCE_VIDEO_DURATION")
+		poll, err := plugin.Engine.Call(t.Context(), "buildQueryRequest", ctx)
+		require.NoError(t, err)
+		assert.Equal(t, "GET", poll.(map[string]any)["method"])
+		for _, status := range []string{"failed", "cancelled"} {
+			result, err := plugin.Engine.Call(t.Context(), "parseTaskResult", ctx, map[string]any{"id": "exact-task", "status": status})
+			require.NoError(t, err)
+			assert.Equal(t, "FAILURE", result.(map[string]any)["status"])
+		}
+	}
+}
+
+func TestDocumentedBasisAndThresholdInvalidateWhenCatalogChanges(t *testing.T) {
+	for _, tc := range []struct{ id, pricing, features, field, replacement string }{
+		{"minimax-h3", `"price_per_video_second":"30","video_price_tiers":{"768p":"30","2k":"48"},"video_bills_input_seconds":true`, `"video_input_seconds","video_second","video_tiers"`, `"video_bills_input_seconds":true`, `"video_bills_input_seconds":false`},
+	} {
+		t.Run(tc.id, func(t *testing.T) {
+			category, endpoint := "video", "videos_generations"
+			if tc.id == "qwen-image-3.0-pro" {
+				category, endpoint = "image", "images_generations"
+			}
+			catalog := fmt.Sprintf(`{"schema_version":"1.0","currency":"points","aliases":{},"models":[{"id":%q,"pricing":{"category":%q,"endpoint_type":%q,"callable":true,%s},"billing":{"features":[%s]},"caps":{}}]}`, tc.id, category, endpoint, tc.pricing, tc.features)
+			items, hash, _, err := BuildEffective([]byte(catalog), []byte(`{"points_per_cny":60}`), "1", "1")
+			require.NoError(t, err)
+			require.Len(t, items[0].ContractOverrides, 1)
+			if tc.id == "minimax-h3" {
+				require.NotEmpty(t, items[0].TaskExpression)
+				cost, _, err := billingexpr.RunExprWithRequest(items[0].TaskExpression, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: map[string]any{"duration_sec": 4.5, "resolution": "768p", "input_video_duration_sec": 999}})
+				require.NoError(t, err)
+				assert.InDelta(t, 2.25, cost, 1e-12)
+				assert.Equal(t, "30", items[0].Prices["video_tier:768p"].Credits)
+			} else {
+				assert.Equal(t, "MISSING_AUTHORITATIVE_OUTPUT_DIMENSIONS", items[0].ReasonCode)
+			}
+			changed, nextHash, _, err := BuildEffective([]byte(strings.Replace(catalog, tc.field, tc.replacement, 1)), []byte(`{"points_per_cny":60}`), "1", "1")
+			require.NoError(t, err)
+			assert.NotEqual(t, hash, nextHash)
+			assert.Equal(t, "STALE_PROVIDER_OVERRIDE", changed[0].ReasonCode)
+			assert.Empty(t, changed[0].TaskExpression)
+		})
+	}
+	catalog := []byte(`{"schema_version":"1.0","currency":"points","aliases":{},"models":[{"id":"tvod-subtitle-soft","pricing":{"category":"video","endpoint_type":"videos_generations","callable":true,"price_per_video_second":"0.1011","video_price_tiers":{"asr":"0.06066","translate":"0.04044"}},"billing":{"features":["video_second","video_tiers"]},"caps":{}}]}`)
+	items, _, _, err := BuildEffective(catalog, []byte(`{"points_per_cny":60}`), "1", "1")
+	require.NoError(t, err)
+	assert.Equal(t, "MISSING_AUTHORITATIVE_SOURCE_VIDEO_DURATION", items[0].ReasonCode)
+	assert.Empty(t, items[0].ContractOverrides)
+	assert.Empty(t, items[0].TaskExpression, "formula alone must not make the model selectable")
+	for _, translations := range []int{0, 1, 3} {
+		cost, _, err := billingexpr.RunExprWithRequest(items[0].Expression, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: map[string]any{"source_duration_sec": 10, "translation_units": translations}})
+		require.NoError(t, err)
+		assert.InDelta(t, 10*(0.06066+float64(translations)*0.04044)/60, cost, 1e-10)
+	}
+}
+
+func TestAuthenticatedDFLOPImageBindingAndQuantityBlockers(t *testing.T) {
+	for _, tc := range []struct{ id, fields, features, profile, blocker string }{
+		{"doubao-seedream-4-0-250828", `"price_per_image":"12"`, `"per_image"`, "IMAGE_PER_OUTPUT", ""},
+		{"doubao-seedream-4-5-251128", `"price_per_image":"15"`, `"per_image"`, "IMAGE_PER_OUTPUT", ""},
+		{"doubao-seedream-5-0-260128", `"price_per_image":"13.2"`, `"per_image"`, "IMAGE_PER_OUTPUT", ""},
+		{"doubao-seedream-5-0-pro-260628", `"price_per_image":"18","price_per_image_large":"36","price_per_input_image":"1.2","free_input_images":1,"large_pixel_threshold":2610000`, `"image_size_bands","input_images","per_image"`, "IMAGE_PIXEL_TIER", "MISSING_AUTHORITATIVE_OUTPUT_DIMENSIONS"},
+		{"qwen-image-3.0", `"price_per_image":"10.8","price_per_input_image":"1.2"`, `"input_images","per_image"`, "IMAGE_PER_OUTPUT_PLUS_REFERENCE", ""},
+		{"qwen-image-3.0-pro", `"price_per_image":"15","price_per_image_large":"30","price_per_input_image":"1.2","large_pixel_threshold":2097152`, `"image_size_bands","input_images","per_image"`, "IMAGE_PIXEL_TIER", "MISSING_AUTHORITATIVE_OUTPUT_DIMENSIONS"},
+	} {
+		t.Run(tc.id, func(t *testing.T) {
+			catalog := fmt.Sprintf(`{"schema_version":"1.0","currency":"points","aliases":{},"models":[{"id":%q,"pricing":{"category":"image","endpoint_type":"images_generations","callable":true,%s},"billing":{"features":[%s]},"caps":{}}]}`, tc.id, tc.fields, tc.features)
+			items, _, _, err := BuildEffective([]byte(catalog), []byte(`{"points_per_cny":60}`), "1", "1")
+			require.NoError(t, err)
+			require.Len(t, items, 1)
+			assert.Equal(t, "dflop-image", items[0].TaskPlugin)
+			assert.Equal(t, tc.blocker, items[0].ReasonCode)
+			assert.Empty(t, items[0].ContractOverrides, "authenticated threshold must not be replaced by public docs")
+			if tc.blocker != "" {
+				assert.Equal(t, UnsupportedMapping, items[0].Status)
+				assert.Empty(t, items[0].TaskExpression)
+			} else {
+				assert.NotEmpty(t, items[0].TaskExpression)
+			}
+		})
+	}
+}
+
+func TestCatalogEndpointPrecedence(t *testing.T) {
+	for _, tc := range []struct{ endpoint, protocol, path string }{
+		{"images_generations", "openai_image", "/v1/images/generations"},
+		{"videos_generations", "openai_video", "/v1/videos/generations"},
+		{"", "openai_chat", "/v1/chat/completions"},
+	} {
+		t.Run(tc.protocol, func(t *testing.T) {
+			item := Item{EndpointType: tc.endpoint, Protocols: []string{"openai_chat"}, Callable: true}
+			binding, err := CatalogEndpoint(item)
+			require.NoError(t, err)
+			assert.Equal(t, tc.protocol, binding.Protocol)
+			assert.Equal(t, tc.path, binding.Path)
+		})
+	}
+	_, err := CatalogEndpoint(Item{Callable: true, EndpointType: "unknown"})
+	require.ErrorContains(t, err, "PROTOCOL_MISMATCH")
+	_, err = CatalogEndpoint(Item{EndpointType: "images_generations"})
+	require.ErrorContains(t, err, "SOURCE_MODEL_NOT_CALLABLE")
+}
+
+func TestAuthenticatedWanUsageProfilesUseExactQuantityContract(t *testing.T) {
+	for _, id := range []string{"wan2.7-t2v", "wan3.0-video", "wan3.0-video-prime"} {
+		t.Run(id, func(t *testing.T) {
+			features := `"video_second","video_tiers"`
+			input := false
+			tiers := `"720p":"60","1080p":"120"`
+			if id != "wan2.7-t2v" {
+				features += `,"video_input_seconds"`
+				input = true
+				tiers += `,"480p":"60"`
+			}
+			raw := fmt.Sprintf(`{"schema_version":"1.0","currency":"points","aliases":{},"models":[{"id":%q,"pricing":{"category":"video","endpoint_type":"videos_generations","callable":true,"price_per_video_second":"60","video_price_tiers":{%s},"video_bills_input_seconds":%t,"video_max_input_seconds":15},"billing":{"features":[%s]},"caps":{}}]}`, id, tiers, input, features)
+			items, _, _, err := BuildEffective([]byte(raw), []byte(`{"points_per_cny":60}`), "1", "1")
+			require.NoError(t, err)
+			require.Equal(t, "dflop-media", items[0].TaskPlugin)
+			assert.Empty(t, items[0].ReasonCode)
+			require.NotEmpty(t, items[0].TaskExpression)
+			for _, seconds := range []float64{0, 7} {
+				cost, _, err := billingexpr.RunExprWithRequest(items[0].TaskExpression, billingexpr.TokenParams{}, billingexpr.RequestInput{Usage: map[string]any{"duration_sec": 4.5, "input_video_duration_sec": seconds, "resolution": "720p"}})
+				require.NoError(t, err)
+				expected := 4.5
+				if input {
+					expected += seconds
+				}
+				assert.InDelta(t, expected, cost, 1e-12)
+			}
+		})
+	}
 }

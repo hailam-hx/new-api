@@ -586,3 +586,41 @@ func TestApplyReasoningModelSuffixPreservesGpt51CodexMax(t *testing.T) {
 	assert.Nil(t, info.ReasoningConversion)
 	assert.Equal(t, "gpt-5.1-codex-max", hostreasoning.BaseModelName("gpt-5.1-codex-max"))
 }
+
+func TestDFLOPGeminiNamesSurviveProductionSuffixNormalization(t *testing.T) {
+	for _, name := range []string{"gemini-3.1-pro-low", "gemini-3.1-flash-lite", "gemini-3.1-pro-thinking"} {
+		t.Run(name, func(t *testing.T) {
+			request := &dto.GeneralOpenAIRequest{Model: name}
+			info := &relaycommon.RelayInfo{OriginModelName: name, Request: request, ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://api.dflop.top", UpstreamModelName: name}}
+			require.NoError(t, ApplyReasoningModelSuffix(nil, info, request))
+			assert.Equal(t, name, request.Model)
+			assert.Equal(t, name, info.UpstreamModelName)
+		})
+	}
+}
+
+func TestDFLOPGeminiExplicitControlsStillParse(t *testing.T) {
+	request := &dto.GeneralOpenAIRequest{Model: "gemini-3.1-pro-low@temperature:0.2"}
+	info := &relaycommon.RelayInfo{OriginModelName: request.Model, Request: request, ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://api.dflop.top", UpstreamModelName: request.Model}}
+	require.NoError(t, ApplyReasoningModelSuffix(nil, info, request))
+	assert.Equal(t, "gemini-3.1-pro-low", request.Model)
+	require.NotNil(t, request.Temperature)
+	assert.Equal(t, 0.2, *request.Temperature)
+}
+
+func TestDFLOPGeminiMappingPreservesProviderSuffixAndExplicitControls(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Set("model_mapping", `{"gemini-3.1-pro":"wrong-base","gemini-3.1-pro-low":"gemini-3.1-pro-thinking"}`)
+	request := &dto.GeneralOpenAIRequest{Model: "gemini-3.1-pro-low@temperature:0.2"}
+	info := &relaycommon.RelayInfo{OriginModelName: request.Model, Request: request, ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://api.dflop.top", UpstreamModelName: request.Model}}
+	require.NoError(t, ModelMappedHelper(c, info, request))
+	require.NoError(t, ApplyReasoningModelSuffix(c, info, request))
+	assert.Equal(t, "gemini-3.1-pro-thinking", request.Model)
+	require.NotNil(t, request.Temperature)
+	assert.Equal(t, 0.2, *request.Temperature)
+	c.Set("model_mapping", `{"gemini-3.1-pro":"wrong-base"}`)
+	info.OriginModelName = "gemini-3.1-pro-low"
+	info.UpstreamModelName = info.OriginModelName
+	require.NoError(t, ModelMappedHelper(c, info, request))
+	assert.Equal(t, "gemini-3.1-pro-low", info.UpstreamModelName)
+}

@@ -69,7 +69,8 @@ export function searchDocumentation(
   pages: DocArticle[],
   data: DocReference,
   models: PricingModel[],
-  translate: (key: string, values?: Record<string, string | number>) => string
+  translate: (key: string, values?: Record<string, string | number>) => string,
+  includeReference = false
 ): SearchResult[] {
   const terms = query
     .trim()
@@ -106,7 +107,7 @@ export function searchDocumentation(
       })
     }
   }
-  for (const endpoint of data.endpoints) {
+  for (const endpoint of includeReference ? data.endpoints : []) {
     if (
       matches(
         `${endpoint.method} ${endpoint.path} ${endpoint.summary} ${endpoint.handler}`
@@ -119,7 +120,7 @@ export function searchDocumentation(
       })
     }
   }
-  for (const error of data.errors) {
+  for (const error of includeReference ? data.errors : []) {
     if (matches(`${error.name} ${error.code}`)) {
       results.push({
         title: error.code,
@@ -177,5 +178,34 @@ export function buildQuickstart(
     curl: `${discoveryCurl}\njq -n --arg model "$NEW_API_MODEL" '{model: $model, messages: [{role: "user", content: "Hello"}]${stream ? ', stream: true' : ''}}' |\n  curl --fail-with-body ${stream ? '-N ' : ''}"$NEW_API_BASE_URL/v1/chat/completions" \\\n    -H "Authorization: Bearer $NEW_API_KEY" \\\n    -H "Content-Type: application/json" --data-binary @-`,
     python: `import os\nfrom openai import OpenAI\n\nclient = OpenAI(api_key=os.environ["NEW_API_KEY"], base_url=${JSON.stringify(`${origin}/v1`)})\nrequested = os.environ.get("NEW_API_MODEL")\nmodel = next((item.id for item in client.models.list() if "openai" in getattr(item, "supported_endpoint_types", []) and (not requested or item.id == requested)), None)\nif model is None:\n    raise ValueError("No accessible compatible model")\nresponse = client.chat.completions.create(model=model, messages=[{"role": "user", "content": "Hello"}]${stream ? ', stream=True' : ''})\n${stream ? 'for chunk in response:\n    if chunk.choices:\n        print(chunk.choices[0].delta.content or "", end="", flush=True)' : 'print(response.choices[0].message.content)'}`,
     typescript: `import OpenAI from 'openai'\n\nconst client = new OpenAI({ apiKey: process.env.NEW_API_KEY, baseURL: ${JSON.stringify(`${origin}/v1`)} })\nconst available = await client.models.list()\nconst model = available.data.find(item => 'supported_endpoint_types' in item && Array.isArray(item.supported_endpoint_types) && item.supported_endpoint_types.includes('openai') && (!process.env.NEW_API_MODEL || item.id === process.env.NEW_API_MODEL))?.id\nif (!model) throw new Error('No accessible compatible model')\nconst response = await client.chat.completions.create({ model, messages: [{ role: 'user', content: 'Hello' }]${stream ? ', stream: true' : ''} })\n${stream ? "for await (const chunk of response) process.stdout.write(chunk.choices[0]?.delta.content ?? '')" : 'console.log(response.choices[0].message.content)'}`,
+  }
+}
+
+export function buildFirstRequest(origin: string, stream: boolean) {
+  const url = `${origin.replace(/\/$/, '')}/v1`
+  const payload = `{model: $model, messages: [{role: "user", content: "Hello"}]${stream ? ', stream: true}' : '}'}`
+  return {
+    curl: `: "\${NEW_API_KEY:?Set NEW_API_KEY}" "\${NEW_API_MODEL:?Set NEW_API_MODEL}"
+jq -n --arg model "$NEW_API_MODEL" '${payload}' |
+  curl --fail-with-body ${stream ? '-N ' : ''}${JSON.stringify(`${url}/chat/completions`)} \
+    -H "Authorization: Bearer $NEW_API_KEY" \
+    -H "Content-Type: application/json" --data-binary @-`,
+    python: `import os
+from openai import OpenAI
+
+client = OpenAI(api_key=os.environ["NEW_API_KEY"], base_url=${JSON.stringify(url)})
+response = client.chat.completions.create(
+    model=os.environ["NEW_API_MODEL"],
+    messages=[{"role": "user", "content": "Hello"}]${stream ? ',\n    stream=True' : ''}
+)
+${stream ? 'for chunk in response:\n    if chunk.choices:\n        print(chunk.choices[0].delta.content or "", end="", flush=True)' : 'print(response.choices[0].message.content)'}`,
+    javascript: `import OpenAI from 'openai'
+
+const client = new OpenAI({ apiKey: process.env.NEW_API_KEY, baseURL: ${JSON.stringify(url)} })
+const response = await client.chat.completions.create({
+  model: process.env.NEW_API_MODEL,
+  messages: [{ role: 'user', content: 'Hello' }]${stream ? ',\n  stream: true' : ''}
+})
+${stream ? "for await (const chunk of response) console.log(chunk.choices[0]?.delta?.content ?? '')" : 'console.log(response.choices[0].message.content)'}`,
   }
 }

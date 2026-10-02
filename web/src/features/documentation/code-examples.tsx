@@ -25,11 +25,11 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useTheme } from '@/context/theme-provider'
 
-import { buildQuickstart } from './lib'
+import { buildQuickstart, buildFirstRequest } from './lib'
 
 export function DocsCode(props: {
   code: string
-  language: 'bash' | 'python' | 'typescript' | 'json'
+  language: 'bash' | 'python' | 'typescript' | 'javascript' | 'json'
 }) {
   const { resolvedTheme } = useTheme()
   const [tokens, setTokens] = useState<
@@ -92,30 +92,51 @@ export function DocsCode(props: {
   )
 }
 
-export function CodeExamples(props: { origin: string; protocol?: string }) {
+export function CodeExamples(props: {
+  origin: string
+  protocol?: string
+  beginner?: boolean
+}) {
   const { t } = useTranslation()
   const [stream, setStream] = useState('minimal')
-  const code = buildQuickstart(
-    props.origin,
-    props.protocol ?? 'openai',
-    stream === 'stream'
-  )
+  const code = props.beginner
+    ? buildFirstRequest(props.origin, stream === 'stream')
+    : buildQuickstart(
+        props.origin,
+        props.protocol ?? 'openai',
+        stream === 'stream'
+      )
   return (
     <section className='mt-8 min-w-0 space-y-4' id='request-examples'>
       <h2 className='scroll-mt-40 text-xl font-semibold'>
         {t('Request examples')}
       </h2>
-      <Tabs value={stream} onValueChange={(value) => setStream(String(value))}>
-        <TabsList aria-label={t('Request mode')}>
-          <TabsTrigger value='minimal'>{t('Minimal request')}</TabsTrigger>
-          <TabsTrigger value='stream'>{t('Streaming')}</TabsTrigger>
-        </TabsList>
-      </Tabs>
+      {props.beginner && (
+        <DocsCode
+          language='bash'
+          code={
+            "export NEW_API_KEY='PASTE_YOUR_API_KEY'\nexport NEW_API_MODEL='PASTE_MODEL_ID'"
+          }
+        />
+      )}
+      {!props.beginner && (
+        <Tabs
+          value={stream}
+          onValueChange={(value) => setStream(String(value))}
+        >
+          <TabsList aria-label={t('Request mode')}>
+            <TabsTrigger value='minimal'>{t('Minimal request')}</TabsTrigger>
+            <TabsTrigger value='stream'>{t('Streaming')}</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
       <Tabs defaultValue='curl'>
         <TabsList aria-label={t('SDK language')}>
           <TabsTrigger value='curl'>cURL</TabsTrigger>
           <TabsTrigger value='python'>Python</TabsTrigger>
-          <TabsTrigger value='typescript'>TypeScript</TabsTrigger>
+          <TabsTrigger value='typescript'>
+            {props.beginner ? 'JavaScript' : 'TypeScript'}
+          </TabsTrigger>
         </TabsList>
         <TabsContent value='curl'>
           <DocsCode code={code.curl} language='bash' />
@@ -124,9 +145,33 @@ export function CodeExamples(props: { origin: string; protocol?: string }) {
           <DocsCode code={code.python} language='python' />
         </TabsContent>
         <TabsContent value='typescript'>
-          <DocsCode code={code.typescript} language='typescript' />
+          <DocsCode
+            code={'javascript' in code ? code.javascript : code.typescript}
+            language={props.beginner ? 'javascript' : 'typescript'}
+          />
         </TabsContent>
       </Tabs>
+      {props.beginner && (
+        <details className='rounded-lg border p-4'>
+          <summary className='cursor-pointer text-sm font-medium'>
+            {t('Advanced options')}
+          </summary>
+          <p className='text-muted-foreground mt-3 text-sm'>
+            {t(
+              'Streaming shows the answer as it arrives. Optional fields depend on your chosen model.'
+            )}
+          </p>
+          <Tabs
+            value={stream}
+            onValueChange={(value) => setStream(String(value))}
+          >
+            <TabsList aria-label={t('Request mode')}>
+              <TabsTrigger value='minimal'>{t('Minimal request')}</TabsTrigger>
+              <TabsTrigger value='stream'>{t('Streaming')}</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </details>
+      )}
       <p className='text-muted-foreground text-xs'>
         {t(
           'Keep API keys in server environment variables. Examples do not submit requests from this page.'

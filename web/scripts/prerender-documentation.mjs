@@ -24,10 +24,14 @@ import { marked } from 'marked'
 
 import {
   articles,
+  beginnerArticles,
   groups,
   translateDocSection,
 } from '../src/features/documentation/content.ts'
-import { buildQuickstart } from '../src/features/documentation/lib.ts'
+import {
+  buildFirstRequest,
+  buildQuickstart,
+} from '../src/features/documentation/lib.ts'
 import en from '../src/i18n/locales/en.json' with { type: 'json' }
 
 const translations = createInstance()
@@ -77,7 +81,7 @@ const articlePath = (article) =>
 const navigation = data.groups
   .map(
     (group) =>
-      `<section><p class="text-muted-foreground mb-2 text-xs font-semibold uppercase">${escape(group)}</p><ul class="mb-6 space-y-2">${data.articles
+      `<section><p class="text-muted-foreground mb-2 text-xs font-semibold uppercase">${escape(group)}</p><ul class="mb-6 space-y-2">${beginnerArticles
         .filter(
           (article) => article.group === group && article.kind !== 'provider'
         )
@@ -93,9 +97,7 @@ for (const article of data.articles) {
   const url = articlePath(article)
   urls.push(origin + url)
   const canonical = origin + url
-  const navigationArticles = data.articles.filter(
-    (item) => item.kind !== 'provider'
-  )
+  const navigationArticles = beginnerArticles
   const index = navigationArticles.indexOf(article)
   const previous = navigationArticles[index - 1]
   const next = index >= 0 ? navigationArticles[index + 1] : undefined
@@ -115,7 +117,7 @@ for (const article of data.articles) {
       )
       .join('')}</ul></section>`
   }
-  if (['quickstart', 'sdk'].includes(article.kind)) {
+  if (['quickstart', 'chat', 'sdk'].includes(article.kind)) {
     if (origin) {
       extra += `<section id="request-examples"><h2>Request examples</h2>${[
         false,
@@ -124,7 +126,9 @@ for (const article of data.articles) {
         .map(
           (stream) =>
             `<section><h3>${stream ? 'Streaming' : 'Minimal request'}</h3>${Object.entries(
-              buildQuickstart(origin, article.protocol ?? 'openai', stream)
+              article.kind === 'sdk'
+                ? buildQuickstart(origin, article.protocol ?? 'openai', stream)
+                : buildFirstRequest(origin, stream)
             )
               .map(
                 ([language, code]) =>
@@ -138,7 +142,7 @@ for (const article of data.articles) {
         '<p>Open this page in your browser for SDK examples using your current deployment URL.</p>'
     }
   }
-  const content = `<a href="#docs-content" class="sr-only focus:not-sr-only">Skip to content</a><header class="border-b px-6 py-4"><a href="/">New API</a> · <a href="/docs">Docs</a> · <a href="/docs/models">Models</a> · <a href="/docs/pricing">Pricing</a> · <a href="/docs/api-reference">API Reference</a> · <a href="/dashboard">Console</a></header><div class="mx-auto grid max-w-[1500px] gap-8 p-6 lg:grid-cols-[230px_minmax(0,1fr)_180px]"><aside class="hidden lg:block"><nav aria-label="Documentation navigation">${navigation}</nav></aside><main id="docs-content" class="min-w-0"><nav aria-label="Breadcrumb"><a href="/docs">Docs</a> / ${escape(article.group)} / ${escape(article.title)}</nav><article class="prose max-w-none"><h1 class="mt-6 text-4xl font-semibold">${escape(article.title)}</h1><p class="text-muted-foreground my-4">${escape(article.description)}</p>${article.kind === 'home' ? '<section class="grid gap-6 border-y py-6 sm:grid-cols-2"><div><h2>I want to use the API</h2><p>Create an API key → choose a model → send your first request.</p><a href="/docs/quickstart">Quickstart</a> · <a href="/docs/models">Browse Models</a></div><div><h2>I manage the platform</h2><p>Configure channels → models → pricing → routing.</p><a href="/docs/admin-overview">Admin Guide</a> · <a href="/docs/admin-providers">Providers</a></div></section>' : ''}${article.sections.map((section) => `<section id="${section.id}" class="mt-8 scroll-mt-40"><h2 class="mb-4 text-xl font-semibold"><a href="#${section.id}">${escape(section.title)}</a></h2>${marked.parse(translateDocSection(section, translations.t.bind(translations)))}</section>`).join('')}${extra}${article.console ? `<p class="mt-6"><a href="${escape(article.console)}">Open in Console</a></p>` : ''}</article><p class="mt-8 text-sm text-muted-foreground">Live catalogs follow platform access settings.</p><nav aria-label="Previous and next page" class="mt-8 flex justify-between border-t pt-6">${previous ? `<a href="${articlePath(previous)}">Previous: ${escape(previous.title)}</a>` : '<span></span>'}${next ? `<a href="${articlePath(next)}">Next: ${escape(next.title)}</a>` : ''}</nav></main><aside class="hidden lg:block"><nav aria-label="On this page">${article.sections.map((section) => `<p class="mb-3 text-xs"><a href="#${section.id}">${escape(section.title)}</a></p>`).join('')}</nav></aside></div>`
+  const content = `<a href="#docs-content" class="sr-only focus:not-sr-only">Skip to content</a><header class="border-b px-6 py-4"><a href="/">New API</a> · <a href="/docs">Docs</a> · <a href="/docs/models">Models</a> · <a href="/docs/pricing">Pricing</a> · <a href="/dashboard">Console</a></header><div class="mx-auto grid max-w-[1500px] gap-8 p-6 lg:grid-cols-[230px_minmax(0,1fr)_180px]"><aside class="hidden lg:block"><nav aria-label="Documentation navigation">${navigation}</nav></aside><main id="docs-content" class="min-w-0"><nav aria-label="Breadcrumb"><a href="/docs">Docs</a> / ${escape(article.group)} / ${escape(article.title)}</nav><article class="prose max-w-none"><h1 class="mt-6 text-4xl font-semibold">${escape(article.title)}</h1><p class="text-muted-foreground my-4">${escape(article.description)}</p>${article.kind === 'home' ? '<section class="border-y py-6"><a href="/docs/quickstart">Quickstart</a> · <a href="/docs/models">View Models</a> · <a href="/docs/pricing">View Pricing</a><ol><li>Create an API Key</li><li>Choose a Model</li><li>Send a Request</li></ol><h2>Popular Guides</h2><a href="/docs/text-chat">Text / Chat</a> · <a href="/docs/image">Image</a> · <a href="/docs/video">Video</a> · <a href="/docs/integration-claude-code">Claude Code</a> · <a href="/docs/integration-cursor">Cursor</a></section>' : ''}${article.sections.map((section) => `<section id="${section.id}" class="mt-8 scroll-mt-40"><h2 class="mb-4 text-xl font-semibold"><a href="#${section.id}">${escape(section.title)}</a></h2>${marked.parse(translateDocSection(section, translations.t.bind(translations)))}</section>`).join('')}${extra}${article.console ? `<p class="mt-6"><a href="${escape(article.console)}">Open in Console</a></p>` : ''}</article><p class="mt-8 text-sm text-muted-foreground">Live catalogs follow platform access settings.</p><nav aria-label="Previous and next page" class="mt-8 flex justify-between border-t pt-6">${previous ? `<a href="${articlePath(previous)}">Previous: ${escape(previous.title)}</a>` : '<span></span>'}${next ? `<a href="${articlePath(next)}">Next: ${escape(next.title)}</a>` : ''}</nav></main><aside class="hidden lg:block"><nav aria-label="On this page">${article.sections.map((section) => `<p class="mb-3 text-xs"><a href="#${section.id}">${escape(section.title)}</a></p>`).join('')}</nav></aside></div>`
   const metadata = `<title>${escape(article.title)} · New API Documentation</title><meta name="description" content="${escape(article.description)}"><link rel="canonical" href="${escape(canonical)}"><meta property="og:title" content="${escape(article.title)} · New API Documentation"><meta property="og:description" content="${escape(article.description)}"><meta property="og:type" content="article"><meta property="og:url" content="${escape(canonical)}">`
   const ownedMetadata = metadata.replaceAll(
     /<(title|meta|link)\b/g,

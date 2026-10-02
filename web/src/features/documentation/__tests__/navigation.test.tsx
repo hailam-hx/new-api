@@ -61,7 +61,7 @@ describe('documentation navigation', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     )
   })
-  it('finds an endpoint in the search dialog and preserves its anchor on selection', async () => {
+  it('finds the short Text / Chat guide without exposing endpoint inventories', async () => {
     const user = userEvent.setup()
     const router = await renderNavigation(<DocsSearch models={[]} />)
     await user.click(
@@ -71,11 +71,12 @@ describe('documentation navigation', () => {
       screen.getByRole('textbox', { name: 'Search documentation' }),
       '/v1/chat/completions'
     )
-    await user.click(
-      screen.getByRole('link', { name: /POST \/v1\/chat\/completions/ })
-    )
+    expect(
+      screen.queryByRole('link', { name: /POST \/v1\/chat\/completions/ })
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole('link', { name: /^Text \/ Chat/ }))
     await waitFor(() =>
-      expect(router.state.location.hash).toContain('post--v1-chat-completions')
+      expect(router.state.location.pathname).toBe('/docs/text-chat')
     )
   })
   it('shows a visible empty result for a query with no matching source', async () => {
@@ -92,9 +93,12 @@ describe('documentation navigation', () => {
   })
 })
 
-it('keeps Providers selected when reading an administrator provider detail', async () => {
+it('keeps the primary sidebar to eighteen user guides and hides administration even on a legacy provider URL', async () => {
   await renderNavigation(<DocsNavigation slug='provider-14' />)
+  expect(screen.getAllByRole('link')).toHaveLength(18)
+  expect(screen.getByRole('link', { name: 'API Key' })).toBeVisible()
   expect(
-    screen.getByRole('link', { name: 'Providers / Channels' })
-  ).toHaveAttribute('aria-current', 'page')
+    screen.queryByRole('link', { name: 'Providers / Channels' })
+  ).not.toBeInTheDocument()
+  expect(screen.queryByText('Administration')).not.toBeInTheDocument()
 })

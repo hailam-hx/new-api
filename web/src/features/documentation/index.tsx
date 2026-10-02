@@ -17,10 +17,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Link, useRouterState } from '@tanstack/react-router'
-import { ArrowRight, BookOpen, Code2, Settings2 } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
+import { CopyButton } from '@/components/copy-button'
 import { ErrorState } from '@/components/error-state'
 import { PublicLayout } from '@/components/layout'
 import { LoadingState } from '@/components/loading-state'
@@ -34,6 +35,7 @@ import {
 } from '@/components/ui/breadcrumb'
 import { Button } from '@/components/ui/button'
 import { Markdown } from '@/components/ui/markdown'
+import { useApiInfo } from '@/features/dashboard/hooks/use-status-data'
 import { usePricingData } from '@/features/pricing/hooks/use-pricing-data'
 import { useStatus } from '@/hooks/use-status'
 import { getModuleAccessFromStatus } from '@/lib/nav-modules'
@@ -41,14 +43,21 @@ import { useAuthStore } from '@/stores/auth-store'
 
 import { ModelCatalog, ModelDocument } from './catalog'
 import { CodeExamples } from './code-examples'
-import { articles, getArticle, translateDocSection } from './content'
+import {
+  articles,
+  beginnerArticles,
+  getArticle,
+  translateDocSection,
+} from './content'
 import { DocumentationMetadata } from './metadata'
 import { DocsNavigation, DocsSearch } from './navigation'
-import { ApiReference, ErrorReference } from './reference'
+import { ApiReference, ErrorReference, CommonErrors } from './reference'
+import { TaskExamples } from './task-examples'
 
 export function Documentation(props: { slug?: string; modelId?: string }) {
   const { t } = useTranslation()
   const status = useStatus()
+  const { items: apiAddresses } = useApiInfo()
   const user = useAuthStore((state) => state.auth.user)
   const access = getModuleAccessFromStatus(
     status.status as Record<string, unknown> | null,
@@ -64,25 +73,78 @@ export function Documentation(props: { slug?: string; modelId?: string }) {
     ? `/docs/models/${encodeURIComponent(props.modelId)}`
     : `/docs/${article.slug}`
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const apiOrigin = (
+    apiAddresses[0]?.url?.trim() ||
+    (typeof status.status?.server_address === 'string'
+      ? status.status.server_address.trim()
+      : '') ||
+    origin
+  )
+    .replace(/\/$/, '')
+    .replace(/\/v1$/, '')
   const canonical =
     origin + (article.slug === 'overview' && !props.modelId ? '/docs' : path)
-  const navigationArticles = articles.filter((item) => item.kind !== 'provider')
+  const navigationArticles = beginnerArticles
   const index = navigationArticles.indexOf(article)
   const previous = navigationArticles[index - 1]
   const next = index >= 0 ? navigationArticles[index + 1] : undefined
-  const hasExamples = article.kind === 'quickstart' || article.kind === 'sdk'
+  const hasExamples = ['quickstart', 'chat', 'sdk'].includes(article.kind)
   const hasCatalog =
     !!props.modelId || ['models', 'pricing', 'matrix'].includes(article.kind)
   useEffect(() => {
     const hash = href.split('#')[1]
     if (hash) {
       document
-        .getElementById(decodeURIComponent(hash))
+        .querySelector(`#${CSS.escape(decodeURIComponent(hash))}`)
         ?.scrollIntoView({ block: 'start' })
     } else window.scrollTo({ top: 0 })
   }, [href, data.isLoading])
   return (
-    <PublicLayout showMainContainer={false} headerProps={{ variant: 'solid' }}>
+    <PublicLayout
+      showMainContainer={false}
+      navContent={
+        <nav
+          aria-label={t('Documentation shortcuts')}
+          className='flex items-center gap-5 text-sm'
+        >
+          <Link to='/docs'>{t('Docs')}</Link>
+          <Link to='/docs/$slug' params={{ slug: 'models' }}>
+            {t('Models')}
+          </Link>
+          <Link to='/docs/$slug' params={{ slug: 'pricing' }}>
+            {t('Pricing')}
+          </Link>
+        </nav>
+      }
+      headerProps={{
+        variant: 'solid',
+        showAuthButtons: false,
+        showNotifications: false,
+        showNavigation: false,
+        leftContent: (
+          <div className='lg:hidden'>
+            <DocsNavigation slug={article.slug} mobile />
+          </div>
+        ),
+        rightContent: (
+          <div className='flex items-center gap-2'>
+            <DocsSearch
+              models={canLoadCatalog && !data.error ? data.models : []}
+              catalogRestricted={!canLoadCatalog}
+            />
+            <Button
+              variant='ghost'
+              size='sm'
+              aria-label={t('Console')}
+              render={<Link to='/dashboard' />}
+            >
+              <span className='hidden sm:inline'>{t('Console')}</span>
+              <ArrowRight className='size-4' />
+            </Button>
+          </div>
+        ),
+      }}
+    >
       <DocumentationMetadata
         title={title}
         description={t(article.description)}
@@ -94,43 +156,8 @@ export function Documentation(props: { slug?: string; modelId?: string }) {
       >
         {t('Skip to content')}
       </a>
-      <div className='bg-background/95 border-border fixed inset-x-0 top-16 z-30 border-b backdrop-blur'>
-        <div className='mx-auto flex max-w-[1500px] items-center justify-between gap-2 px-4 py-2'>
-          <div className='lg:hidden'>
-            <DocsNavigation slug={article.slug} mobile />
-          </div>
-          <nav
-            aria-label={t('Documentation shortcuts')}
-            className='hidden min-w-0 items-center gap-5 text-sm sm:flex'
-          >
-            <Link to='/docs' className='flex items-center gap-2 font-medium'>
-              <BookOpen className='size-4' />
-              {t('Docs')}
-            </Link>
-            <Link to='/docs/$slug' params={{ slug: 'models' }}>
-              {t('Models')}
-            </Link>
-            <Link to='/docs/$slug' params={{ slug: 'pricing' }}>
-              {t('Pricing')}
-            </Link>
-            <Link to='/docs/$slug' params={{ slug: 'api-reference' }}>
-              {t('API Reference')}
-            </Link>
-          </nav>
-          <div className='flex items-center gap-2'>
-            <DocsSearch
-              models={canLoadCatalog && !data.error ? data.models : []}
-              catalogRestricted={!canLoadCatalog}
-            />
-            <Button variant='ghost' size='sm' render={<Link to='/dashboard' />}>
-              {t('Console')}
-              <ArrowRight className='size-3' />
-            </Button>
-          </div>
-        </div>
-      </div>
-      <div className='mx-auto grid max-w-[1500px] grid-cols-1 gap-8 px-4 pt-32 lg:grid-cols-[230px_minmax(0,1fr)] lg:px-6 xl:grid-cols-[230px_minmax(0,1fr)_180px]'>
-        <aside className='sticky top-32 hidden max-h-[calc(100svh-8rem)] overflow-y-auto overscroll-contain lg:block'>
+      <div className='mx-auto grid max-w-[1500px] grid-cols-1 gap-8 px-4 pt-24 lg:grid-cols-[230px_minmax(0,1fr)] lg:px-6 xl:grid-cols-[230px_minmax(0,1fr)_180px]'>
+        <aside className='sticky top-24 hidden max-h-[calc(100svh-6rem)] self-start overflow-y-auto overscroll-contain lg:block'>
           <DocsNavigation slug={article.slug} />
         </aside>
         <main id='docs-content' className='min-w-0 pb-16' tabIndex={-1}>
@@ -163,113 +190,116 @@ export function Documentation(props: { slug?: string; modelId?: string }) {
                 {t(article.description)}
               </p>
               {article.kind === 'home' && (
-                <div className='mt-10 grid gap-8 border-y py-8 sm:grid-cols-2'>
+                <section className='mt-8 space-y-8'>
+                  <div className='flex flex-wrap gap-3'>
+                    <Button
+                      render={
+                        <Link
+                          to='/docs/$slug'
+                          params={{ slug: 'quickstart' }}
+                        />
+                      }
+                    >
+                      {t('Quickstart')}
+                      <ArrowRight className='size-4' />
+                    </Button>
+                    <Button
+                      variant='outline'
+                      render={
+                        <Link to='/docs/$slug' params={{ slug: 'models' }} />
+                      }
+                    >
+                      {t('View models')}
+                    </Button>
+                    <Button
+                      variant='ghost'
+                      render={
+                        <Link to='/docs/$slug' params={{ slug: 'pricing' }} />
+                      }
+                    >
+                      {t('View pricing')}
+                    </Button>
+                  </div>
+                  <ol className='grid gap-4 sm:grid-cols-3'>
+                    {['api-key', 'models', 'quickstart'].map((slug, step) => (
+                      <li key={slug} className='rounded-xl border p-5'>
+                        <span className='text-primary text-sm font-semibold'>
+                          {step + 1}
+                        </span>
+                        <Link
+                          className='mt-3 block font-medium'
+                          to='/docs/$slug'
+                          params={{ slug }}
+                        >
+                          {t(
+                            [
+                              'Create an API key',
+                              'Choose a model',
+                              'Send a request',
+                            ][step]
+                          )}
+                        </Link>
+                      </li>
+                    ))}
+                  </ol>
                   <div>
-                    <Code2 className='text-muted-foreground mb-4 size-5' />
-                    <h2 className='text-lg font-semibold'>
-                      {t('I want to use the API')}
+                    <h2 className='mb-3 text-lg font-semibold'>
+                      {t('Popular guides')}
                     </h2>
-                    <p className='text-muted-foreground mt-3 text-sm leading-6'>
-                      {t(
-                        'Create an API key → choose a model → send your first request.'
-                      )}
-                    </p>
-                    <div className='mt-4 flex flex-wrap gap-3'>
-                      <Button
-                        size='sm'
-                        render={
-                          <Link
-                            to='/docs/$slug'
-                            params={{ slug: 'quickstart' }}
-                          />
-                        }
-                      >
-                        {t('Quickstart')}
-                        <ArrowRight className='size-3' />
-                      </Button>
-                      <Button
-                        size='sm'
-                        variant='outline'
-                        render={
-                          <Link to='/docs/$slug' params={{ slug: 'models' }} />
-                        }
-                      >
-                        {t('Browse Models')}
-                      </Button>
-                      <Button
-                        size='sm'
-                        variant='ghost'
-                        render={
-                          <Link
-                            to='/docs/$slug'
-                            params={{ slug: 'api-reference' }}
-                          />
-                        }
-                      >
-                        {t('API Reference')}
-                      </Button>
+                    <div className='flex flex-wrap gap-3'>
+                      {beginnerArticles
+                        .filter((page) =>
+                          [
+                            'text-chat',
+                            'image',
+                            'video',
+                            'integration-claude-code',
+                            'integration-cursor',
+                          ].includes(page.slug)
+                        )
+                        .map((page) => (
+                          <Button
+                            key={page.slug}
+                            variant='outline'
+                            size='sm'
+                            render={
+                              <Link
+                                to='/docs/$slug'
+                                params={{ slug: page.slug }}
+                              />
+                            }
+                          >
+                            {t(page.title)}
+                          </Button>
+                        ))}
                     </div>
                   </div>
-                  <div>
-                    <Settings2 className='text-muted-foreground mb-4 size-5' />
-                    <h2 className='text-lg font-semibold'>
-                      {t('I manage the platform')}
-                    </h2>
-                    <p className='text-muted-foreground mt-3 text-sm leading-6'>
-                      {t('Configure channels → models → pricing → routing.')}
-                    </p>
-                    <div className='mt-4 flex flex-wrap gap-3'>
-                      <Button
-                        size='sm'
-                        variant='outline'
-                        render={
-                          <Link
-                            to='/docs/$slug'
-                            params={{ slug: 'admin-overview' }}
-                          />
-                        }
-                      >
-                        {t('Admin Guide')}
-                      </Button>
-                      <Button
-                        size='sm'
-                        variant='ghost'
-                        render={
-                          <Link
-                            to='/docs/$slug'
-                            params={{ slug: 'admin-providers' }}
-                          />
-                        }
-                      >
-                        {t('Providers')}
-                      </Button>
-                      <Button
-                        size='sm'
-                        variant='ghost'
-                        render={
-                          <Link
-                            to='/docs/$slug'
-                            params={{ slug: 'admin-pricing' }}
-                          />
-                        }
-                      >
-                        {t('Pricing')}
-                      </Button>
-                      <Button
-                        size='sm'
-                        variant='ghost'
-                        render={
-                          <Link
-                            to='/docs/$slug'
-                            params={{ slug: 'admin-routing' }}
-                          />
-                        }
-                      >
-                        {t('Routing')}
-                      </Button>
+                </section>
+              )}
+              {['home', 'quickstart', 'integration'].includes(article.kind) && (
+                <section className='mt-8 rounded-xl border p-4'>
+                  <div className='flex items-center justify-between gap-3'>
+                    <div className='min-w-0'>
+                      <p className='text-muted-foreground mb-2 text-xs'>
+                        {t(
+                          article.protocol === 'anthropic'
+                            ? 'Gateway URL'
+                            : 'OpenAI Base URL'
+                        )}
+                      </p>
+                      <code className='text-sm break-all'>
+                        {apiOrigin}
+                        {article.protocol === 'anthropic' ? '' : '/v1'}
+                      </code>
                     </div>
+                    <CopyButton
+                      value={
+                        apiOrigin +
+                        (article.protocol === 'anthropic' ? '' : '/v1')
+                      }
+                    />
                   </div>
-                </div>
+                </section>
               )}
               {article.sections.map((section) => (
                 <section
@@ -328,8 +358,19 @@ export function Documentation(props: { slug?: string; modelId?: string }) {
             </>
           )}
           {hasExamples && (
-            <CodeExamples origin={origin} protocol={article.protocol} />
+            <CodeExamples
+              origin={apiOrigin}
+              protocol={article.protocol}
+              beginner={['quickstart', 'chat'].includes(article.kind)}
+            />
           )}
+          {['image', 'video', 'audio'].includes(article.kind) && (
+            <TaskExamples
+              kind={article.kind as 'image' | 'video' | 'audio'}
+              origin={apiOrigin}
+            />
+          )}
+          {article.kind === 'common-errors' && <CommonErrors />}
           {hasCatalog && (
             <>
               {status.loading && <LoadingState />}
@@ -373,18 +414,20 @@ export function Documentation(props: { slug?: string; modelId?: string }) {
           )}
           {article.kind === 'reference' && <ApiReference />}
           {article.kind === 'errors' && <ErrorReference />}
-          <details className='text-muted-foreground mt-6 text-xs'>
-            <summary className='cursor-pointer'>
-              {t('Implementation sources')}
-            </summary>
-            <ul className='mt-2 space-y-1'>
-              {article.sources.map((source) => (
-                <li key={source}>
-                  <code>{source}</code>
-                </li>
-              ))}
-            </ul>
-          </details>
+          {!beginnerArticles.includes(article) && (
+            <details className='text-muted-foreground mt-6 text-xs'>
+              <summary className='cursor-pointer'>
+                {t('Implementation sources')}
+              </summary>
+              <ul className='mt-2 space-y-1'>
+                {article.sources.map((source) => (
+                  <li key={source}>
+                    <code>{source}</code>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
           <nav
             className='mt-10 grid grid-cols-2 gap-4 border-t pt-6'
             aria-label={t('Previous and next page')}
@@ -417,7 +460,7 @@ export function Documentation(props: { slug?: string; modelId?: string }) {
             )}
           </nav>
         </main>
-        <aside className='sticky top-32 hidden max-h-[calc(100svh-8rem)] overflow-y-auto xl:block'>
+        <aside className='sticky top-24 hidden max-h-[calc(100svh-6rem)] self-start overflow-y-auto xl:block'>
           <nav aria-label={t('On this page')}>
             <p className='mb-4 text-xs font-semibold'>{t('On this page')}</p>
             <ul className='text-muted-foreground space-y-3 text-xs'>

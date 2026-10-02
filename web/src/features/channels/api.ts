@@ -699,3 +699,23 @@ export async function getPrefillGroups(
   const res = await api.get('/api/prefill_group', { params: { type } })
   return res.data
 }
+
+/** Task diagnostics: offline by default, reviewed catalog probe only when explicit. */
+export async function preflightTaskChannel(
+  id: number,
+  model?: string,
+  operation?: string,
+  mode: 'preflight' | 'connectivity' = 'preflight',
+  keyIndex?: number
+): Promise<{
+  success: boolean
+  message?: string
+  data?: import('./types').TaskChannelDiagnostic
+}> {
+  const res = await api.post(
+    `/api/channel/test/${id}/task`,
+    { model, operation, mode, input: null, key_index: keyIndex },
+    channelActionConfig()
+  )
+  return res.data
+}

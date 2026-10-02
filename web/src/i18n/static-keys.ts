@@ -834,4 +834,9 @@ export const STATIC_I18N_KEYS = [
   'Vendor name and icon must not exceed 128 characters.',
   'Shown',
   'Not shown',
+  'Create an API Key',
+  'Choose a Model',
+  'Send a Request',
+  'Gateway URL',
+  'OpenAI Base URL',
 ] as const

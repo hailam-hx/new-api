@@ -1,0 +1,497 @@
+{
+  "groups": [
+    "Getting Started",
+    "Models & Pricing",
+    "API",
+    "Integrations",
+    "Account",
+    "Support"
+  ],
+  "articles": [
+    {
+      "slug": "overview",
+      "group": "Getting Started",
+      "title": "New API Documentation",
+      "description": "Start using AI APIs in a few minutes.",
+      "kind": "home",
+      "sources": ["router/relay-router.go", "controller/model.go"],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "What is New API?",
+          "body": "New API lets your app send a message, create an image or use another supported AI model through one API account. Start with a key, a model and one small request."
+        },
+        {
+          "id": "step-2",
+          "title": "Three things you need",
+          "body": "- **Base URL**: the address your app connects to. Copy the address shown below.\n- **API Key**: your private access key, created in [API Keys](/keys).\n- **Model ID**: the exact model name. Find it in [Models](/docs/models) and use Copy. Different models support different tasks."
+        }
+      ]
+    },
+    {
+      "slug": "quickstart",
+      "group": "Getting Started",
+      "title": "Quickstart",
+      "description": "Your first AI response in five short steps.",
+      "kind": "quickstart",
+      "sources": [
+        "web/src/features/keys/components/api-keys-primary-buttons.tsx",
+        "controller/model.go",
+        "router/relay-router.go",
+        "web/src/features/usage-logs/components/columns/common-logs-columns.tsx"
+      ],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "1. Sign in",
+          "body": "[Sign in](/sign-in), or [create an account](/sign-up) if registration is available."
+        },
+        {
+          "id": "step-2",
+          "title": "2. Create an API key",
+          "body": "Open [API Keys](/keys), choose **Create API Key**, then copy the key. Keep it private."
+        },
+        {
+          "id": "step-3",
+          "title": "3. Choose a model",
+          "body": "Open [Models](/docs/models), choose a Text model that supports chat, and copy its Model ID. Your key must have access to that model."
+        },
+        {
+          "id": "step-4",
+          "title": "4. Copy and run",
+          "body": "Set `NEW_API_KEY` and `NEW_API_MODEL` in your terminal. Choose cURL, Python or JavaScript below, copy the example and run it. For Python install `openai`; for JavaScript install `openai`; cURL also needs `jq`."
+        },
+        {
+          "id": "step-5",
+          "title": "5. Check the result",
+          "body": "Your request goes to the model, which returns an answer. Its usage determines the cost. Open [Usage Logs](/usage-logs/common) to see the request and its **Cost**. If it fails, use [Common errors](/docs/error-codes)."
+        }
+      ],
+      "console": "/keys"
+    },
+    {
+      "slug": "api-key",
+      "group": "Getting Started",
+      "title": "API Key",
+      "description": "Create, copy and protect your API key.",
+      "kind": "article",
+      "sources": [
+        "web/src/features/keys/components/data-table-row-actions.tsx"
+      ],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Create and copy",
+          "body": "Open [API Keys](/keys), choose **Create API Key**, give it a name and save. Open its actions to **Copy Key** or **Copy Connection Info**. Use a separate key for each app when possible."
+        },
+        {
+          "id": "step-2",
+          "title": "Use your key safely",
+          "body": "An API key lets an app use your account balance. Put it in your app settings or a server environment variable. Never share it, publish it in code or send it in a screenshot."
+        },
+        {
+          "id": "step-3",
+          "title": "If a key is exposed",
+          "body": "Open [API Keys](/keys), **Disable** or **Delete** the exposed key, then create a new one and update your apps. Deleting or disabling a key stops future requests using it."
+        }
+      ],
+      "console": "/keys"
+    },
+    {
+      "slug": "models",
+      "group": "Models & Pricing",
+      "title": "Models",
+      "description": "Choose a model and copy its ID.",
+      "kind": "models",
+      "sources": [
+        "controller/pricing.go",
+        "controller/model.go",
+        "web/src/features/pricing/hooks/use-pricing-data.ts"
+      ],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Choose by task",
+          "body": "Use Text for chat, Image for pictures, Video for clips, or Audio for speech. Search by model name or provider. A type is shown only when the platform supplies supporting information."
+        },
+        {
+          "id": "step-2",
+          "title": "Copy the Model ID",
+          "body": "Use **Copy** beside a model name. Paste that exact ID into your app or the request example. A listed model still needs permission on your API key; if access fails, check the key settings."
+        }
+      ]
+    },
+    {
+      "slug": "pricing",
+      "group": "Models & Pricing",
+      "title": "Pricing",
+      "description": "See the price before you send a request.",
+      "kind": "pricing",
+      "sources": [
+        "controller/pricing.go",
+        "web/src/features/pricing/components/model-price-cell.tsx",
+        "web/src/features/usage-logs/components/columns/common-logs-columns.tsx"
+      ],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Read the price",
+          "body": "The prices below come from this platform. Text may have separate input and output prices. Image, video and audio use the unit shown for that model; there is no single unit for every model."
+        },
+        {
+          "id": "step-2",
+          "title": "Check what you paid",
+          "body": "Prices can depend on your account and request options. Public prices marked **From** show a starting price. The request's **Cost** in [Usage Logs](/usage-logs/common) is the amount recorded for your usage."
+        }
+      ]
+    },
+    {
+      "slug": "text-chat",
+      "group": "API",
+      "title": "Text / Chat",
+      "description": "Send a message and receive an AI answer.",
+      "kind": "chat",
+      "sources": ["router/relay-router.go", "relaykit/dto/openai_request.go"],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "What it does",
+          "body": "Use Text / Chat for questions, writing and supported coding tasks. Choose a model with OpenAI chat support in [Models](/docs/models)."
+        },
+        {
+          "id": "step-2",
+          "title": "Endpoint and response",
+          "body": "Send `POST /v1/chat/completions`. `model` is your Model ID; `messages` contains your conversation. A normal response has the answer in `choices[0].message.content`. Usage and cost appear in [Usage Logs](/usage-logs/common)."
+        },
+        {
+          "id": "step-3",
+          "title": "Common options",
+          "body": "Start with `model` and `messages`. In **Advanced options**, `stream` delivers the answer in pieces. `temperature` changes randomness and `max_tokens` limits the answer length, where the selected model supports them. Begin without optional fields if the model rejects one."
+        }
+      ],
+      "protocol": "openai"
+    },
+    {
+      "slug": "image",
+      "group": "API",
+      "title": "Image",
+      "description": "Create a picture from a prompt.",
+      "kind": "image",
+      "sources": [
+        "pkg/jsplugin/routing.go",
+        "relay/channel/openai/relay_image.go",
+        "docs/plugin-api/v1.md"
+      ],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Prompt and model",
+          "body": "Describe the picture you want. Choose a model that supports image generation, then send `POST /v1/images/generations` with `model` and `prompt`."
+        },
+        {
+          "id": "step-2",
+          "title": "Options and result",
+          "body": "Depending on the model, `size` controls dimensions and `n` controls image count. Start with one image and omit optional settings until you check the model's support. The result can contain an image URL or encoded image data; async providers may return a task."
+        },
+        {
+          "id": "step-3",
+          "title": "If it takes too long",
+          "body": "Check [Task Logs](/usage-logs/task) before sending the same request again. An image task can continue after a timeout and still incur a charge when it finishes."
+        }
+      ]
+    },
+    {
+      "slug": "video",
+      "group": "API",
+      "title": "Video",
+      "description": "Create a video and check when it is ready.",
+      "kind": "video",
+      "sources": [
+        "pkg/jsplugin/routing.go",
+        "model/task.go",
+        "controller/relay.go"
+      ],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Create a video",
+          "body": "Choose a supported video model, write a prompt and send `POST /v1/videos`. The response gives you a task `id`; the video is not usually ready immediately."
+        },
+        {
+          "id": "step-2",
+          "title": "Check and download",
+          "body": "Create task → save its ID → check `GET /v1/videos/{task_id}` → when `status` is `completed`, download `GET /v1/videos/{task_id}/content`. If it is `failed`, inspect [Task Logs](/usage-logs/task)."
+        },
+        {
+          "id": "step-3",
+          "title": "Model-specific options",
+          "body": "Duration, resolution, aspect ratio, reference images and audio options vary by model. Only use options supported by your chosen model; the first example omits them. Check task status before retrying to avoid creating a second paid task."
+        }
+      ]
+    },
+    {
+      "slug": "audio",
+      "group": "API",
+      "title": "Audio",
+      "description": "Turn text into speech or speech into text.",
+      "kind": "audio",
+      "sources": [
+        "router/relay-router.go",
+        "pkg/jsplugin/routing.go",
+        "relay/audio_handler.go"
+      ],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Text-to-speech",
+          "body": "Send `POST /v1/audio/speech` with a supported `model`, your text in `input`, and a supported `voice`. A normal response is audio data. Some async models return task JSON instead; check the response type before saving an audio file."
+        },
+        {
+          "id": "step-2",
+          "title": "Speech-to-text",
+          "body": "Send `POST /v1/audio/transcriptions` with your audio `file` and a supported `model` as multipart form data. The response includes the transcribed `text`."
+        },
+        {
+          "id": "step-3",
+          "title": "Choose a supported model",
+          "body": "Speech generation and transcription are different tasks. Check the model's support and price rather than assuming every Audio model can do both."
+        }
+      ]
+    },
+    {
+      "slug": "integration-claude-code",
+      "group": "Integrations",
+      "title": "Claude Code",
+      "description": "Connect Claude Code with your gateway key.",
+      "kind": "integration",
+      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Configure",
+          "body": "Create a dedicated [API key](/keys). Set `ANTHROPIC_BASE_URL` to this gateway's origin **without `/v1`**, and `ANTHROPIC_AUTH_TOKEN` to that key. Choose a model that supports Anthropic Messages in [Models](/docs/models). Set `ANTHROPIC_MODEL` to its exact ID, then start Claude Code in the same terminal."
+        },
+        {
+          "id": "step-2",
+          "title": "Test",
+          "body": "Send one short prompt, check `/status` in Claude Code and review [Usage Logs](/usage-logs/common). Client versions and model features differ; this gateway does not enable the count-tokens endpoint. See the [official Claude Code gateway guide](https://code.claude.com/docs/en/llm-gateway-connect)."
+        }
+      ],
+      "protocol": "anthropic"
+    },
+    {
+      "slug": "integration-cursor",
+      "group": "Integrations",
+      "title": "Cursor",
+      "description": "Use your API key in supported Cursor settings.",
+      "kind": "integration",
+      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Configure",
+          "body": "Create a dedicated [API key](/keys). Open Cursor **Settings → Models**. If your version provides **Override OpenAI Base URL**, enter the OpenAI Base URL below, save your key and choose an accessible chat model ID."
+        },
+        {
+          "id": "step-2",
+          "title": "Test",
+          "body": "Send a short chat prompt and check [Usage Logs](/usage-logs/common). Support depends on Cursor's version and provider controls. Your key does not replace every Cursor feature, including Tab completion, and requests pass through Cursor's servers. See the [official Cursor API key guide](https://cursor.com/help/models-and-usage/api-keys)."
+        }
+      ]
+    },
+    {
+      "slug": "integration-cline",
+      "group": "Integrations",
+      "title": "Cline",
+      "description": "Configure an OpenAI Compatible connection.",
+      "kind": "integration",
+      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Configure",
+          "body": "Create a dedicated [API key](/keys). In Cline settings choose **OpenAI Compatible**. Paste the OpenAI Base URL below, your key and the exact Model ID copied from [Models](/docs/models)."
+        },
+        {
+          "id": "step-2",
+          "title": "Test",
+          "body": "Send a short prompt and inspect [Usage Logs](/usage-logs/common). Only enable image or tool features when the model supports them. See the [official Cline setup guide](https://docs.cline.bot/provider-config/openai-compatible)."
+        }
+      ]
+    },
+    {
+      "slug": "integration-compatible-apps",
+      "group": "Integrations",
+      "title": "OpenAI-compatible Apps",
+      "description": "Connect apps that offer a Custom OpenAI API setting.",
+      "kind": "integration",
+      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Three settings",
+          "body": "Most compatible apps need **Base URL**, **API Key** and **Model ID**. Use the OpenAI Base URL below, a key from [API Keys](/keys) and an accessible chat model copied from [Models](/docs/models). Avoid adding `/v1` twice if the app appends it."
+        },
+        {
+          "id": "step-2",
+          "title": "Test a small request",
+          "body": "Send one short message, then open [Usage Logs](/usage-logs/common). Basic chat support does not guarantee every app feature. If a setting is missing or the request fails, check the app's own documentation and [Common errors](/docs/error-codes)."
+        }
+      ]
+    },
+    {
+      "slug": "console-wallet",
+      "group": "Account",
+      "title": "Balance & Top-up",
+      "description": "Check your balance and add credit.",
+      "kind": "article",
+      "sources": [
+        "web/src/features/wallet/components/wallet-stats-card.tsx",
+        "web/src/features/wallet/index.tsx"
+      ],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Your balance",
+          "body": "Open [Wallet](/wallet) to see **Current Balance** and the payment or redemption options available on this platform. Your balance decreases as requests use paid services."
+        },
+        {
+          "id": "step-2",
+          "title": "After a payment",
+          "body": "Check [Payment history](/wallet?show_history=true) to confirm the order status. If credit has not arrived, check that status before paying again and contact support with the order ID. Never share your payment credentials."
+        }
+      ],
+      "console": "/wallet"
+    },
+    {
+      "slug": "console-logs",
+      "group": "Account",
+      "title": "Usage & Logs",
+      "description": "See your requests and their actual cost.",
+      "kind": "article",
+      "sources": [
+        "web/src/features/usage-logs/components/columns/common-logs-columns.tsx",
+        "web/src/features/usage-logs/index.tsx"
+      ],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Check a request",
+          "body": "Open [Usage Logs](/usage-logs/common) and find the request by time or model. The log shows its model, usage and **Cost**; available status and error information helps explain failures."
+        },
+        {
+          "id": "step-2",
+          "title": "Check a task",
+          "body": "Use [Task Logs](/usage-logs/task) for video and other async work. Check whether the task is still running, completed or failed before starting it again. The final cost or refund can be recorded after completion."
+        }
+      ],
+      "console": "/usage-logs/common"
+    },
+    {
+      "slug": "billing",
+      "group": "Account",
+      "title": "Billing",
+      "description": "Understand when and how you pay.",
+      "kind": "article",
+      "sources": [
+        "service/billing_session.go",
+        "service/task_billing.go",
+        "service/violation_fee.go",
+        "web/src/features/usage-logs/components/columns/common-logs-columns.tsx"
+      ],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "When am I charged?",
+          "body": "Successful requests are charged using the model's configured price and recorded usage. Text can charge separately for input and output tokens. Image, video and audio use the unit displayed on [Pricing](/docs/pricing)."
+        },
+        {
+          "id": "step-2",
+          "title": "What if a request fails?",
+          "body": "Failed requests normally return reserved balance. Completed work or configured policy fees may still be charged. A timed-out task can keep running, so check [Task Logs](/usage-logs/task) before trying again."
+        },
+        {
+          "id": "step-3",
+          "title": "Where is the exact cost?",
+          "body": "Open [Usage Logs](/usage-logs/common) and read **Cost** for that request. Use [Wallet](/wallet) for your remaining balance. Task charges or refunds can be finalized later; the initial balance change is not always the final cost."
+        }
+      ]
+    },
+    {
+      "slug": "faq",
+      "group": "Support",
+      "title": "FAQ",
+      "description": "Short answers to the questions people ask first.",
+      "kind": "article",
+      "sources": [
+        "middleware/auth.go",
+        "middleware/rate-limit.go",
+        "middleware/distributor.go",
+        "controller/pricing.go"
+      ],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Where do I get my API key?",
+          "body": "Open [API Keys](/keys), create a key and use **Copy Key**."
+        },
+        {
+          "id": "step-2",
+          "title": "What are Base URL and Model ID?",
+          "body": "Base URL is the server address your app connects to. Model ID is the exact model name you copy from [Models](/docs/models). See [Quickstart](/docs/quickstart)."
+        },
+        {
+          "id": "step-3",
+          "title": "Why is my balance insufficient?",
+          "body": "Check [Wallet](/wallet) and your key's quota. Add credit if needed, or check your subscription limits. See [Billing](/docs/billing)."
+        },
+        {
+          "id": "step-4",
+          "title": "Why is a model unavailable?",
+          "body": "Check the model ID, your key's access and the task type. A visible model may be unavailable for your key or temporarily have no working provider. See [Common errors](/docs/error-codes)."
+        },
+        {
+          "id": "step-5",
+          "title": "Which models create images or videos?",
+          "body": "Use the Image or Video filter on [Models](/docs/models). The type is based on supplied metadata, so unknown types are not guessed."
+        },
+        {
+          "id": "step-6",
+          "title": "What do 401, 429 or a timeout mean?",
+          "body": "401 usually means the key is invalid, expired or disabled. 429 means a request limit was reached. On a timeout, check the request or task status before retrying. See [Common errors](/docs/error-codes)."
+        },
+        {
+          "id": "step-7",
+          "title": "How do I check the cost?",
+          "body": "Open [Usage Logs](/usage-logs/common), find the request and read **Cost**."
+        }
+      ]
+    },
+    {
+      "slug": "error-codes",
+      "group": "Support",
+      "title": "Common errors",
+      "description": "Find the cause and the next step.",
+      "kind": "common-errors",
+      "sources": [
+        "middleware/auth.go",
+        "middleware/distributor.go",
+        "middleware/rate-limit.go",
+        "service/billing_session.go",
+        "controller/relay.go"
+      ],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Read the message",
+          "body": "Check both the HTTP status and the response message. The same status can have different causes. This gateway uses **403**, not a fixed 402, for insufficient account or key quota."
+        },
+        {
+          "id": "step-2",
+          "title": "Before retrying",
+          "body": "Fix invalid settings first. For limits, wait and try a small request. For image or video timeouts, check [Task Logs](/usage-logs/task) before submitting again; a task may still finish and be charged."
+        }
+      ]
+    }
+  ]
+}

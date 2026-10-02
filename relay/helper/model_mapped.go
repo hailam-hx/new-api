@@ -3,10 +3,14 @@ package helper
 import (
 	"errors"
 	"fmt"
+	"strings"
+
+	"github.com/QuantumNous/new-api/service/pricing/dflop"
 
 	rootcommon "github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
+	kitreasoning "github.com/QuantumNous/new-api/relaykit/relayconvert/reasoning"
 	hostreasoning "github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/gin-gonic/gin"
 )
@@ -33,6 +37,9 @@ func ModelMappedHelper(c *gin.Context, info *relaycommon.RelayInfo, request dto.
 		for {
 			mappedModel, exists := modelMap[currentModel]
 			baseModel := hostreasoning.BaseModelName(currentModel)
+			if dflop.ApprovedCatalogOrigin(info.ChannelBaseUrl) && strings.HasPrefix(currentModel, "gemini-") {
+				baseModel = kitreasoning.ParseModelModifiers(currentModel).Base
+			}
 			if (!exists || mappedModel == "") && baseModel != currentModel {
 				mappedModel, exists = modelMap[baseModel]
 			}

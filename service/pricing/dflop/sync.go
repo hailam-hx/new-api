@@ -29,7 +29,7 @@ func Plan(items []Item, config model.DFLOPConfig, entries []model.ModelPricingEn
 		if item.ReasonCode == "NO_PLUGIN_USAGE_PROFILE" {
 			item.ReasonCode = missingTaskBindingReason(item)
 		}
-		if item.Status == SupportedAuto && item.PricingShape == "image:per_image" && mediaPricesMatch(item, "price_per_image") {
+		if item.TaskPlugin == "" && item.Status == SupportedAuto && item.PricingShape == "image:per_image" && mediaPricesMatch(item, "price_per_image") {
 			for _, plugin := range jsplugin.DefaultRegistry.Generation().PluginsByModel(item.ModelID) {
 				if plugin.Meta.Key == "doubao" && slices.Contains(plugin.Meta.Models, item.ModelID) {
 					item.TaskPlugin = plugin.Meta.Key
@@ -109,6 +109,11 @@ func Plan(items []Item, config model.DFLOPConfig, entries []model.ModelPricingEn
 			expression = item.TaskExpression
 		}
 		row := model.PricingSyncItem{ModelID: item.ModelID, Category: item.Category, EndpointType: item.EndpointType, Status: status, Reason: reason, ReasonCode: reasonCode, ExpectedVersion: entry.Version, CurrentPricing: string(currentJSON), ProposedPricing: string(proposedJSON), Prices: string(pricesJSON), Expression: expression, PricingShape: item.PricingShape, PricingScope: pricingScope, PluginKey: pluginKey, RequiredFacts: string(requiredJSON), AvailableFacts: string(availableJSON), MissingFacts: string(missingJSON)}
+		if status == SupportedAuto && len(item.ContractOverrides) > 0 {
+			row.Status = SupportedWithProviderOverride
+			row.ReasonCode = DocumentedContractOverride
+			row.Reason = "Official DFLOP contract fallback; explicit manual apply required"
+		}
 		if status != SupportedAuto {
 			row.Action = "SKIP"
 			result = append(result, row)
@@ -478,9 +483,25 @@ func (m Manager) Apply(ctx context.Context, id, expectedVersion string, selected
 			logger.LogWarn(ctx, fmt.Sprintf("DFLOP pricing apply failure audit write failed: run_id=%s err=%v", id, recordErr))
 		}
 	}()
-	run, _, err := model.GetPricingSyncPreview(id)
+	run, previewItems, err := model.GetPricingSyncPreview(id)
 	if err != nil {
 		return nil, err
+	}
+	if actorID <= 0 {
+		for _, item := range previewItems {
+			if !slices.Contains(selected, item.ModelID) {
+				continue
+			}
+			var prices map[string]Price
+			if err := common.UnmarshalJsonStr(item.Prices, &prices); err != nil {
+				return nil, err
+			}
+			for _, price := range prices {
+				if len(price.ContractOverrides) > 0 {
+					return nil, errors.New("DFLOP_DOCUMENTED_CONTRACT_OVERRIDE: automatic apply forbidden")
+				}
+			}
+		}
 	}
 	if run.PricingVersionBefore != expectedVersion {
 		return nil, model.ErrModelPricingConflict

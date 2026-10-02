@@ -20,7 +20,10 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import http from 'node:http'
 
-import { buildQuickstart } from '../src/features/documentation/lib.ts'
+import {
+  buildFirstRequest,
+  buildQuickstart,
+} from '../src/features/documentation/lib.ts'
 
 const calls = []
 const server = http.createServer(async (req, res) => {
@@ -95,9 +98,44 @@ try {
       }
     }
   }
+  for (const stream of [false, true]) {
+    const code = buildFirstRequest(origin, stream)
+    for (const shell of ['/bin/bash', '/bin/zsh']) {
+      const child = spawn(shell, ['-c', code.curl], {
+        env: {
+          ...process.env,
+          PATH: process.env.DOCS_JQ_DIRECTORY + ':' + process.env.PATH,
+          NEW_API_KEY: 'fixture-only-token',
+          NEW_API_MODEL: 'fixture/model-with-quote"',
+        },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+      let stderr = ''
+      child.stderr.on('data', (value) => (stderr += value))
+      assert.equal(
+        await new Promise((resolve) => child.on('exit', resolve)),
+        0,
+        stderr
+      )
+      assert.equal(calls.at(-1).url, '/v1/chat/completions')
+      assert.deepEqual(calls.at(-1).body, {
+        model: 'fixture/model-with-quote"',
+        messages: [{ role: 'user', content: 'Hello' }],
+        ...(stream ? { stream: true } : {}),
+      })
+    }
+    const python = spawn(
+      'python3',
+      ['-c', 'import ast,sys; ast.parse(sys.stdin.read())'],
+      { stdio: ['pipe', 'pipe', 'pipe'] }
+    )
+    python.stdin.end(code.python)
+    assert.equal(await new Promise((resolve) => python.on('exit', resolve)), 0)
+    new Bun.Transpiler({ loader: 'js' }).transformSync(code.javascript)
+  }
 } finally {
   server.close()
 }
 console.log(
-  'PASS: six real cURL executions against local protocol fixture; dynamic model choice, JSON and URL escaping, minimal/stream requests. Six Python examples parse; six TypeScript examples transpile.'
+  'PASS: four beginner Bash/zsh and six reference cURL executions against local protocol fixture; dynamic model choice, JSON and URL escaping, minimal/stream requests. Six Python examples parse; six TypeScript examples transpile.'
 )

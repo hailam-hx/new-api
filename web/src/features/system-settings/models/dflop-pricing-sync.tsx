@@ -41,7 +41,17 @@ type Config = {
   allow_auto_apply_new_models: boolean
 }
 
+type ContractOverride = {
+  feature: string
+  source_url: string
+  observed_at: string
+  version: string
+  catalog_conflict: string
+  value: string
+}
+
 type Price = {
+  contract_overrides?: ContractOverride[]
   unit: string
   credits: string
   cost_cny: string
@@ -164,6 +174,7 @@ export function DflopPricingSync() {
   const { t } = useTranslation()
   const statusLabels: Record<string, string> = {
     SUPPORTED_AUTO: t('Ready'),
+    SUPPORTED_WITH_PROVIDER_OVERRIDE: t('Official DFLOP contract fallback'),
     SUPPORTED_MANUAL: t('Needs review'),
     MANUAL_OVERRIDE: t('Manual adoption required'),
     MANUAL_DRIFT: t('Manual drift'),
@@ -183,6 +194,10 @@ export function DflopPricingSync() {
     SKIP: t('Skip'), BLOCK: t('Blocked'),
   }
   const reasonLabels: Record<string, string> = {
+    DFLOP_DOCUMENTED_CONTRACT_OVERRIDE: t('Official DFLOP contract fallback'),
+    STALE_PROVIDER_OVERRIDE: t('Provider override changed; administrator review required'),
+    MISSING_AUTHORITATIVE_OUTPUT_DIMENSIONS: t('Authoritative output dimensions are unavailable'),
+    MISSING_AUTHORITATIVE_SOURCE_VIDEO_DURATION: t('Authoritative source video duration is unavailable'),
     AMBIGUOUS_DISCOUNT: t('Discounted source price needs review'),
     PROMOTION_STATE_CHANGED: t('Promotion state changed'),
     MULTIMODAL_PROMOTION_MAPPING_REQUIRED: t('Other promoted billing features need mapping'),
@@ -294,7 +309,7 @@ export function DflopPricingSync() {
   ]
 
   let detailUsageSource = t('Not established')
-  if (detail?.status === 'SUPPORTED_AUTO') {
+  if (detail && ['SUPPORTED_AUTO', 'SUPPORTED_WITH_PROVIDER_OVERRIDE'].includes(detail.status)) {
     detailUsageSource = detail.pricing_scope === 'PLUGIN_OVERRIDE' ? t('Task plugin final result') : t('Final relay response or request count')
   }
   const includesManualAdoption = selected.some((name) => preview?.items.some((item) => item.model_id === name && (item.status === 'MANUAL_OVERRIDE' || item.status === 'MANUAL_DRIFT')))
@@ -360,7 +375,7 @@ export function DflopPricingSync() {
       {preview.run.error_message && <p role='alert' className='text-destructive text-sm'>{preview.run.error_message}</p>}
       <Input aria-label={t('Search models')} placeholder={t('Search models')} value={search} onChange={(event) => setSearch(event.target.value)} />
       <StaticDataTable data={visible} getRowKey={(item) => item.model_id} className='max-h-[35rem] overflow-auto' tableClassName='min-w-[1100px]' columns={[
-        { id: 'select', header: t('Select'), cell: (item) => <Checkbox aria-label={t('Select {{model}}', { model: item.model_id })} checked={selected.includes(item.model_id)} disabled={item.action !== 'ADD' && item.action !== 'UPDATE' || !['SUPPORTED_AUTO', 'SUPPORTED_MANUAL', 'MANUAL_OVERRIDE', 'MANUAL_DRIFT'].includes(item.status)} onCheckedChange={(checked) => setSelected((old) => checked ? [...old, item.model_id] : old.filter((name) => name !== item.model_id))} /> },
+        { id: 'select', header: t('Select'), cell: (item) => <Checkbox aria-label={t('Select {{model}}', { model: item.model_id })} checked={selected.includes(item.model_id)} disabled={item.action !== 'ADD' && item.action !== 'UPDATE' || !['SUPPORTED_AUTO', 'SUPPORTED_WITH_PROVIDER_OVERRIDE', 'SUPPORTED_MANUAL', 'MANUAL_OVERRIDE', 'MANUAL_DRIFT'].includes(item.status)} onCheckedChange={(checked) => setSelected((old) => checked ? [...old, item.model_id] : old.filter((name) => name !== item.model_id))} /> },
         { id: 'model', header: t('Model'), cell: (item) => <span className='font-mono text-xs'>{item.model_id}</span> },
         { id: 'type', header: t('Type'), cell: (item) => item.category },
         { id: 'status', header: t('Status'), cell: (item) => <span title={t(item.reason)}>{statusLabels[item.status] ?? item.status} / {actionLabels[item.action] ?? item.action}</span> },
@@ -385,6 +400,15 @@ export function DflopPricingSync() {
         <dt>{t('Pricing shape')}</dt><dd className='break-all font-mono'>{detail.pricing_shape || '—'}</dd>
         <dt>{t('Billing features')}</dt><dd>{detail.pricing_shape?.split(':')[1]?.split('+').join(', ') || '—'}</dd>
         <dt>{t('Price source semantics')}</dt><dd>{priceRows(detail)[0]?.[1].source_price_kind || '—'}</dd>
+        {priceRows(detail).some(([, price]) => price.contract_overrides?.length) && <>
+          <dt>{t('Official DFLOP contract fallback')}</dt><dd className='space-y-2'>{[...new Map(priceRows(detail).flatMap(([, price]) => (price.contract_overrides ?? []).map((override) => [override.feature, override] as const))).values()].map((override) => <div key={override.feature} className='break-words'>
+            <div className='font-mono'>{override.feature}: {override.value}</div>
+            <a href={override.source_url} target='_blank' rel='noopener noreferrer' className='text-primary underline'>{override.source_url}</a>
+            <div>{override.observed_at} · {override.version}</div>
+            <div>{t('Catalog conflict')}: {override.catalog_conflict}</div>
+            <div>{t('Manual apply only; automatic apply is forbidden')}</div>
+          </div>)}</dd>
+        </>}
         {source?.source_mode !== 'AUTHENTICATED_EFFECTIVE' && <><dt>{t('Promotion rule')}</dt><dd>{priceRows(detail)[0]?.[1].promotion_rule_id || '—'} · {priceRows(detail)[0]?.[1].promotion_multiplier || '—'} · {priceRows(detail)[0]?.[1].promotion_state || '—'}</dd></>}
         <dt>{t('Effective upstream cost')}</dt><dd>{priceRows(detail).map(([name, price]) => {
           if (source?.source_mode === 'AUTHENTICATED_EFFECTIVE') return `${name}: ${price.credits} points · ¥${price.cost_cny} · $${price.cost_usd} · ${t('Selling markup')} ${previewMarkup}: $${price.selling_usd}`

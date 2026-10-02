@@ -25,7 +25,9 @@ import {
   cleanup,
 } from '@testing-library/react'
 import { createInstance } from 'i18next'
+import { useEffect } from 'react'
 import { I18nextProvider } from 'react-i18next'
+import { toast } from 'sonner'
 import { afterEach, expect, test, vi } from 'vitest'
 
 import {
@@ -33,9 +35,17 @@ import {
   handleBatchEnableModels,
 } from '@/features/models/lib/model-actions'
 import type { Model } from '@/features/models/types'
+import { api } from '@/lib/api'
 
-import { loadChannelModels } from '../../lib/channel-model-visibility'
+import {
+  loadChannelModels,
+  loadChannelModelVisibility,
+} from '../../lib/channel-model-visibility'
+import type { Channel } from '../../types'
+import { ChannelsProvider, useChannels } from '../channels-provider'
+import { ChannelTestDialog } from '../dialogs/channel-test-dialog'
 import { ChannelTestModelVisibilityAction } from '../dialogs/channel-test-model-visibility-action'
+import { TaskConnectivityAction } from '../dialogs/task-connectivity-action'
 
 vi.mock('@/features/models/lib/model-actions', () => ({
   handleBatchDisableModels: vi.fn(),
@@ -44,8 +54,12 @@ vi.mock('@/features/models/lib/model-actions', () => ({
 vi.mock('@/features/models/vendor-api', () => ({
   invalidateVendorData: vi.fn(),
 }))
-vi.mock('../../lib/channel-model-visibility', () => ({
+vi.mock('../../lib/channel-model-visibility', async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import('../../lib/channel-model-visibility')
+  >()),
   loadChannelModels: vi.fn(),
+  loadChannelModelVisibility: vi.fn().mockResolvedValue({}),
 }))
 vi.mock('@/lib/handle-server-error', () => ({ handleServerError: vi.fn() }))
 vi.mock('@/components/confirm-dialog', () => ({
@@ -67,6 +81,7 @@ await i18n.init({ lng: 'en', resources: { en: { translation: {} } } })
 afterEach(() => {
   cleanup()
   vi.resetAllMocks()
+  vi.restoreAllMocks()
 })
 function setup(action: 'hide' | 'show' = 'hide') {
   render(
@@ -185,4 +200,268 @@ test('shows only successful hidden models after confirmation, including exact ov
     )
   )
   expect(handleBatchDisableModels).not.toHaveBeenCalled()
+})
+
+const diagnosticChannel = {
+  id: 99,
+  name: 'Task vendor',
+  models: 'partial,untested,failed',
+  type: 61,
+} as Channel
+function DiagnosticDialogFixture() {
+  const setCurrentRow = useChannels().setCurrentRow
+  useEffect(() => setCurrentRow(diagnosticChannel), [setCurrentRow])
+  return <ChannelTestDialog open onOpenChange={() => undefined} />
+}
+
+test('mixed task batch keeps partial and untested rows out of hide/delete and never updates channel health', async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  vi.mocked(loadChannelModelVisibility).mockResolvedValue({})
+  vi.spyOn(api, 'post').mockImplementation(async (_url, body) => {
+    const model = (body as { model: string }).model
+    const outcome = model === 'failed' ? 'fail' : model
+    return {
+      data: {
+        success: true,
+        data: {
+          kind: 'task_plugin',
+          mode: 'preflight',
+          status:
+            outcome === 'fail' ? 'pricing_not_ready' : 'preflight_partial',
+          outcome,
+          model,
+          mapped_model: model,
+          plugin: 'media',
+          connectivity_tested: false,
+          live_generation_tested: false,
+          checks: [
+            {
+              check: 'runtime_evidence',
+              status: 'not_tested',
+              reason_code: 'LIVE_CANARY_REQUIRED',
+              evidence: 'offline metadata',
+            },
+          ],
+        },
+      },
+    }
+  })
+  const put = vi
+    .spyOn(api, 'put')
+    .mockResolvedValue({ data: { success: true } })
+  const get = vi
+    .spyOn(api, 'get')
+    .mockRejectedValue(new Error('No legacy upstream test allowed'))
+  const info = vi.spyOn(toast, 'info')
+  vi.mocked(loadChannelModels).mockResolvedValue([
+    { id: 1, model_name: 'partial', name_rule: 0, square_state: 'visible' },
+    { id: 2, model_name: 'untested', name_rule: 0, square_state: 'visible' },
+    { id: 3, model_name: 'failed', name_rule: 0, square_state: 'visible' },
+  ] as Model[])
+  render(
+    <QueryClientProvider client={client}>
+      <I18nextProvider i18n={i18n}>
+        <ChannelsProvider>
+          <DiagnosticDialogFixture />
+        </ChannelsProvider>
+      </I18nextProvider>
+    </QueryClientProvider>
+  )
+  fireEvent.click(
+    await screen.findByRole('button', { name: /Test all 3 models/ })
+  )
+  await screen.findByRole('button', { name: 'Hide failed models (1)' })
+  expect(screen.getByText('Partial verification')).toBeInTheDocument()
+  expect(screen.getAllByText('Upstream not tested').length).toBeGreaterThan(0)
+  expect(
+    screen.getByRole('button', { name: 'Delete failed models (1)' })
+  ).toBeInTheDocument()
+  fireEvent.click(screen.getAllByRole('button', { name: 'Details' })[0])
+  expect(await screen.findByText(/LIVE_CANARY_REQUIRED/)).toBeInTheDocument()
+  expect(screen.getByText(/offline metadata/)).toBeInTheDocument()
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+  expect(get).not.toHaveBeenCalled()
+  expect(put).not.toHaveBeenCalled()
+  expect(info).toHaveBeenCalledWith(
+    expect.stringContaining('1 partial, 1 untested, 1 failed')
+  )
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Hide failed models (1)' })
+  )
+  fireEvent.click(screen.getByText('Confirm'))
+  await waitFor(() =>
+    expect(handleBatchDisableModels).toHaveBeenCalledWith(
+      [3],
+      expect.any(QueryClient),
+      undefined,
+      []
+    )
+  )
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Delete failed models (1)' })
+    ).toBeEnabled()
+  )
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Delete failed models (1)' })
+  )
+  fireEvent.click(screen.getByText('Confirm'))
+  await waitFor(() => expect(put).toHaveBeenCalled())
+  const payload = put.mock.calls[0][1] as { models: string }
+  expect(payload.models.split(',')).toEqual(['partial', 'untested'])
+  expect(payload).not.toHaveProperty('status')
+})
+
+test('explicit connectivity appears only for reviewed capability, preserves catalog evidence and never updates channel health', async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  vi.mocked(loadChannelModelVisibility).mockResolvedValue({})
+  const post = vi.spyOn(api, 'post').mockImplementation(async (_url, body) => {
+    const request = body as { model: string; mode: string }
+    const connectivity = request.mode === 'connectivity'
+    return {
+      data: {
+        success: true,
+        data: {
+          kind: 'task_plugin',
+          mode: request.mode,
+          status: connectivity ? 'connectivity_pass' : 'preflight_partial',
+          outcome: 'partial',
+          model: request.model,
+          mapped_model: request.model,
+          plugin: 'dflop-media',
+          generation: 1,
+          diagnostic_duration_ms: 0,
+          connectivity_available: request.model === 'partial',
+          connectivity_key_indices: [0],
+          connectivity_tested: connectivity,
+          live_generation_tested: false,
+          connectivity_status: connectivity ? 'connectivity_pass' : undefined,
+          connectivity_latency_ms: 7,
+          model_access: connectivity ? 'confirmed' : undefined,
+          credential_identity: connectivity ? 'key_index:0' : undefined,
+          checks: [],
+        },
+      },
+    }
+  })
+  const put = vi
+    .spyOn(api, 'put')
+    .mockResolvedValue({ data: { success: true } })
+  const get = vi
+    .spyOn(api, 'get')
+    .mockRejectedValue(new Error('unexpected generic GET'))
+  render(
+    <QueryClientProvider client={client}>
+      <I18nextProvider i18n={i18n}>
+        <ChannelsProvider>
+          <DiagnosticDialogFixture />
+        </ChannelsProvider>
+      </I18nextProvider>
+    </QueryClientProvider>
+  )
+  expect(
+    screen.queryByRole('button', { name: 'Check DFLOP connectivity' })
+  ).not.toBeInTheDocument()
+  fireEvent.click(
+    await screen.findByRole('button', { name: /Test all 3 models/ })
+  )
+  const button = await screen.findByRole('button', {
+    name: 'Check DFLOP connectivity',
+  })
+  expect(
+    screen.getAllByRole('button', { name: 'Check DFLOP connectivity' })
+  ).toHaveLength(1)
+  expect(
+    post.mock.calls.every(
+      (call) => (call[1] as { mode: string }).mode === 'preflight'
+    )
+  ).toBe(true)
+  fireEvent.click(button)
+  await screen.findByText('DFLOP connectivity verified')
+  expect(
+    screen.getByText('Model visible to the selected API key')
+  ).toBeInTheDocument()
+  expect(screen.getByText('Content generation not tested')).toBeInTheDocument()
+  expect(post).toHaveBeenLastCalledWith(
+    '/api/channel/test/99/task',
+    expect.objectContaining({ mode: 'connectivity', model: 'partial' }),
+    expect.anything()
+  )
+  expect(get).not.toHaveBeenCalled()
+  expect(put).not.toHaveBeenCalled()
+  expect(
+    screen.queryByRole('button', { name: /Hide failed models/ })
+  ).not.toBeInTheDocument()
+})
+
+test('multi-key connectivity requires explicit enabled key selection before any probe', async () => {
+  const client = new QueryClient({
+    defaultOptions: { mutations: { retry: false } },
+  })
+  const complete = vi.fn()
+  const post = vi.spyOn(api, 'post').mockResolvedValue({
+    data: {
+      success: true,
+      data: {
+        mode: 'connectivity',
+        outcome: 'partial',
+        connectivity_status: 'connectivity_pass',
+      },
+    },
+  })
+  render(
+    <QueryClientProvider client={client}>
+      <I18nextProvider i18n={i18n}>
+        <TaskConnectivityAction
+          channelId={99}
+          model='video'
+          multiKey
+          disabled={false}
+          onComplete={complete}
+          diagnostic={{
+            kind: 'task_plugin',
+            mode: 'preflight',
+            outcome: 'partial',
+            status: 'preflight_partial',
+            generation: 1,
+            model: 'video',
+            mapped_model: 'video',
+            diagnostic_duration_ms: 0,
+            connectivity_tested: false,
+            live_generation_tested: false,
+            connectivity_available: true,
+            connectivity_key_indices: [1, 3],
+            checks: [],
+          }}
+        />
+      </I18nextProvider>
+    </QueryClientProvider>
+  )
+  const button = screen.getByRole('button', {
+    name: 'Check DFLOP connectivity',
+  })
+  expect(button).toBeDisabled()
+  expect(post).not.toHaveBeenCalled()
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Select an enabled API key' })
+  )
+  fireEvent.click(
+    await screen.findByRole('option', { name: 'API key index 3' })
+  )
+  expect(button).toBeEnabled()
+  fireEvent.click(button)
+  await waitFor(() => expect(complete).toHaveBeenCalled())
+  expect(post).toHaveBeenCalledWith(
+    '/api/channel/test/99/task',
+    expect.objectContaining({
+      mode: 'connectivity',
+      model: 'video',
+      key_index: 3,
+    }),
+    expect.anything()
+  )
 })

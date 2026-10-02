@@ -27,6 +27,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/pricing/dflop"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	hosttypes "github.com/QuantumNous/new-api/types"
@@ -38,10 +39,13 @@ import (
 )
 
 type testResult struct {
-	context     *gin.Context
-	localErr    error
-	newAPIError *types.NewAPIError
-	billingPlan *billing_setting.TaskBillingPlan
+	outboundAttempted bool
+	upstreamStatus    int
+	upstreamModel     string
+	context           *gin.Context
+	localErr          error
+	newAPIError       *types.NewAPIError
+	billingPlan       *billing_setting.TaskBillingPlan
 }
 
 // resolveChannelTestTaskPricing is a configuration preflight, not a task submit.
@@ -88,8 +92,8 @@ func resolveChannelTestTaskPricing(channel *model.Channel, generation *jsplugin.
 		for key := range billing_setting.GetPluginBillingExprCopy() {
 			provider, pricedModel, ok := billing_setting.SplitPluginBillingExprKey(key)
 			if ok && provider != plan.Plugin && (pricedModel == clientModel || pricedModel == mappedModel) {
-				plan.Reason = "PROVIDER_SCOPE_MISMATCH"
-				plan.Message = "Pricing exists only for a different task plugin; no cross-provider fallback is allowed"
+				plan.Reason = "PRICING_NOT_APPLIED"
+				plan.Message = "Pricing exists only for a different task plugin; explicit DFLOP pricing preview and apply are required"
 				break
 			}
 		}
@@ -97,10 +101,28 @@ func resolveChannelTestTaskPricing(channel *model.Channel, generation *jsplugin.
 	return &plan
 }
 
-func normalizeChannelTestEndpoint(channel *model.Channel, endpointType string) string {
+func normalizeChannelTestEndpoint(channel *model.Channel, endpointType string, modelName string) string {
 	normalized := strings.TrimSpace(endpointType)
 	if normalized != "" {
 		return normalized
+	}
+	if channel != nil && dflop.ApprovedCatalogOrigin(channel.GetBaseURL()) {
+		if raw, err := dflop.AuthenticatedSourceCatalog(channel.Id, channel.Key); err == nil {
+			if item, err := dflop.AuthenticatedCatalogModel(raw, modelName); err == nil {
+				if binding, err := dflop.CatalogEndpoint(item); err == nil {
+					switch binding.Protocol {
+					case "openai_image":
+						return string(constant.EndpointTypeImageGeneration)
+					case "openai_video":
+						return string(constant.EndpointTypeOpenAIVideo)
+					case "openai_chat":
+						return string(constant.EndpointTypeOpenAI)
+					}
+				}
+			}
+		}
+		// No name-prefix fallback when the authenticated contract is absent.
+		return ""
 	}
 	if channel != nil && channel.Type == constant.ChannelTypeCodex {
 		return string(constant.EndpointTypeOpenAIResponse)
@@ -125,7 +147,15 @@ func resolveChannelTestUserID(c *gin.Context) (int, error) {
 	return rootUser.Id, nil
 }
 
-func testChannel(ctx context.Context, channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool) testResult {
+func testChannel(ctx context.Context, channel *model.Channel, testUserID int, testModel string, endpointType string, isStream bool) (result testResult) {
+	outboundAttempted := false
+	upstreamStatus := 0
+	upstreamModel := ""
+	defer func() {
+		result.outboundAttempted = outboundAttempted
+		result.upstreamStatus = upstreamStatus
+		result.upstreamModel = upstreamModel
+	}()
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -164,7 +194,13 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		}
 	}
 
-	endpointType = normalizeChannelTestEndpoint(channel, endpointType)
+	generation := jsplugin.DefaultRegistry.Generation()
+	c.Set("model_mapping", channel.GetModelMapping())
+	preflightInfo := &relaycommon.RelayInfo{OriginModelName: testModel, ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: testModel, ChannelBaseUrl: channel.GetBaseURL()}}
+	if err := helper.ModelMappedHelper(c, preflightInfo, nil); err != nil {
+		return testResult{context: c, localErr: err, newAPIError: types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithStatusCode(http.StatusBadRequest))}
+	}
+	endpointType = normalizeChannelTestEndpoint(channel, endpointType, preflightInfo.UpstreamModelName)
 
 	// Task connectivity needs a protocol-specific payload and the real funded
 	// submit path. Never send a generic chat request using a task expression.
@@ -172,14 +208,12 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	if endpointType != "" {
 		if endpointInfo, ok := common.GetDefaultEndpointInfo(constant.EndpointType(endpointType)); ok {
 			preflightPath = endpointInfo.Path
+			if dflop.ApprovedCatalogOrigin(channel.GetBaseURL()) && constant.EndpointType(endpointType) == constant.EndpointTypeOpenAIVideo {
+				preflightPath = "/v1/videos/generations"
+			}
 		}
 	}
-	generation := jsplugin.DefaultRegistry.Generation()
-	c.Set("model_mapping", channel.GetModelMapping())
-	preflightInfo := &relaycommon.RelayInfo{OriginModelName: testModel, ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: testModel}}
-	if err := helper.ModelMappedHelper(c, preflightInfo, nil); err != nil {
-		return testResult{context: c, localErr: err, newAPIError: types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithStatusCode(http.StatusBadRequest))}
-	}
+
 	if plan := resolveChannelTestTaskPricing(channel, generation, testModel, preflightInfo.UpstreamModelName, preflightPath); plan != nil {
 		if !plan.Resolved {
 			err := errors.New(plan.Message)
@@ -187,6 +221,22 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 		}
 		err := errors.New("Task plugin pricing resolved; channel connectivity test requires a task-specific payload and is not supported")
 		return testResult{context: c, localErr: err, newAPIError: types.NewError(err, types.ErrorCode("task_channel_test_unsupported"), types.ErrOptionWithStatusCode(http.StatusBadRequest), types.ErrOptionWithSkipRetry()), billingPlan: plan}
+	}
+
+	if dflop.ApprovedCatalogOrigin(channel.GetBaseURL()) {
+		raw, err := dflop.AuthenticatedSourceCatalog(channel.Id, channel.Key)
+		var binding dflop.EndpointBinding
+		if err == nil {
+			var item dflop.Item
+			item, err = dflop.AuthenticatedCatalogModel(raw, preflightInfo.UpstreamModelName)
+			if err == nil {
+				binding, err = dflop.CatalogEndpointForPath(item, preflightPath)
+			}
+		}
+		if err != nil {
+			return testResult{context: c, localErr: err, newAPIError: types.NewError(err, types.ErrorCode("DFLOP_CONTRACT_BLOCKED"), types.ErrOptionWithStatusCode(http.StatusBadRequest), types.ErrOptionWithSkipRetry())}
+		}
+		preflightPath = binding.Path
 	}
 
 	requestPath := "/v1/chat/completions"
@@ -512,6 +562,8 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 
 	requestBody := bytes.NewBuffer(jsonData)
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(jsonData))
+	outboundAttempted = true
+	upstreamModel = gjson.GetBytes(jsonData, "model").String()
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
 		return testResult{
@@ -523,6 +575,7 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 	var httpResp *http.Response
 	if resp != nil {
 		httpResp = resp.(*http.Response)
+		upstreamStatus = httpResp.StatusCode
 		if httpResp.StatusCode != http.StatusOK {
 			err := service.RelayErrorHandler(c.Request.Context(), httpResp, true)
 			common.SysError(fmt.Sprintf(
@@ -558,8 +611,8 @@ func testChannel(ctx context.Context, channel *model.Channel, testUserID int, te
 			newAPIError: types.NewOpenAIError(usageErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
 		}
 	}
-	result := w.Result()
-	respBody, err := readTestResponseBody(result.Body, isStream)
+	recordedResponse := w.Result()
+	respBody, err := readTestResponseBody(recordedResponse.Body, isStream)
 	if err != nil {
 		return testResult{
 			context:     c,
@@ -966,6 +1019,9 @@ func TestChannel(c *gin.Context) {
 		if result.billingPlan != nil {
 			resp["billing_preflight"] = result.billingPlan
 		}
+		if diagnostic := channelFailureDiagnostic(channel, result, testModel, endpointType); diagnostic != nil {
+			resp["diagnostic"] = diagnostic
+		}
 		c.JSON(http.StatusOK, resp)
 		return
 	}
@@ -979,6 +1035,7 @@ func TestChannel(c *gin.Context) {
 			"message":    result.newAPIError.Error(),
 			"time":       consumedTime,
 			"error_code": result.newAPIError.GetErrorCode(),
+			"diagnostic": channelFailureDiagnostic(channel, result, testModel, endpointType),
 		})
 		return
 	}
@@ -992,15 +1049,38 @@ func TestChannel(c *gin.Context) {
 // channelTestSummary records the outcome of one channel test cycle so the
 // system task can persist a per-run result for history.
 type channelTestSummary struct {
-	Tested    int `json:"tested"`
-	Succeeded int `json:"succeeded"`
-	Failed    int `json:"failed"`
-	Disabled  int `json:"disabled"`
-	Enabled   int `json:"enabled"`
+	Tested            int `json:"tested"`
+	Succeeded         int `json:"succeeded"`
+	Failed            int `json:"failed"`
+	Disabled          int `json:"disabled"`
+	Enabled           int `json:"enabled"`
+	PreflightPassed   int `json:"preflight_passed"`
+	PreflightPartial  int `json:"preflight_partial"`
+	PreflightUntested int `json:"preflight_untested"`
+	PreflightFailed   int `json:"preflight_failed"`
 }
 
 func testChannelForHealthCheck(ctx context.Context, channel *model.Channel, testUserID int, allowDisable bool, disableThreshold int64) channelTestSummary {
 	summary := channelTestSummary{}
+	if ctx.Err() != nil {
+		return summary
+	}
+	diagnostic := taskChannelDiagnostic(channel, jsplugin.DefaultRegistry.Generation(), "", "")
+	if diagnostic.Kind == "task_plugin" {
+		switch diagnostic.Outcome {
+		case "pass":
+			summary.PreflightPassed++
+		case "partial":
+			summary.PreflightPartial++
+		case "untested":
+			summary.PreflightUntested++
+		case "fail":
+			summary.PreflightFailed++
+			summary.Failed++
+		}
+		// Configuration evidence never changes availability or upstream latency.
+		return summary
+	}
 	isChannelEnabled := channel.Status == common.ChannelStatusEnabled
 	tik := time.Now()
 	result := testChannel(ctx, channel, testUserID, "", "", shouldUseStreamForAutomaticChannelTest(channel))
@@ -1011,7 +1091,10 @@ func testChannelForHealthCheck(ctx context.Context, channel *model.Channel, test
 	// Configuration preflight is not an upstream health observation. Do not
 	// change channel availability or response time from a task-only preflight.
 	if result.billingPlan != nil {
-		return channelTestSummary{Tested: 1, Failed: 1}
+		if !result.billingPlan.Resolved {
+			return channelTestSummary{PreflightFailed: 1, Failed: 1}
+		}
+		return channelTestSummary{PreflightPartial: 1}
 	}
 
 	summary.Tested++
@@ -1135,6 +1218,10 @@ func runChannelTestWorkers(
 		summary.Failed += result.Failed
 		summary.Disabled += result.Disabled
 		summary.Enabled += result.Enabled
+		summary.PreflightPassed += result.PreflightPassed
+		summary.PreflightPartial += result.PreflightPartial
+		summary.PreflightUntested += result.PreflightUntested
+		summary.PreflightFailed += result.PreflightFailed
 		processed++
 		if report != nil && ctx.Err() == nil {
 			report(processed, total)

@@ -236,3 +236,56 @@ export function ErrorReference() {
     </section>
   )
 }
+
+export function CommonErrors() {
+  const { t } = useTranslation()
+  const rows = [
+    {
+      status: '401',
+      cause: t('Invalid, expired or disabled API key'),
+      fix: t('Copy an active key from API Keys and check the app settings.'),
+    },
+    {
+      status: '403',
+      cause: t('Insufficient balance, key quota or permission'),
+      fix: t('Check Wallet, subscription limits and your API key access.'),
+    },
+    {
+      status: '404',
+      cause: t('The requested URL does not exist'),
+      fix: t('Check the Base URL and endpoint. Avoid adding /v1 twice.'),
+    },
+    {
+      status: '429',
+      cause: t('Too many requests'),
+      fix: t('Wait before retrying and reduce simultaneous requests.'),
+    },
+    {
+      status: '500 / 503',
+      cause: t('A processing error or an unavailable service'),
+      fix: t(
+        'Check the response message and Usage Logs; contact support if it continues.'
+      ),
+    },
+    {
+      status: t('Timeout'),
+      cause: t('The request did not finish within the allowed time'),
+      fix: t(
+        'Check request or task status before retrying. A task may still be running.'
+      ),
+    },
+  ]
+  return (
+    <section id='common-errors' className='mt-8 scroll-mt-32'>
+      <StaticDataTable
+        data={rows}
+        getRowKey={(row) => row.status}
+        columns={[
+          { id: 'status', header: t('HTTP Status'), cell: (row) => row.status },
+          { id: 'cause', header: t('Cause'), cell: (row) => row.cause },
+          { id: 'fix', header: t('Try this'), cell: (row) => row.fix },
+        ]}
+      />
+    </section>
+  )
+}

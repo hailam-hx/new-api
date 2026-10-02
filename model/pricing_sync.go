@@ -320,7 +320,23 @@ func ApplyPricingSyncWithContext(ctx context.Context, id, configHash, sourceHash
 			if item.Action != "ADD" && item.Action != "UPDATE" {
 				return fmt.Errorf("model %s has no applicable change", item.ModelID)
 			}
-			if item.Status != "SUPPORTED_AUTO" && item.Status != "SUPPORTED_MANUAL" && !(adopt && (item.Status == "MANUAL_OVERRIDE" || item.Status == "MANUAL_DRIFT")) {
+			var sourcePrices map[string]struct {
+				ContractOverrides []any `json:"contract_overrides"`
+			}
+			if item.Prices != "" {
+				if err := common.UnmarshalJsonStr(item.Prices, &sourcePrices); err != nil {
+					return err
+				}
+			}
+			for _, price := range sourcePrices {
+				if len(price.ContractOverrides) > 0 && (actorID <= 0 || run.Trigger != "manual") {
+					return errors.New("DFLOP_DOCUMENTED_CONTRACT_OVERRIDE: explicit manual apply required")
+				}
+			}
+			if item.Status == "SUPPORTED_WITH_PROVIDER_OVERRIDE" && (actorID <= 0 || run.Trigger != "manual") {
+				return errors.New("DFLOP_DOCUMENTED_CONTRACT_OVERRIDE: explicit manual apply required")
+			}
+			if item.Status != "SUPPORTED_AUTO" && item.Status != "SUPPORTED_MANUAL" && item.Status != "SUPPORTED_WITH_PROVIDER_OVERRIDE" && !(adopt && (item.Status == "MANUAL_OVERRIDE" || item.Status == "MANUAL_DRIFT")) {
 				return fmt.Errorf("model %s is blocked: %s", item.ModelID, item.Reason)
 			}
 			previous := modelPricingValues(values, item.ModelID)

@@ -48,6 +48,7 @@ await context.route('**/api/**', async (route) => {
       success: true,
       data: {
         system_name: 'New API',
+        server_address: 'https://api-fixture.example/proxy/',
         price: 1,
         usd_exchange_rate: 1,
         HeaderNavModules: {
@@ -106,6 +107,7 @@ assert.equal(
   '/keys'
 )
 await page.getByRole('tab', { name: 'Python', exact: true }).click()
+await page.getByText('Advanced options', { exact: true }).click()
 await page.getByRole('tab', { name: 'Streaming', exact: true }).click()
 await page
   .getByRole('tabpanel')
@@ -120,7 +122,8 @@ await page
   .click()
 const copiedExample = await page.evaluate(() => navigator.clipboard.readText())
 assert(
-  copiedExample.includes('client.models.list()') &&
+  copiedExample.includes('https://api-fixture.example/proxy/v1') &&
+    copiedExample.includes('NEW_API_MODEL') &&
     copiedExample.includes('stream=True')
 )
 assert.equal(
@@ -133,12 +136,15 @@ await page
 await page
   .getByRole('textbox', { name: 'Search documentation' })
   .fill('/v1/chat/completions')
-await page.getByRole('link', { name: /POST \/v1\/chat\/completions/ }).click()
-await page.locator('#post--v1-chat-completions').waitFor()
+await page
+  .getByRole('dialog')
+  .getByRole('link', { name: /^Text \/ Chat/ })
+  .click()
+await page.getByRole('heading', { name: 'Text / Chat', exact: true }).waitFor()
 assert.equal(await page.locator('link[rel=canonical]').count(), 1)
 assert.equal(
   await page.locator('link[rel=canonical]').getAttribute('href'),
-  `${baseUrl}/docs/api-reference`
+  `${baseUrl}/docs/text-chat`
 )
 await page.goto(`${baseUrl}/docs/models`)
 await page
@@ -150,7 +156,7 @@ await page
 await page
   .getByRole('heading', { name: 'fixture/chat-model', exact: true })
   .waitFor()
-assert((await page.getByText('Not provided', { exact: true }).count()) >= 3)
+assert((await page.getByText('Not provided', { exact: true }).count()) >= 2)
 await page.screenshot({
   path: `${process.env.DOCS_QA_DIRECTORY || '/tmp'}/new-api-docs-desktop.png`,
   fullPage: false,
@@ -200,14 +206,7 @@ await page.getByRole('button', { name: 'Tìm tài liệu', exact: true }).waitFo
 await page.setViewportSize({ width: 1091, height: 959 })
 await page.getByRole('button', { name: 'Tìm tài liệu', exact: true }).waitFor()
 await page.evaluate(() => window.scrollTo(0, 220))
-await page.getByRole('button', { name: 'Chuyển đổi menu điều hướng' }).waitFor()
 const header = page.locator('header').first()
-const shortcuts = page.getByRole('navigation', {
-  name: 'Liên kết nhanh tài liệu',
-})
-const headerBounds = await header.boundingBox()
-const shortcutsBounds = await shortcuts.boundingBox()
-assert(shortcutsBounds.y >= headerBounds.y + headerBounds.height)
 assert(
   !['transparent', 'rgba(0, 0, 0, 0)'].includes(
     await header.evaluate(
@@ -215,12 +214,6 @@ assert(
     )
   )
 )
-await page.getByRole('button', { name: 'Chuyển đổi menu điều hướng' }).click()
-await page.getByRole('link', { name: 'Trang chủ', exact: true }).waitFor()
-await page.getByRole('button', { name: 'Chuyển đổi menu điều hướng' }).click()
-assert.equal(await page.evaluate(() => document.body.style.overflow), '')
-await page.setViewportSize({ width: 1440, height: 1000 })
-await header.getByRole('link', { name: 'Trang chủ', exact: true }).waitFor()
 assert(
   await header
     .getByRole('link')
@@ -230,11 +223,10 @@ assert(
         .every((link) => link.scrollWidth <= link.clientWidth)
     )
 )
-await page.setViewportSize({ width: 1091, height: 959 })
 await page.screenshot({ path: '/tmp/new-api-docs-header-vi.png' })
 await page.setViewportSize({ width: 1440, height: 1000 })
 const documentation = JSON.parse(
-  await fs.readFile('src/features/documentation/content-data.json', 'utf8')
+  await fs.readFile('src/features/documentation/beginner-data.json', 'utf8')
 )
 const overview = documentation.articles.find(
   (article) => article.slug === 'overview'

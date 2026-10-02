@@ -66,7 +66,7 @@ export const meta = {
   author: { name: "QuantumNous" },
   channelTypes: [35],
   models: [
-    "MiniMax-H3",
+    "minimax-h3",
     "MiniMax-Hailuo-2.3",
     "MiniMax-Hailuo-2.3-Fast",
     "MiniMax-Hailuo-02",
@@ -99,7 +99,7 @@ export const meta = {
   ],
   usageProfiles: [
     {
-      models: ["MiniMax-H3"],
+      models: ["minimax-h3"],
       schema: H3_USAGE_SCHEMA,
       examples: [
         { label: "H3 768P 5s", facts: { seconds: 5, resolution: "768P", input_images: 0, input_video_seconds: 0 } },
@@ -201,7 +201,7 @@ const H3_RATIOS = ["adaptive", "21:9", "16:9", "4:3", "1:1", "3:4", "9:16"];
 // array instead of flat frame fields, an explicit `ratio`, 768P/2K resolutions,
 // a task id path parameter on query, and a `{task: {...}}` query envelope.
 function isH3(model) {
-  return model === H3_MODEL;
+  return typeof model === "string" && model.toLowerCase() === "minimax-h3";
 }
 
 function h3Duration(req) {
@@ -444,7 +444,7 @@ export function buildSubmitRequest(ctx) {
   if (isH3(model)) {
     const content = h3Content(req);
     const h3Body = {
-      model: model,
+      model: H3_MODEL,
       content: content,
       resolution: h3Resolution(req),
       duration: h3Duration(req),

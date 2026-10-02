@@ -23,6 +23,7 @@ import {
   CHANNEL_TYPE_WARNINGS,
 } from '@/features/channels/constants'
 
+import beginnerData from './beginner-data.json'
 import data from './content-data.json'
 import reference from './generated/reference.json'
 
@@ -44,7 +45,8 @@ export type DocArticle = {
   protocol?: string
 }
 
-export const groups: string[] = data.groups
+export const groups: string[] = beginnerData.groups
+export const beginnerArticles: DocArticle[] = beginnerData.articles
 // Derive administrator provider pages from the same registry as the channel picker.
 // These describe configuration, not configured credentials or model availability.
 const providers: DocArticle[] = CHANNEL_TYPE_OPTIONS.map((provider) => ({
@@ -127,7 +129,10 @@ const taskPluginProviders: DocArticle[] = reference.taskPlugins.map(
   })
 )
 export const articles: DocArticle[] = [
-  ...data.articles,
+  ...beginnerArticles,
+  ...data.articles.filter(
+    (article) => !beginnerArticles.some((page) => page.slug === article.slug)
+  ),
   ...providers,
   ...taskPluginProviders,
 ]

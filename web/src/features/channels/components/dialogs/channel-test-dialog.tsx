@@ -94,7 +94,11 @@ import {
   loadChannelModelVisibility,
   type ChannelModelVisibilityFilter,
 } from '../../lib/channel-model-visibility'
-import type { ChannelTestResult } from '../../lib/channel-test-export'
+import {
+  isFailedChannelTest,
+  taskDiagnosticReasonLabel,
+  type ChannelTestResult,
+} from '../../lib/channel-test-export'
 import type {
   Channel,
   GetChannelsResponse,
@@ -103,6 +107,7 @@ import type {
 import { useChannels } from '../channels-provider'
 import { ChannelTestExport } from './channel-test-export'
 import { ChannelTestModelVisibilityAction } from './channel-test-model-visibility-action'
+import { TaskConnectivityAction } from './task-connectivity-action'
 
 type ChannelTestDialogProps = {
   open: boolean
@@ -124,6 +129,8 @@ type BatchProgress = {
   completed: number
   success: number
   failed: number
+  partial: number
+  untested: number
 }
 
 type ChannelTestCachePatch = {
@@ -216,6 +223,7 @@ type FailureDetailsState = {
   model: string
   summary: string
   details: string
+  diagnostic?: boolean
 }
 
 function sleep(ms: number) {
@@ -386,10 +394,15 @@ function ChannelTestDialogContent({
       completed: batchProgress.completed,
       total: batchProgress.total,
     })
-    const resultText = t('{{success}} succeeded, {{failed}} failed', {
-      success: batchProgress.success,
-      failed: batchProgress.failed,
-    })
+    const resultText = t(
+      '{{success}} passed, {{partial}} partial, {{untested}} untested, {{failed}} failed',
+      {
+        success: batchProgress.success,
+        failed: batchProgress.failed,
+        partial: batchProgress.partial,
+        untested: batchProgress.untested,
+      }
+    )
 
     batchProgressToastIdRef.current = toast.loading(title, {
       id: batchProgressToastIdRef.current ?? undefined,
@@ -462,7 +475,7 @@ function ChannelTestDialogContent({
   )
 
   const failedModels = useMemo(
-    () => models.filter((model) => testResults[model]?.status === 'error'),
+    () => models.filter((model) => isFailedChannelTest(testResults[model])),
     [models, testResults]
   )
 
@@ -575,10 +588,16 @@ function ChannelTestDialogContent({
             stream: effectiveStreamTest || undefined,
             silent,
           },
-          (success, responseTime, error, errorCode) => {
+          (success, responseTime, error, errorCode, diagnostic) => {
             const completedAt = Date.now()
+            let status: TestResult['status'] = success ? 'success' : 'error'
+            if (diagnostic) {
+              status =
+                diagnostic.outcome === 'fail' ? 'error' : diagnostic.outcome
+            }
             finalResult = {
-              status: success ? 'success' : 'error',
+              status,
+              diagnostic,
               responseTime,
               completedAt,
               error,
@@ -644,6 +663,8 @@ function ChannelTestDialogContent({
         completed: 0,
         success: 0,
         failed: 0,
+        partial: 0,
+        untested: 0,
       })
 
       let resultPatch: ChannelTestCachePatch | undefined
@@ -651,6 +672,8 @@ function ChannelTestDialogContent({
       let completedCount = 0
       let successCount = 0
       let failedCount = 0
+      let partialCount = 0
+      let untestedCount = 0
 
       try {
         const createFallbackResult = (error?: unknown): TestResult => ({
@@ -662,16 +685,20 @@ function ChannelTestDialogContent({
         const recordBatchResult = (result: TestResult) => {
           results.push(result)
           completedCount += 1
-          if (result.status === 'success') {
+          if (result.status === 'success' || result.status === 'pass') {
             successCount += 1
           }
-          failedCount = completedCount - successCount
+          if (isFailedChannelTest(result)) failedCount += 1
+          if (result.status === 'partial') partialCount += 1
+          if (result.status === 'untested') untestedCount += 1
 
           setBatchProgress({
             total: uniqueModels.length,
             completed: completedCount,
             success: successCount,
             failed: failedCount,
+            partial: partialCount,
+            untested: untestedCount,
           })
         }
 
@@ -722,7 +749,19 @@ function ChannelTestDialogContent({
           batchStopRequestedRef.current && completedCount < uniqueModels.length
 
         dismissBatchProgressToast()
-        if (stopped) {
+        if (partialCount > 0 || untestedCount > 0) {
+          toast.info(
+            t(
+              '{{success}} passed, {{partial}} partial, {{untested}} untested, {{failed}} failed',
+              {
+                success: successCount,
+                partial: partialCount,
+                untested: untestedCount,
+                failed: failedCount,
+              }
+            )
+          )
+        } else if (stopped) {
           toast.info(
             t(
               'Batch test stopped: {{completed}}/{{total}} completed, {{success}} succeeded, {{failed}} failed',
@@ -780,8 +819,8 @@ function ChannelTestDialogContent({
   }, [successModels])
 
   const handleDeleteFailedModels = useCallback(async () => {
-    const failed = models.filter(
-      (model) => testResults[model]?.status === 'error'
+    const failed = models.filter((model) =>
+      isFailedChannelTest(testResults[model])
     )
     if (!failed.length) {
       setIsDeleteFailedDialogOpen(false)
@@ -937,32 +976,68 @@ function ChannelTestDialogContent({
           const isTestingModel = testingModels.has(model)
 
           return (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    variant='ghost'
-                    size='icon-sm'
-                    onClick={() => testSingleModel(model)}
-                    disabled={isTestingModel || isBatchTesting}
-                    aria-label={t('Test Connection')}
-                  />
+            <div className='flex items-center gap-2'>
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant='ghost'
+                      size='icon-sm'
+                      onClick={() => testSingleModel(model)}
+                      disabled={isTestingModel || isBatchTesting}
+                      aria-label={t('Test Connection')}
+                    />
+                  }
+                >
+                  {isTestingModel ? (
+                    <Loader2 className='size-4 animate-spin' />
+                  ) : (
+                    <Gauge className='size-4' />
+                  )}
+                </TooltipTrigger>
+                <TooltipContent>{t('Test Connection')}</TooltipContent>
+              </Tooltip>
+              <TaskConnectivityAction
+                key={`${currentRow.id}:${model}:${endpointType}`}
+                operation={endpointType === 'auto' ? undefined : endpointType}
+                channelId={currentRow.id}
+                model={model}
+                diagnostic={testResults[model]?.diagnostic}
+                multiKey={currentRow.channel_info?.is_multi_key ?? false}
+                disabled={isTestingModel || isBatchTesting}
+                onComplete={(diagnostic) =>
+                  updateTestResult(model, {
+                    status:
+                      diagnostic.outcome === 'fail'
+                        ? 'error'
+                        : diagnostic.outcome,
+                    diagnostic,
+                    completedAt: Date.now(),
+                    error:
+                      diagnostic.outcome === 'fail'
+                        ? taskDiagnosticReasonLabel(
+                            diagnostic.checks.find(
+                              (check) => check.status === 'fail'
+                            )?.reason,
+                            t
+                          ) || t('Preflight validation failed')
+                        : undefined,
+                    errorCode: diagnostic.checks.find(
+                      (check) => check.status === 'fail'
+                    )?.reason,
+                  })
                 }
-              >
-                {isTestingModel ? (
-                  <Loader2 className='size-4 animate-spin' />
-                ) : (
-                  <Gauge className='size-4' />
-                )}
-              </TooltipTrigger>
-              <TooltipContent>{t('Test Connection')}</TooltipContent>
-            </Tooltip>
+              />
+            </div>
           )
         },
         enableSorting: false,
       },
     ],
     [
+      currentRow,
+      endpointType,
+      updateTestResult,
       defaultTestModel,
       isBatchTesting,
       t,
@@ -1256,6 +1331,13 @@ function TestStatusCell({ result }: { result?: TestResult }) {
     )
   }
 
+  if (result.diagnostic && result.diagnostic.outcome !== 'fail') {
+    let label = t('Upstream not tested')
+    if (result.status === 'pass') label = t('Preflight valid')
+    if (result.status === 'partial') label = t('Partial verification')
+    return <StatusBadge label={label} variant='info' copyable={false} />
+  }
+
   if (result.status === 'success') {
     return (
       <StatusBadge label={t('Success')} variant='success' copyable={false} />
@@ -1285,6 +1367,61 @@ function TestResultCell({
       <div className='text-muted-foreground flex min-w-0 items-center gap-2 text-sm'>
         <Loader2 className='size-4 shrink-0 animate-spin' />
         <span className='truncate'>{t('Testing...')}</span>
+      </div>
+    )
+  }
+
+  if (result.diagnostic) {
+    const diagnostic = result.diagnostic
+    const failedCheck = diagnostic.checks.find(
+      (check) => check.status === 'fail'
+    )
+    let summary = t('Configuration checked; upstream not tested')
+    if (failedCheck) {
+      summary = `${failedCheck.check_type ?? failedCheck.check}: ${failedCheck.reason_code ?? failedCheck.reason ?? diagnostic.status}`
+    } else if (diagnostic.mode === 'connectivity') {
+      summary = taskDiagnosticReasonLabel(diagnostic.connectivity_status, t)
+    } else if (diagnostic.mode === 'runtime') {
+      summary = diagnostic.status
+    } else if (diagnostic.outcome === 'untested') {
+      summary = t('Upstream not tested')
+    }
+    return (
+      <div className='space-y-1 text-xs'>
+        {diagnostic.mode === 'connectivity' && (
+          <>
+            {diagnostic.model_access && (
+              <div>
+                {diagnostic.model_access === 'confirmed'
+                  ? t('Model visible to the selected API key')
+                  : t('Model access not confirmed for this API key')}
+              </div>
+            )}
+            {diagnostic.credential_identity && (
+              <div>{diagnostic.credential_identity}</div>
+            )}
+            <div>{t('Content generation not tested')}</div>
+          </>
+        )}
+        <span className='text-muted-foreground line-clamp-2 min-w-0'>
+          {summary}
+        </span>
+        <Button
+          variant='ghost'
+          size='sm'
+          aria-haspopup='dialog'
+          onClick={() =>
+            onOpenDetails({
+              model,
+              summary,
+              details: JSON.stringify(diagnostic, null, 2),
+              diagnostic: true,
+            })
+          }
+        >
+          <Info className='size-4 shrink-0' />
+          {t('Details')}
+        </Button>
       </div>
     )
   }
@@ -1404,7 +1541,7 @@ function FailureDetailsSheet({
               </section>
               <section className='space-y-1'>
                 <div className='text-muted-foreground text-xs font-medium'>
-                  {t('Failed')}
+                  {details.diagnostic ? t('Status') : t('Failed')}
                 </div>
                 <p className='text-muted-foreground text-sm leading-relaxed wrap-break-word'>
                   {details.summary}
