@@ -183,11 +183,12 @@ export function buildQuickstart(
 
 export function buildFirstRequest(origin: string, stream: boolean) {
   const url = `${origin.replace(/\/$/, '')}/v1`
+  const shellEndpoint = `'${`${url}/chat/completions`.replaceAll("'", "'\\''")}'`
   const payload = `{model: $model, messages: [{role: "user", content: "Hello"}]${stream ? ', stream: true}' : '}'}`
   return {
     curl: `: "\${NEW_API_KEY:?Set NEW_API_KEY}" "\${NEW_API_MODEL:?Set NEW_API_MODEL}"
 jq -n --arg model "$NEW_API_MODEL" '${payload}' |
-  curl --fail-with-body ${stream ? '-N ' : ''}${JSON.stringify(`${url}/chat/completions`)} \
+  curl --fail-with-body ${stream ? '-N ' : ''}${shellEndpoint} \
     -H "Authorization: Bearer $NEW_API_KEY" \
     -H "Content-Type: application/json" --data-binary @-`,
     python: `import os

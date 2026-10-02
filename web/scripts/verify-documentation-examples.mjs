@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
+import fs from 'node:fs/promises'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -19,11 +20,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import http from 'node:http'
+import os from 'node:os'
+import path from 'node:path'
 
 import {
   buildFirstRequest,
   buildQuickstart,
 } from '../src/features/documentation/lib.ts'
+import { buildTaskExample } from '../src/features/documentation/task-example-code.ts'
 
 const calls = []
 const server = http.createServer(async (req, res) => {
@@ -40,6 +44,25 @@ const server = http.createServer(async (req, res) => {
             supported_endpoint_types: ['openai', 'anthropic', 'gemini'],
           },
         ],
+      })
+    )
+    return
+  }
+  if (req.url.startsWith('/v1/videos')) {
+    calls.push({
+      url: req.url,
+      body: payload ? JSON.parse(payload) : undefined,
+      headers: req.headers,
+    })
+    if (req.url.endsWith('/content')) {
+      res.end('fixture-video')
+      return
+    }
+    res.setHeader('Content-Type', 'application/json')
+    res.end(
+      JSON.stringify({
+        id: 'task_fixture',
+        status: req.method === 'POST' ? 'queued' : 'completed',
       })
     )
     return
@@ -104,7 +127,7 @@ try {
       const child = spawn(shell, ['-c', code.curl], {
         env: {
           ...process.env,
-          PATH: process.env.DOCS_JQ_DIRECTORY + ':' + process.env.PATH,
+          PATH: `${process.env.DOCS_JQ_DIRECTORY}:${process.env.PATH}`,
           NEW_API_KEY: 'fixture-only-token',
           NEW_API_MODEL: 'fixture/model-with-quote"',
         },
@@ -133,9 +156,55 @@ try {
     assert.equal(await new Promise((resolve) => python.on('exit', resolve)), 0)
     new Bun.Transpiler({ loader: 'js' }).transformSync(code.javascript)
   }
+  const mediaDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'docs-video-'))
+  try {
+    for (const shell of ['/bin/bash', '/bin/zsh']) {
+      const child = spawn(
+        shell,
+        [
+          '-c',
+          `${buildTaskExample(origin, 'video').curl}\nprintf 'EXAMPLE_RETURNED'`,
+        ],
+        {
+          cwd: mediaDirectory,
+          env: {
+            ...process.env,
+            PATH: `${process.env.DOCS_JQ_DIRECTORY}:${process.env.PATH}`,
+            NEW_API_KEY: 'fixture-only-token',
+            NEW_API_MODEL: 'fixture/model-with-quote"',
+          },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        }
+      )
+      let stderr = '',
+        stdout = ''
+      child.stderr.on('data', (value) => (stderr += value))
+      child.stdout.on('data', (value) => (stdout += value))
+      assert.equal(
+        await new Promise((resolve) => child.on('exit', resolve)),
+        0,
+        stderr
+      )
+      assert(stdout.includes('EXAMPLE_RETURNED'))
+      assert.equal(
+        await fs.readFile(path.join(mediaDirectory, 'video.mp4'), 'utf8'),
+        'fixture-video'
+      )
+      assert.deepEqual(
+        calls.slice(-3).map((request) => request.url),
+        [
+          '/v1/videos',
+          '/v1/videos/task_fixture',
+          '/v1/videos/task_fixture/content',
+        ]
+      )
+    }
+  } finally {
+    await fs.rm(mediaDirectory, { recursive: true, force: true })
+  }
 } finally {
   server.close()
 }
 console.log(
-  'PASS: four beginner Bash/zsh and six reference cURL executions against local protocol fixture; dynamic model choice, JSON and URL escaping, minimal/stream requests. Six Python examples parse; six TypeScript examples transpile.'
+  'PASS: four beginner chat, two video Bash/zsh and six reference cURL executions against local protocol fixture; dynamic model choice, JSON and URL escaping, minimal/stream requests. Six Python examples parse; six TypeScript examples transpile.'
 )

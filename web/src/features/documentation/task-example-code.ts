@@ -25,7 +25,8 @@ export function buildTaskExample(
 ): { curl: string; python: string; javascript: string } {
   const origin = baseUrl.replace(/\/$/, '')
   const shellOrigin = `'${origin.replaceAll("'", "'\\''")}'`
-  const curlStart = `set -euo pipefail
+  const curlStart = `(
+set -euo pipefail
 export NEW_API_BASE_URL=${shellOrigin}
 : "\${NEW_API_KEY:?Set NEW_API_KEY securely}"
 : "\${NEW_API_MODEL:?Set NEW_API_MODEL to your chosen model ID}"`
@@ -52,7 +53,8 @@ curl --fail-with-body "$NEW_API_BASE_URL/v1/audio/transcriptions" \\
   -H "Authorization: Bearer $NEW_API_KEY" \\
   --form-string "model=$NEW_API_MODEL" \\
   --form-string "response_format=json" \\
-  -F "file=@$NEW_API_AUDIO_FILE"`,
+  -F "file=@$NEW_API_AUDIO_FILE"
+)`,
       python: `${pythonStart}
 with open(os.environ["NEW_API_AUDIO_FILE"], "rb") as audio:
     response = requests.post(base_url + "/v1/audio/transcriptions", headers=headers,
@@ -84,7 +86,8 @@ if grep -qi '^content-type:.*json' speech.headers; then
   cat speech.response
 else
   mv speech.response speech.mp3
-fi`,
+fi
+)`,
       python: `${pythonStart}
 response = requests.post(base_url + "/v1/audio/speech", headers=headers,
     json={"model": model, "input": "Hello! Welcome to New API.",
@@ -136,7 +139,8 @@ const result = await response.json()`
   if (kind === 'image') {
     return {
       curl: `${curlRequest}
-printf '%s\\n' "$result" | jq .`,
+printf '%s\\n' "$result" | jq .
+)`,
       python: `${pythonRequest}
 print(result)`,
       javascript: `${jsRequest}
@@ -163,7 +167,8 @@ for attempt in {1..120}; do
   fi
   sleep 5
 done
-printf 'Still running. Keep task ID %s; check its status later.\\n' "$task_id"`,
+printf 'Still running. Keep task ID %s; check its status later.\\n' "$task_id"
+)`,
     python: `import time
 from urllib.parse import quote
 

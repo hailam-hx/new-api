@@ -34,6 +34,7 @@ const context = await browser.newContext({
 })
 await context.grantPermissions(['clipboard-read', 'clipboard-write'])
 await context.addInitScript(() => localStorage.setItem('i18nextLng', 'en'))
+let publishedApiAddress = false
 let restricted = false,
   pricingRequests = 0
 const page = await context.newPage()
@@ -49,6 +50,15 @@ await context.route('**/api/**', async (route) => {
       data: {
         system_name: 'New API',
         server_address: 'https://api-fixture.example/proxy/',
+        api_info: publishedApiAddress
+          ? [
+              {
+                url: 'https://published-api.example/gateway/v1/',
+                route: 'API',
+                description: '',
+              },
+            ]
+          : [],
         price: 1,
         usd_exchange_rate: 1,
         HeaderNavModules: {
@@ -130,6 +140,14 @@ assert.equal(
   await page.locator('link[rel=canonical]').last().getAttribute('href'),
   `${baseUrl}/docs/quickstart`
 )
+publishedApiAddress = true
+await page.reload()
+await page.getByRole('tab', { name: 'JavaScript', exact: true }).click()
+await page
+  .getByRole('tabpanel')
+  .getByText('https://published-api.example/gateway/v1', { exact: false })
+  .waitFor()
+assert(!(await page.getByRole('tabpanel').textContent()).includes('/v1/v1'))
 await page
   .getByRole('button', { name: 'Search documentation', exact: true })
   .click()
@@ -157,6 +175,29 @@ await page
   .getByRole('heading', { name: 'fixture/chat-model', exact: true })
   .waitFor()
 assert((await page.getByText('Not provided', { exact: true }).count()) >= 2)
+for (const [slug, title, endpoint] of [
+  ['image', 'Image', '/v1/images/generations'],
+  ['video', 'Video', '/v1/videos'],
+  ['audio', 'Audio', '/v1/audio/speech'],
+]) {
+  await page.goto(`${baseUrl}/docs/${slug}`)
+  await page.getByRole('heading', { name: title, exact: true }).waitFor()
+  await page.getByRole('tab', { name: 'JavaScript', exact: true }).click()
+  await page
+    .getByRole('tabpanel', { name: 'JavaScript' })
+    .getByText(endpoint, { exact: false })
+    .waitFor()
+  assert.equal(
+    await page
+      .getByRole('button', { name: 'Advanced options' })
+      .getAttribute('aria-expanded'),
+    'false'
+  )
+}
+await page.goto(`${baseUrl}/docs`)
+await page
+  .getByRole('heading', { name: 'New API Documentation', exact: true })
+  .waitFor()
 await page.screenshot({
   path: `${process.env.DOCS_QA_DIRECTORY || '/tmp'}/new-api-docs-desktop.png`,
   fullPage: false,
