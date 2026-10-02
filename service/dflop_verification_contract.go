@@ -59,20 +59,183 @@ type VerificationContractPlan struct {
 }
 
 type VerificationMediaFixture struct {
-	ID                   string  `json:"id"`
-	Path                 string  `json:"path"`
-	MIMEType             string  `json:"mime_type"`
-	SHA256               string  `json:"sha256"`
-	Bytes                int     `json:"bytes"`
-	Width                int     `json:"width,omitempty"`
-	Height               int     `json:"height,omitempty"`
-	Seconds              float64 `json:"seconds,omitempty"`
-	Synthetic            bool    `json:"synthetic"`
-	PublicURL            string  `json:"public_url,omitempty"`
-	RequiresFace         bool    `json:"requires_face,omitempty"`
-	Provenance           string  `json:"provenance,omitempty"`
-	RightsClassification string  `json:"rights_classification,omitempty"`
-	AuthorizationRecord  string  `json:"authorization_record,omitempty"`
+	ConsentReference         string  `json:"consent_reference,omitempty"`
+	AssetType                string  `json:"asset_type,omitempty"`
+	IdentityClassification   string  `json:"identity_classification,omitempty"`
+	RightsBasis              string  `json:"rights_basis,omitempty"`
+	CreatedAt                string  `json:"created_at,omitempty"`
+	PublicVerificationStatus string  `json:"public_verification_status,omitempty"`
+	ID                       string  `json:"id"`
+	Path                     string  `json:"path"`
+	MIMEType                 string  `json:"mime_type"`
+	SHA256                   string  `json:"sha256"`
+	Bytes                    int     `json:"bytes"`
+	Width                    int     `json:"width,omitempty"`
+	Height                   int     `json:"height,omitempty"`
+	Seconds                  float64 `json:"seconds,omitempty"`
+	Synthetic                bool    `json:"synthetic"`
+	PublicURL                string  `json:"public_url,omitempty"`
+	RequiresFace             bool    `json:"requires_face,omitempty"`
+	Provenance               string  `json:"provenance,omitempty"`
+	RightsClassification     string  `json:"rights_classification,omitempty"`
+	AuthorizationRecord      string  `json:"authorization_record,omitempty"`
+}
+
+type VerificationPlanContractAudit struct {
+	AuthenticatedCatalogModes  []string                   `json:"authenticated_catalog_modes"`
+	ExactEndpointContractModes []string                   `json:"exact_endpoint_contract_modes,omitempty"`
+	EffectiveModes             []string                   `json:"effective_modes"`
+	Model                      string                     `json:"catalog_model"`
+	Callable                   bool                       `json:"catalog_callable"`
+	EndpointType               string                     `json:"catalog_endpoint_type"`
+	CatalogProtocols           []string                   `json:"catalog_protocols"`
+	Documentation              []string                   `json:"documentation"`
+	Capabilities               common.RawMessage          `json:"catalog_capabilities"`
+	SupportedModes             []string                   `json:"supported_modes"`
+	Protocol                   string                     `json:"planned_protocol"`
+	Endpoint                   string                     `json:"planned_endpoint"`
+	Mode                       string                     `json:"planned_mode"`
+	RequiredMedia              []string                   `json:"required_media"`
+	Media                      []VerificationMediaFixture `json:"actual_fixture"`
+	RequiredFields             []string                   `json:"request_schema_required_fields"`
+	RequestSchemaValid         bool                       `json:"request_schema_valid"`
+	ModeSupported              bool                       `json:"mode_supported"`
+	Blocker                    string                     `json:"blocker,omitempty"`
+}
+
+// AuditDFLOPVerificationPlanContract compares the exact planned tuple to the
+// authenticated capabilities and endpoint contract, independently of pricing.
+func AuditDFLOPVerificationPlanContract(fixture VerificationFixture, item dflop.Item) VerificationPlanContractAudit {
+	audit := VerificationPlanContractAudit{Model: item.ModelID, Callable: item.Callable, EndpointType: item.EndpointType, CatalogProtocols: slices.Clone(item.Protocols), Documentation: slices.Clone(fixture.Plan.Documentation), Protocol: fixture.Protocol, Endpoint: fixture.Endpoint, Mode: fixture.Mode, RequiredMedia: slices.Clone(fixture.RequiredInputs), Media: slices.Clone(fixture.Media), RequiredFields: slices.Clone(fixture.Plan.RequiredFields), RequestSchemaValid: true}
+	var row struct {
+		Caps common.RawMessage `json:"caps"`
+	}
+	var caps struct {
+		Image    *struct{} `json:"image"`
+		Surfaces []string  `json:"surfaces"`
+		Video    *struct {
+			Family   string          `json:"family"`
+			Modes    map[string]bool `json:"modes"`
+			Requires []string        `json:"requires"`
+		} `json:"video"`
+	}
+	if common.Unmarshal(item.Raw, &row) != nil || common.Unmarshal(row.Caps, &caps) != nil {
+		audit.Blocker = "PROVIDER_CAPABILITIES_MISSING"
+		return audit
+	}
+	audit.Capabilities = row.Caps
+	for _, field := range fixture.Plan.RequiredFields {
+		value, present := fixture.Request[field]
+		if !present || value == nil || value == "" {
+			audit.RequestSchemaValid = false
+		}
+	}
+	endpoint := map[string]string{"images_generations": "/v1/images/generations", "videos_generations": "/v1/videos/generations", "tts_synthesize": "/v1/audio/speech", "music_generations": "/v1/music/generations", "voice_clone": "/v1/audio/voices", "avatar_create": "/v1/videos/avatars"}[item.EndpointType]
+	protocol := map[string]string{"images_generations": "openai_image", "videos_generations": "openai_video", "tts_synthesize": "openai_audio_speech", "music_generations": "native", "voice_clone": "native", "avatar_create": "native"}[item.EndpointType]
+	switch item.EndpointType {
+	case "images_generations":
+		if caps.Image != nil {
+			audit.SupportedModes = []string{"text_to_image"}
+		}
+	case "tts_synthesize":
+		if slices.Contains(caps.Surfaces, "voice") {
+			audit.SupportedModes = []string{"speech"}
+		}
+	case "music_generations":
+		if slices.Contains(caps.Surfaces, "music") {
+			audit.SupportedModes = []string{"music"}
+		}
+	case "voice_clone":
+		if slices.Contains(caps.Surfaces, "voice") {
+			audit.SupportedModes = []string{"synthetic_clone"}
+		}
+	case "avatar_create":
+		if slices.Contains(caps.Surfaces, "avatar") {
+			audit.SupportedModes = []string{"avatar_image"}
+		}
+	case "videos_generations":
+		if caps.Video != nil {
+			for mode, enabled := range caps.Video.Modes {
+				if enabled {
+					audit.SupportedModes = append(audit.SupportedModes, mode)
+				}
+			}
+			// These provider endpoint families have native semantic modes rather than
+			// generative t2v/i2v capability flags. Require the exact family and model.
+			switch caps.Video.Family {
+			case "avatar":
+				if item.ModelID == "dh-avatar" {
+					audit.SupportedModes = append(audit.SupportedModes, "avatar")
+				}
+			case "clip_compose":
+				if item.ModelID == "clip-compose" {
+					audit.SupportedModes = append(audit.SupportedModes, "speech_clip")
+				}
+			case "lipsync":
+				if slices.Contains([]string{"dh-lipsync", "dh-lipsync-pro", "dh-lipsync-max"}, item.ModelID) {
+					audit.SupportedModes = append(audit.SupportedModes, "audio_driven")
+				}
+			case "motion":
+				if item.ModelID == "dh-motion" {
+					audit.SupportedModes = append(audit.SupportedModes, "video_edit")
+				}
+			}
+			if item.ModelID == "happyhorse-1.0-video-edit" && caps.Video.Modes["r2v"] && slices.Contains(caps.Video.Requires, "ref_video") {
+				audit.SupportedModes = append(audit.SupportedModes, "video_edit")
+			}
+		}
+	}
+	// Required content media has the provider's nested URL shape. Having a
+	// fixture identity alone does not prove it was included in the request.
+	if fixture.Protocol == "openai_video" && slices.Contains([]string{"i2v", "r2v", "video_edit", "reference_video"}, fixture.Mode) && fixture.Model != "dh-motion" {
+		expectedType := "image_url"
+		if fixture.Mode == "video_edit" || fixture.Mode == "reference_video" {
+			expectedType = "video_url"
+		}
+		content, ok := fixture.Request["content"].([]any)
+		foundText, foundMedia := false, false
+		for _, entry := range content {
+			value, valid := entry.(map[string]any)
+			if !valid {
+				continue
+			}
+			if value["type"] == "text" {
+				text, _ := value["text"].(string)
+				foundText = foundText || text != ""
+			}
+			if value["type"] == expectedType {
+				media, _ := value[expectedType].(map[string]any)
+				address, _ := media["url"].(string)
+				for _, fixtureMedia := range fixture.Media {
+					foundMedia = foundMedia || address != "" && address == fixtureMedia.PublicURL
+				}
+			}
+		}
+		audit.RequestSchemaValid = audit.RequestSchemaValid && ok && foundText && foundMedia
+	}
+	slices.Sort(audit.SupportedModes)
+	audit.AuthenticatedCatalogModes = slices.Clone(audit.SupportedModes)
+	// Exact endpoint restrictions narrow authenticated capabilities. Extra
+	// catalog modes are never permission to exceed the endpoint contract.
+	if item.ModelID == "grok-imagine-video-1.5-preview" {
+		audit.ExactEndpointContractModes = []string{"i2v"}
+		audit.SupportedModes = nil
+		for _, mode := range audit.AuthenticatedCatalogModes {
+			if slices.Contains(audit.ExactEndpointContractModes, mode) {
+				audit.SupportedModes = append(audit.SupportedModes, mode)
+			}
+		}
+	}
+	audit.EffectiveModes = slices.Clone(audit.SupportedModes)
+	audit.ModeSupported = slices.Contains(audit.EffectiveModes, fixture.Mode)
+	if item.ModelID != fixture.Model || !item.Callable {
+		audit.Blocker = "SOURCE_MODEL_NOT_IN_AUTHENTICATED_CATALOG"
+	} else if endpoint == "" || fixture.Endpoint != endpoint || fixture.Protocol != protocol {
+		audit.Blocker = "PROVIDER_CONTRACT_ENDPOINT_CONFLICT"
+	} else if !audit.ModeSupported {
+		audit.Blocker = "PROVIDER_CONTRACT_MODE_CONFLICT"
+	}
+	return audit
 }
 
 type VerificationFixture struct {
@@ -95,7 +258,12 @@ type VerificationFixture struct {
 	RequiresPublishedFixture   bool                         `json:"requires_published_fixture"`
 	OperatorAssetSpecification string                       `json:"operator_asset_specification,omitempty"`
 	Plan                       VerificationContractPlan     `json:"plan"`
+	catalogContract            *dflop.Item
 	verifyPublicMedia          func(context.Context, VerificationMediaFixture) error
+	ClipPreparation            *VerificationClipPreparation `json:"clip_preparation,omitempty"`
+	AvatarPresetEvidence       *VerificationPresetEvidence  `json:"avatar_preset_evidence,omitempty"`
+	VoicePresetEvidence        *VerificationPresetEvidence  `json:"voice_preset_evidence,omitempty"`
+	verifyPresetResources      func(context.Context, string, string) error
 	verifyClipSource           func(context.Context, string, string) error
 }
 
@@ -188,15 +356,19 @@ func DFLOPVerificationContractPlans() []VerificationContractPlan {
 // DFLOPVerificationFixtures uses fresh authenticated capabilities for request
 // bounds. Missing capabilities remain blockers rather than guessed defaults.
 type VerificationFixtureOptions struct {
-	SourceCatalogHash  string
-	PublishedMedia     map[string]VerificationMediaFixture
-	PresetAvatar       string
-	PresetVoice        string
-	ClipASRID          string
-	ClipSourceVideoURL string
-	ClipStyleID        string
-	VerifyPublicMedia  func(context.Context, VerificationMediaFixture) error
-	VerifyClipSource   func(context.Context, string, string) error
+	SourceCatalogHash     string
+	ClipPreparation       *VerificationClipPreparation
+	AvatarPresetEvidence  *VerificationPresetEvidence
+	VoicePresetEvidence   *VerificationPresetEvidence
+	VerifyPresetResources func(context.Context, string, string) error
+	PublishedMedia        map[string]VerificationMediaFixture
+	PresetAvatar          string
+	PresetVoice           string
+	ClipASRID             string
+	ClipSourceVideoURL    string
+	ClipStyleID           string
+	VerifyPublicMedia     func(context.Context, VerificationMediaFixture) error
+	VerifyClipSource      func(context.Context, string, string) error
 }
 
 func DFLOPVerificationFixtures(catalog []dflop.Item) []VerificationFixture {
@@ -341,6 +513,7 @@ func DFLOPVerificationFixturesWithOptions(catalog []dflop.Item, options Verifica
 			fixture.Request = map[string]any{"model": model, "input": "Hello.", "async": true}
 			if options.PresetVoice != "" {
 				fixture.Request["voice"] = options.PresetVoice
+				fixture.VoicePresetEvidence = options.VoicePresetEvidence
 			}
 			fixture.Bounds["characters"] = VerificationBound{Min: 1, Max: 6}
 		case "voice":
@@ -428,7 +601,7 @@ func DFLOPVerificationFixturesWithOptions(catalog []dflop.Item, options Verifica
 			fixture.Media = []VerificationMediaFixture{dflopVerificationMedia("reference-grid-v1")}
 		case "happyhorse-1.0-video-edit":
 			fixture.Mode = "video_edit"
-		case "tvod-jimeng-1.0-lite-i2v":
+		case "tvod-jimeng-1.0-lite-i2v", "grok-imagine-video-1.5-preview":
 			fixture.Mode = "i2v"
 			fixture.RequiredInputs = []string{"published_reference_image_url"}
 			fixture.Media = []VerificationMediaFixture{dflopVerificationMedia("reference-grid-v1")}
@@ -437,7 +610,16 @@ func DFLOPVerificationFixturesWithOptions(catalog []dflop.Item, options Verifica
 			fixture.BlockedReason = "FRESH_SAME_SOURCE_ASR_REQUIRED"
 			fixture.Media = nil
 			fixture.Plan.RequiredFields = []string{"model", "video_url", "asr_id"}
-			if options.ClipASRID != "" && options.ClipSourceVideoURL != "" && options.VerifyClipSource != nil {
+			if options.ClipPreparation != nil && options.ClipASRID != "" && options.ClipSourceVideoURL != "" && options.VerifyClipSource != nil {
+				fixture.ClipPreparation = options.ClipPreparation
+				if media, exists := options.PublishedMedia["speaking-square-v1"]; exists && media.PublicURL == options.ClipSourceVideoURL && media.SHA256 == options.ClipPreparation.SourceSHA256 {
+					fixture.Media = []VerificationMediaFixture{media}
+					fixture.RequiresPublishedFixture = true
+				} else {
+					fixture.BlockedReason = "CLIP_PUBLIC_SPEECH_SOURCE_REQUIRED"
+					fixtures = append(fixtures, fixture)
+					continue
+				}
 				fixture.Request["asr_id"] = options.ClipASRID
 				fixture.Request["video_url"] = options.ClipSourceVideoURL
 				fixture.Request["video_style_id"] = options.ClipStyleID
@@ -450,8 +632,11 @@ func DFLOPVerificationFixturesWithOptions(catalog []dflop.Item, options Verifica
 			fixture.Media = nil
 			fixture.Plan.RequiredFields = []string{"model", "avatar", "voice", "text", "duration"}
 			fixture.RequiredInputs = []string{"free_ready_preset_avatar", "free_preset_voice"}
-			fixture.BlockedReason = "PROVIDER_PRESET_AVATAR_VOICE_REQUIRED"
+			fixture.BlockedReason = "READY_AVATAR_RESOURCE_REQUIRED"
 			if options.PresetAvatar != "" && options.PresetVoice != "" {
+				fixture.AvatarPresetEvidence = options.AvatarPresetEvidence
+				fixture.VoicePresetEvidence = options.VoicePresetEvidence
+				fixture.verifyPresetResources = options.VerifyPresetResources
 				fixture.Request["avatar"] = options.PresetAvatar
 				fixture.Request["voice"] = options.PresetVoice
 				fixture.Request["text"] = "Hello."
@@ -514,6 +699,11 @@ func DFLOPVerificationFixturesWithOptions(catalog []dflop.Item, options Verifica
 			fixture.BlockedReason = "PROVIDER_DOCUMENTED_OVERRIDE_STALE"
 		}
 
+		fixture.catalogContract = &item
+		audit := AuditDFLOPVerificationPlanContract(fixture, item)
+		if audit.Blocker != "" {
+			fixture.BlockedReason = audit.Blocker
+		}
 		fixtures = append(fixtures, fixture)
 	}
 	return fixtures
@@ -526,8 +716,28 @@ func ValidateDFLOPVerificationMedia(fixture VerificationMediaFixture) error {
 		return fmt.Errorf("FIXTURE_PROVENANCE_REQUIRED: %s", fixture.ID)
 	}
 	if fixture.RequiresFace {
+		if fixture.IdentityClassification == "" {
+			return fmt.Errorf("FIXTURE_AUTHORIZATION_REQUIRED: %s", fixture.ID)
+		}
+		if fixture.CreatedAt == "" || fixture.RightsBasis == "" || fixture.Width <= 0 || fixture.Height <= 0 || !slices.Contains([]string{"portrait", "face_video", "motion_video"}, fixture.AssetType) {
+			return fmt.Errorf("FIXTURE_HUMAN_METADATA_REQUIRED: %s", fixture.ID)
+		}
+		switch fixture.IdentityClassification {
+		case "SYNTHETIC_FICTIONAL_PERSON":
+			if !fixture.Synthetic || fixture.RightsClassification != "fictional-human-test-only" {
+				return fmt.Errorf("FIXTURE_AUTHORIZATION_REQUIRED: %s", fixture.ID)
+			}
+		case "CONSENTED_TEST_PERFORMER":
+			if fixture.Synthetic || (fixture.AuthorizationRecord == "" && fixture.ConsentReference == "") || fixture.RightsClassification != "organization-performer-explicit-consent" {
+				return fmt.Errorf("FIXTURE_AUTHORIZATION_REQUIRED: %s", fixture.ID)
+			}
+		default:
+			return fmt.Errorf("FIXTURE_AUTHORIZATION_REQUIRED: %s", fixture.ID)
+		}
+	}
+	if fixture.RequiresFace {
 		fictional := fixture.Synthetic && fixture.RightsClassification == "fictional-human-test-only"
-		consented := !fixture.Synthetic && fixture.RightsClassification == "organization-performer-explicit-consent" && fixture.AuthorizationRecord != ""
+		consented := !fixture.Synthetic && fixture.RightsClassification == "organization-performer-explicit-consent" && (fixture.AuthorizationRecord != "" || fixture.ConsentReference != "")
 		if !fictional && !consented {
 			return fmt.Errorf("OPERATOR_ASSET_REQUIRED: %s", fixture.ID)
 		}
@@ -636,6 +846,15 @@ func dflopVideoAtoms(data []byte) (map[string][][]byte, error) {
 
 func ValidateDFLOPVerificationFixture(ctx context.Context, fixture VerificationFixture, plugin *jsplugin.LoadedPlugin) (ProductionVerificationRequest, error) {
 	var request ProductionVerificationRequest
+	if fixture.catalogContract != nil {
+		audit := AuditDFLOPVerificationPlanContract(fixture, *fixture.catalogContract)
+		if audit.Blocker != "" {
+			return request, fmt.Errorf("%s", audit.Blocker)
+		}
+		if fixture.BlockedReason == "" && !audit.RequestSchemaValid {
+			return request, fmt.Errorf("PROVIDER_CONTRACT_REQUEST_SCHEMA_CONFLICT")
+		}
+	}
 	for _, media := range fixture.Media {
 		if err := ValidateDFLOPVerificationMedia(media); err != nil {
 			return request, err
@@ -657,9 +876,22 @@ func ValidateDFLOPVerificationFixture(ctx context.Context, fixture VerificationF
 			}
 		}
 	}
+	if fixture.Plan.ID == "AVATAR_SECONDS" || fixture.Plan.ID == "TTS_CHARACTER" {
+		if fixture.verifyPresetResources != nil && fixture.Plan.ID == "AVATAR_SECONDS" {
+			avatar, _ := fixture.Request["avatar"].(string)
+			voice, _ := fixture.Request["voice"].(string)
+			if err := fixture.verifyPresetResources(ctx, avatar, voice); err != nil {
+				return request, err
+			}
+		}
+	}
 	if fixture.Plan.ID == "CLIP_COMPOSE_FIXED_TASK" {
-		if fixture.verifyClipSource == nil {
+		if fixture.verifyClipSource == nil || fixture.ClipPreparation == nil {
 			return request, fmt.Errorf("FRESH_SAME_SOURCE_ASR_REQUIRED")
+		}
+		style, _ := fixture.Request["video_style_id"].(string)
+		if style != fixture.ClipPreparation.StyleID || len(fixture.Media) != 1 || fixture.Media[0].SHA256 != fixture.ClipPreparation.SourceSHA256 || fixture.Media[0].PublicURL != fixture.ClipPreparation.SourceURL {
+			return request, fmt.Errorf("CLIP_PREPARATION_SOURCE_MISMATCH")
 		}
 		source, _ := fixture.Request["video_url"].(string)
 		asrID, _ := fixture.Request["asr_id"].(string)

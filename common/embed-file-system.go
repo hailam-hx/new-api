@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"path"
 
 	"github.com/gin-contrib/static"
 )
@@ -24,6 +25,7 @@ func (e *embedFileSystem) Exists(prefix string, path string) bool {
 }
 
 func (e *embedFileSystem) Open(name string) (http.File, error) {
+	name = path.Clean(name)
 	if name == "/" {
 		// This will make sure the index page goes to NoRouter handler,
 		// which will use the replaced index bytes with analytic codes.

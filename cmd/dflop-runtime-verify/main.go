@@ -25,20 +25,21 @@ import (
 func run(args []string) error {
 	common.BatchUpdateEnabled = os.Getenv("BATCH_UPDATE_ENABLED") == "true"
 	flags := flag.NewFlagSet("dflop-runtime-verify", flag.ContinueOnError)
-	mode := flags.String("mode", "prepare", "prepare (GET/offline only), approve (offline signing only), execute, or resume (GET only)")
+	mode := flags.String("mode", "prepare", "prepare, verify-public (HEAD/GET/Range only), approve, execute, or resume")
 	database := flags.String("sqlite-db", "one-api.db", "existing SQLite database, SQL_DSN may select another engine")
 	channel := flags.Int("channel-id", 1, "selected authenticated DFLOP channel")
 	user := flags.Int("funding-user-id", 0, "admin user for pricing group; paid mode requires manifest binding")
 	output := flags.String("output", "", "non-secret plan JSON output path")
-	fixtureOrigin := flags.String("fixture-origin", "", "deployed public HTTPS origin for immutable embedded fixtures")
+	fixtureOrigin := flags.String("fixture-origin", os.Getenv("VERIFICATION_FIXTURE_PUBLIC_BASE_URL"), "deployed public HTTPS origin for immutable embedded fixtures")
 	presetAvatar := flags.String("preset-avatar", "", "fresh GET-confirmed ready provider preset avatar ID")
+	prepareClip := flags.Bool("prepare-clip", false, "prepare-only opt in: verified public source + current zero-price subtitle contract, then require new exact approval")
 	presetVoice := flags.String("preset-voice", "", "fresh GET-confirmed provider preset voice ID")
 	planPath := flags.String("plan", "", "frozen fixture plan JSON")
 	manifestPath := flags.String("manifest", "", "explicitly approved authorization JSON")
 	approvalKey := flags.String("approval-private-key-file", "", "operator-owned Ed25519 private key hex file; mode approve only")
 	approvalActor := flags.String("approved-by", "", "explicit approving operator; mode approve only")
 	approvalRef := flags.String("approval-reference", "", "explicit operator authorization reference")
-	confirmPlan := flags.String("confirm-plan-hash", "", "SHA256 of exact reviewed v2 plan; mode approve only")
+	confirmPlan := flags.String("confirm-plan-hash", "", "SHA256 of exact reviewed current plan; mode approve only")
 	confirm := flags.String("confirm-manifest-hash", "", "SHA256 of exact approved manifest file")
 	execute := flags.Bool("execute", false, "explicit paid-mode opt in; never enabled by prepare or resume")
 	runID := flags.Int64("run-id", 0, "existing authorized run for GET-only recovery")
@@ -46,8 +47,48 @@ func run(args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	if flags.NArg() != 0 || !slices.Contains([]string{"prepare", "approve", "execute", "resume"}, *mode) {
+	if flags.NArg() != 0 || !slices.Contains([]string{"prepare", "verify-public", "approve", "execute", "resume"}, *mode) {
 		return errors.New("INVALID_COMMAND")
+	}
+	if *mode == "verify-public" {
+		if *execute || *prepareClip || *manifestPath != "" {
+			return errors.New("GET_ONLY_MODE")
+		}
+		published, err := service.DFLOPVerificationPublishedMedia(*fixtureOrigin)
+		if err != nil {
+			return errors.New("OPERATOR_DEPLOY_REQUIRED: configure VERIFICATION_FIXTURE_PUBLIC_BASE_URL")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		results := map[string]any{}
+		failed := false
+		for _, media := range service.DFLOPVerificationMediaInventory() {
+			fixture := published[media.ID]
+			err := service.VerifyDFLOPPublicMedia(ctx, fixture)
+			status := "PUBLIC_FIXTURE_VERIFIED"
+			reason := ""
+			if err != nil {
+				status = "OPERATOR_DEPLOY_REQUIRED"
+				reason = err.Error()
+				failed = true
+			}
+			results[media.ID] = map[string]any{"url": fixture.PublicURL, "sha256": fixture.SHA256, "mime": fixture.MIMEType, "bytes": fixture.Bytes, "status": status, "reason": reason, "verified_at": time.Now().UTC().Format(time.RFC3339)}
+		}
+		data, _ := common.Marshal(results)
+		if *output != "" {
+			if err := os.WriteFile(*output, data, 0600); err != nil {
+				return err
+			}
+		} else {
+			fmt.Println(string(data))
+		}
+		if failed {
+			return errors.New("OPERATOR_DEPLOY_REQUIRED")
+		}
+		return nil
+	}
+	if *prepareClip && *mode != "prepare" {
+		return errors.New("CLIP_PREPARATION_ONLY_BEFORE_NEW_APPROVAL")
 	}
 	if *mode != "execute" && (*execute || *manifestPath != "" || *confirm != "") {
 		return errors.New("GET_ONLY_MODE")
@@ -91,7 +132,7 @@ func run(args []string) error {
 	}
 	if *mode == "approve" {
 		if *planPath == "" || *output == "" || *approvalKey == "" || *approvalActor == "" || *approvalRef == "" || *confirmPlan == "" {
-			return errors.New("EXPLICIT_V2_APPROVAL_REQUIRED")
+			return errors.New("EXPLICIT_CURRENT_PLAN_APPROVAL_REQUIRED")
 		}
 		body, err := os.ReadFile(*planPath)
 		if err != nil {
@@ -169,6 +210,40 @@ func run(args []string) error {
 		if *user <= 0 || *output == "" {
 			return errors.New("PREPARE_REQUIRES_USER_AND_OUTPUT")
 		}
+		avatar, voice, err := engine.PreparePresetResources(ctx, *channel)
+		if err != nil {
+			return err
+		}
+		if *presetAvatar != "" && *presetAvatar != avatar.ID || *presetVoice != "" && *presetVoice != voice.ID {
+			return errors.New("PRESET_GET_REVALIDATION_REQUIRED")
+		}
+		engine.FixtureOptions.PresetAvatar = avatar.ID
+		engine.FixtureOptions.PresetVoice = voice.ID
+		engine.FixtureOptions.AvatarPresetEvidence = &avatar
+		engine.FixtureOptions.VoicePresetEvidence = &voice
+		evidence := map[string]any{"avatar": avatar, "voice": voice, "paid_requests": 0}
+		if *prepareClip {
+			media, exists := engine.FixtureOptions.PublishedMedia["speaking-square-v1"]
+			if !exists {
+				return errors.New("OPERATOR_DEPLOY_REQUIRED")
+			}
+			prepared, err := engine.PrepareClip(ctx, *channel, media)
+			if err != nil {
+				return err
+			}
+			engine.FixtureOptions.ClipPreparation = &prepared
+			engine.FixtureOptions.ClipASRID = prepared.ASRID
+			engine.FixtureOptions.ClipSourceVideoURL = prepared.SourceURL
+			engine.FixtureOptions.ClipStyleID = prepared.StyleID
+			engine.FixtureOptions.VerifyClipSource = engine.ClipPreparationVerifier(*channel, prepared)
+			evidence["clip_preparation"] = prepared
+		}
+		prerequisiteJSON, _ := common.Marshal(evidence)
+		if *output != "" {
+			if err := os.WriteFile(*output+".prerequisites.json", prerequisiteJSON, 0600); err != nil {
+				return err
+			}
+		}
 		run, _, err := engine.Prepare(ctx, *channel, "", *user)
 		if err != nil {
 			return err
@@ -192,6 +267,11 @@ func run(args []string) error {
 		if plan.CatalogHash != manifest.CatalogHash || plan.CredentialFingerprint != manifest.CredentialFingerprint {
 			return errors.New("DRIFT_REVIEW_REQUIRED")
 		}
+		restored, err := engine.RestoreApprovedPreparation(ctx, *channel, plan, manifest)
+		if err != nil {
+			return err
+		}
+		engine.FixtureOptions = restored
 		run, items, err := engine.CreateAuthorizedRun(ctx, *channel, *user, manifest)
 		if err != nil {
 			return err

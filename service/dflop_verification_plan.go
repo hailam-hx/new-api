@@ -7,27 +7,33 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/service/pricing/dflop"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/shopspring/decimal"
 )
 
-const DFLOPVerificationPlanVersion = "canary-plan-v2"
+const DFLOPVerificationPlanVersion = "canary-plan-v3"
 
 type DFLOPVerificationPlannedTarget struct {
-	FixtureHash           string              `json:"fixture_hash"`
-	FixturePublicURLs     []string            `json:"fixture_public_urls"`
-	RequestBody           common.RawMessage   `json:"request_body,omitempty"`
-	ConfigHash            string              `json:"config_hash"`
-	PluginHash            string              `json:"plugin_hash"`
-	Model                 string              `json:"model"`
-	Wave                  int                 `json:"wave"`
-	Fixture               VerificationFixture `json:"fixture"`
-	PricingSnapshotHash   string              `json:"pricing_snapshot_hash"`
-	BillingExprHash       string              `json:"billing_expr_hash"`
-	RequestBodyHash       string              `json:"request_body_hash,omitempty"`
-	MaximumProviderPoints *string             `json:"maximum_provider_points"`
-	Blocker               string              `json:"blocker,omitempty"`
+	PricingSnapshotKind    string                        `json:"pricing_snapshot_kind"`
+	ContractAudit          VerificationPlanContractAudit `json:"contract_audit"`
+	FixtureHash            string                        `json:"fixture_hash"`
+	StaticIntentHash       string                        `json:"static_intent_hash"`
+	FixturePublicURLHashes []string                      `json:"fixture_public_url_hashes"`
+	FixturePublicURLs      []string                      `json:"fixture_public_urls"`
+	RequestBody            common.RawMessage             `json:"request_body,omitempty"`
+	ConfigHash             string                        `json:"config_hash"`
+	PluginHash             string                        `json:"plugin_hash"`
+	Model                  string                        `json:"model"`
+	Wave                   int                           `json:"wave"`
+	Fixture                VerificationFixture           `json:"fixture"`
+	PricingSnapshotHash    string                        `json:"pricing_snapshot_hash"`
+	BillingExprHash        string                        `json:"billing_expr_hash"`
+	RequestBodyHash        string                        `json:"request_body_hash,omitempty"`
+	MaximumProviderPoints  *string                       `json:"maximum_provider_points"`
+	Blocker                string                        `json:"blocker,omitempty"`
 }
 
 type DFLOPVerificationPlan struct {
@@ -51,6 +57,9 @@ type DFLOPVerificationPlan struct {
 	CompleteMaximumProviderPoints *string                          `json:"complete_maximum_provider_points"`
 	ExpiryRecommendation          string                           `json:"expiry_recommendation"`
 	Authorization                 DFLOPVerificationAuthorization   `json:"proposed_authorization"`
+	ModeAuditTotal                int                              `json:"mode_audit_total"`
+	ModeAuditConflicts            int                              `json:"mode_audit_conflicts"`
+	SupersededPlanStatus          string                           `json:"superseded_plan_status"`
 	Targets                       []DFLOPVerificationPlannedTarget `json:"targets"`
 }
 
@@ -73,10 +82,17 @@ func (engine DFLOPVerificationEngine) Plan(ctx context.Context, runID int64) (DF
 	if err != nil {
 		return plan, err
 	}
-	plan = DFLOPVerificationPlan{Version: DFLOPVerificationPlanVersion, Supersedes: "canary-plan-v1", Currency: "points", WaveMaximumProviderPoints: map[int]string{}, PointsPerCNY: source.pointsPerCNY, ConfiguredCNYToUSD: source.config.CNYToUSD, RunID: run.ID, CatalogHash: run.CatalogHash, SourceChannel: run.ChannelID, CredentialFingerprint: run.CredentialFingerprint, Concurrency: 1, ExpiryRecommendation: "30 minutes after explicit approval", Authorization: DFLOPVerificationAuthorization{Approved: false, ChannelID: run.ChannelID, FundingUserID: run.FundingUserID, CatalogHash: run.CatalogHash, CredentialFingerprint: run.CredentialFingerprint, MaxCostPerRequest: map[string]string{}, PlanVersion: DFLOPVerificationPlanVersion, Concurrency: 1}}
+	plan = DFLOPVerificationPlan{Version: DFLOPVerificationPlanVersion, Supersedes: "canary-plan-v2", SupersededPlanStatus: "SUPERSEDED", Currency: "points", WaveMaximumProviderPoints: map[int]string{}, PointsPerCNY: source.pointsPerCNY, ConfiguredCNYToUSD: source.config.CNYToUSD, RunID: run.ID, CatalogHash: run.CatalogHash, SourceChannel: run.ChannelID, CredentialFingerprint: run.CredentialFingerprint, Concurrency: 1, ExpiryRecommendation: "30 minutes after explicit approval", Authorization: DFLOPVerificationAuthorization{Approved: false, ChannelID: run.ChannelID, FundingUserID: run.FundingUserID, CatalogHash: run.CatalogHash, CredentialFingerprint: run.CredentialFingerprint, MaxCostPerRequest: map[string]string{}, PlanVersion: DFLOPVerificationPlanVersion, Concurrency: 1}}
 	options := engine.FixtureOptions
 	options.SourceCatalogHash = source.hash
 	fixtures := DFLOPVerificationFixturesWithOptions(source.items, options)
+	var mapping map[string]string
+	if source.channel.GetModelMapping() != "" {
+		if err := common.UnmarshalJsonStr(source.channel.GetModelMapping(), &mapping); err != nil {
+			return plan, err
+		}
+	}
+	bindingJSON, _ := common.Marshal(map[string]any{"pricing_config": source.config, "channel_type": source.channel.Type, "channel_setting": source.channel.GetSetting(), "model_mapping": mapping})
 	total := decimal.Zero
 	for _, fixture := range fixtures {
 		fixture.SourceCatalogHash = run.CatalogHash
@@ -87,6 +103,37 @@ func (engine DFLOPVerificationEngine) Plan(ctx context.Context, runID int64) (DF
 				target.FixturePublicURLs = append(target.FixturePublicURLs, media.PublicURL)
 			}
 		}
+		intentJSON, _ := common.Marshal(fixture.Request)
+		target.StaticIntentHash = verificationHash(intentJSON)
+		target.FixturePublicURLHashes = []string{}
+		for _, url := range target.FixturePublicURLs {
+			target.FixturePublicURLHashes = append(target.FixturePublicURLHashes, verificationHash([]byte(url)))
+		}
+		target.ConfigHash = verificationHash(bindingJSON)
+		if plugin, ok := jsplugin.DefaultRegistry.Generation().Get(fixture.Plugin); ok {
+			metaJSON, _ := common.Marshal(map[string]any{"meta": plugin.Meta, "source_hash": plugin.Engine.SourceHash()})
+			target.PluginHash = verificationHash(metaJSON)
+			billingPlan := billing_setting.ResolveTaskBillingPlan(fixture.Plugin, fixture.Model, fixture.Model, plugin, true)
+			if billingPlan.Resolved {
+				target.BillingExprHash = billingexpr.ExprHashString(billingPlan.Expression)
+			}
+		}
+		plan.ModeAuditTotal++
+		provider := slices.IndexFunc(source.items, func(item dflop.Item) bool { return item.ModelID == fixture.Model })
+		if provider >= 0 {
+			pricingJSON, _ := common.Marshal(source.items[provider])
+			target.PricingSnapshotHash = verificationHash(pricingJSON)
+			target.PricingSnapshotKind = "AUTHENTICATED_CATALOG_INTENT"
+			target.ContractAudit = AuditDFLOPVerificationPlanContract(fixture, source.items[provider])
+		} else {
+			target.ContractAudit.Blocker = "SOURCE_MODEL_NOT_IN_AUTHENTICATED_CATALOG"
+		}
+		if target.ContractAudit.Blocker != "" {
+			plan.ModeAuditConflicts++
+			target.Blocker = target.ContractAudit.Blocker
+			plan.Targets = append(plan.Targets, target)
+			continue
+		}
 		index := slices.IndexFunc(items, func(item model.RuntimeVerificationItem) bool {
 			return item.Model == fixture.Model && item.Protocol == fixture.Protocol && item.Mode == fixture.Mode
 		})
@@ -96,7 +143,10 @@ func (engine DFLOPVerificationEngine) Plan(ctx context.Context, runID int64) (DF
 			continue
 		}
 		item := items[index]
-		target.PricingSnapshotHash, target.BillingExprHash = item.PricingSnapshotHash, item.BillingExprHash
+		if item.PricingSnapshotHash != "" {
+			target.PricingSnapshotHash, target.BillingExprHash = item.PricingSnapshotHash, item.BillingExprHash
+			target.PricingSnapshotKind = "FROZEN_PROVIDER_SNAPSHOT"
+		}
 		plugin, ok := jsplugin.DefaultRegistry.Generation().Get(fixture.Plugin)
 		if !ok {
 			target.Blocker = "PLUGIN_BINDING_MISMATCH"
@@ -133,7 +183,7 @@ func (engine DFLOPVerificationEngine) Plan(ctx context.Context, runID int64) (DF
 						total = total.Add(points)
 						plan.Authorization.Models = append(plan.Authorization.Models, item.Model)
 						plan.Authorization.MaxCostPerRequest[item.Model] = maximum
-						plan.Authorization.Targets = append(plan.Authorization.Targets, DFLOPVerificationTarget{Model: item.Model, Protocol: item.Protocol, Mode: item.Mode, FixtureID: item.FixtureID, PricingSnapshotHash: item.PricingSnapshotHash, BillingExprHash: item.BillingExprHash, RequestBodyHash: request.BodyHash, FixtureHash: target.FixtureHash, FixturePublicURLs: target.FixturePublicURLs, Endpoint: fixture.Endpoint, Operation: fixture.Operation, MaximumProviderPoints: maximum, ConfigHash: target.ConfigHash, PluginHash: target.PluginHash})
+						plan.Authorization.Targets = append(plan.Authorization.Targets, DFLOPVerificationTarget{StaticIntentHash: target.StaticIntentHash, FixturePublicURLHashes: target.FixturePublicURLHashes, Model: item.Model, Protocol: item.Protocol, Mode: item.Mode, FixtureID: item.FixtureID, PricingSnapshotHash: item.PricingSnapshotHash, BillingExprHash: item.BillingExprHash, RequestBodyHash: request.BodyHash, FixtureHash: target.FixtureHash, FixturePublicURLs: target.FixturePublicURLs, Endpoint: fixture.Endpoint, Operation: fixture.Operation, MaximumProviderPoints: maximum, ConfigHash: target.ConfigHash, PluginHash: target.PluginHash})
 					}
 				}
 			}

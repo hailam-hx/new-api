@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
@@ -415,6 +416,11 @@ func TestDFLOPVerificationV2ModesAndPublicReachability(t *testing.T) {
 
 func TestDFLOPVerificationV2PresetAvatarAndExactClipPrerequisite(t *testing.T) {
 	options := VerificationFixtureOptions{PresetAvatar: "free-avatar", PresetVoice: "free-voice", ClipASRID: "fresh-asr", ClipSourceVideoURL: "https://fixtures.example/speech-video.mp4", ClipStyleID: "active-style", VerifyClipSource: func(context.Context, string, string) error { return fmt.Errorf("FRESH_SAME_SOURCE_ASR_REQUIRED") }}
+	media := dflopVerificationMedia("speaking-square-v1")
+	media.PublicURL = options.ClipSourceVideoURL
+	options.PublishedMedia = map[string]VerificationMediaFixture{media.ID: media}
+	options.VerifyPublicMedia = func(context.Context, VerificationMediaFixture) error { return nil }
+	options.ClipPreparation = &VerificationClipPreparation{SourceSHA256: media.SHA256, SourceURL: media.PublicURL, StyleID: options.ClipStyleID}
 	fixtures := map[string]VerificationFixture{}
 	for _, fixture := range DFLOPVerificationFixturesWithOptions(verificationFixtureCatalog(t), options) {
 		fixtures[fixture.Model] = fixture
@@ -437,6 +443,8 @@ func TestDFLOPVerificationV2PresetAvatarAndExactClipPrerequisite(t *testing.T) {
 }
 
 func TestDFLOPVerificationPublicOriginAllowlist(t *testing.T) {
+	fixtureServer := httptest.NewTLSServer(http.HandlerFunc(VerificationFixtureHandler))
+	defer fixtureServer.Close()
 	for _, media := range DFLOPVerificationMediaInventory() {
 		published, err := DFLOPVerificationPublishedMedia("https://fixtures.example")
 		require.NoError(t, err)
@@ -453,16 +461,48 @@ func TestDFLOPVerificationPublicOriginAllowlist(t *testing.T) {
 		VerificationFixtureHandler(head, httptest.NewRequest(http.MethodHead, fixture.PublicURL, nil))
 		assert.Equal(t, http.StatusOK, head.Code)
 		assert.Empty(t, head.Body.Bytes())
+		assert.Equal(t, strconv.Itoa(media.Bytes), head.Header().Get("Content-Length"))
+		assert.Equal(t, "bytes", head.Header().Get("Accept-Ranges"))
+		assert.Equal(t, `"sha256-`+media.SHA256+`"`, head.Header().Get("ETag"))
+		rangeRequest := httptest.NewRequest(http.MethodGet, fixture.PublicURL, nil)
+		rangeRequest.Header.Set("Range", "bytes=0-1023")
+		partial := httptest.NewRecorder()
+		VerificationFixtureHandler(partial, rangeRequest)
+		require.Equal(t, http.StatusPartialContent, partial.Code)
+		assert.Equal(t, "bytes", partial.Header().Get("Accept-Ranges"))
+		assert.Equal(t, fmt.Sprintf("bytes 0-%d/%d", min(1023, media.Bytes-1), media.Bytes), partial.Header().Get("Content-Range"))
+		assert.Equal(t, min(1024, media.Bytes), partial.Body.Len())
+		assert.Equal(t, response.Body.Bytes()[:min(1024, media.Bytes)], partial.Body.Bytes())
+		assert.Equal(t, media.MIMEType, partial.Header().Get("Content-Type"))
+		assert.Empty(t, partial.Header().Get("Content-Disposition"))
+		unsatisfiable := httptest.NewRequest(http.MethodGet, fixture.PublicURL, nil)
+		unsatisfiable.Header.Set("Range", fmt.Sprintf("bytes=%d-", media.Bytes))
+		rejectedRange := httptest.NewRecorder()
+		VerificationFixtureHandler(rejectedRange, unsatisfiable)
+		assert.Equal(t, http.StatusRequestedRangeNotSatisfiable, rejectedRange.Code)
+		assert.Equal(t, fmt.Sprintf("bytes */%d", media.Bytes), rejectedRange.Header().Get("Content-Range"))
+		probe := fixture
+		probe.PublicURL = strings.Replace(fixture.PublicURL, "https://fixtures.example", fixtureServer.URL, 1)
+		require.NoError(t, verifyDFLOPPublicMediaResponses(t.Context(), probe, fixtureServer.Client()), media.ID)
 	}
 	media := DFLOPVerificationMediaInventory()[0]
 	data, err := DFLOPVerificationMediaBytes(media.ID)
 	require.NoError(t, err)
-	for _, failure := range []string{"none", "mime", "length", "cache", "checksum", "status"} {
+	for _, failure := range []string{"none", "mime", "length", "cache", "checksum", "status", "accept-ranges", "range-status", "range-body", "range-header", "redirect", "mime-parameter", "content-encoding", "attachment"} {
 		t.Run(failure, func(t *testing.T) {
 			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				mime, length, cache := media.MIMEType, media.Bytes, "public, max-age=31536000, immutable"
 				if failure == "mime" {
 					mime = "application/octet-stream"
+				}
+				if failure == "mime-parameter" {
+					mime += "; charset=utf-8"
+				}
+				if failure == "content-encoding" {
+					w.Header().Set("Content-Encoding", "gzip")
+				}
+				if failure == "attachment" {
+					w.Header().Set("Content-Disposition", "attachment")
 				}
 				if failure == "length" {
 					length++
@@ -477,14 +517,38 @@ func TestDFLOPVerificationPublicOriginAllowlist(t *testing.T) {
 					w.WriteHeader(404)
 					return
 				}
-				w.WriteHeader(200)
-				if r.Method == http.MethodGet {
-					body := slices.Clone(data)
-					if failure == "checksum" {
-						body[0] ^= 1
-					}
-					_, _ = w.Write(body)
+				if failure == "redirect" && r.URL.Path != "/redirected" {
+					w.Header().Set("Location", "/redirected")
+					w.WriteHeader(http.StatusFound)
+					return
 				}
+				body := slices.Clone(data)
+				if failure == "checksum" || failure == "range-body" && r.Header.Get("Range") != "" {
+					body[0] ^= 1
+				}
+				if failure == "range-status" {
+					r.Header.Del("Range")
+				}
+				if failure == "accept-ranges" || failure == "length" {
+					w.Header().Set("Accept-Ranges", "bytes")
+					if failure == "accept-ranges" {
+						w.Header().Set("Accept-Ranges", "none")
+					}
+					w.WriteHeader(http.StatusOK)
+					if r.Method == http.MethodGet {
+						_, _ = w.Write(body)
+					}
+					return
+				}
+				if failure == "range-header" && r.Header.Get("Range") != "" {
+					w.Header().Set("Content-Range", "bytes 0-1/2")
+					w.Header().Set("Accept-Ranges", "bytes")
+					w.Header().Set("Content-Length", strconv.Itoa(min(1024, len(body))))
+					w.WriteHeader(http.StatusPartialContent)
+					_, _ = w.Write(body[:min(1024, len(body))])
+					return
+				}
+				http.ServeContent(w, r, "fixture", time.Time{}, bytes.NewReader(body))
 			}))
 			defer server.Close()
 			probe := media
@@ -497,12 +561,34 @@ func TestDFLOPVerificationPublicOriginAllowlist(t *testing.T) {
 			}
 		})
 	}
-	for _, path := range []string{"/verification-fixtures/v1/wrong/reference-grid-v1.png", "/verification-fixtures/../../one-api.db", "/verification-fixtures/synthetic-v1/not-in-allowlist/private.wav"} {
+	published, err := DFLOPVerificationPublishedMedia("https://fixtures.example")
+	require.NoError(t, err)
+	validURL := published[media.ID].PublicURL
+	for _, rejected := range []string{
+		"/verification-fixtures/v1/wrong/reference-grid-v1.png",
+		"/verification-fixtures/../../one-api.db",
+		"/verification-fixtures/%2e%2e/%2e%2e/.env",
+		"/verification-fixtures/%252e%252e/one-api.db",
+		"/verification-fixtures/synthetic-v1/not-in-allowlist/private.wav",
+		"/verification-fixtures/synthetic-v1/",
+		strings.Replace(validURL, "synthetic-v1", "wrong-namespace", 1),
+		strings.Replace(validURL, media.SHA256, strings.Repeat("0", 64), 1),
+		strings.Replace(validURL, "reference-grid", "%72eference-grid", 1),
+		validURL + "?file=../../one-api.db",
+		validURL + "?",
+		validURL + "/../.env",
+	} {
 		response := httptest.NewRecorder()
-		VerificationFixtureHandler(response, httptest.NewRequest(http.MethodGet, path, nil))
-		assert.Equal(t, http.StatusNotFound, response.Code)
+		VerificationFixtureHandler(response, httptest.NewRequest(http.MethodGet, rejected, nil))
+		assert.Equal(t, http.StatusNotFound, response.Code, rejected)
 	}
-	for _, origin := range []string{"http://fixtures.example", "https://user:secret@fixtures.example", "https://fixtures.example/?token=secret"} {
+	for _, method := range []string{http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions} {
+		response := httptest.NewRecorder()
+		VerificationFixtureHandler(response, httptest.NewRequest(method, validURL, nil))
+		assert.Equal(t, http.StatusMethodNotAllowed, response.Code)
+		assert.Equal(t, "GET, HEAD", response.Header().Get("Allow"))
+	}
+	for _, origin := range []string{"http://fixtures.example", "https://user:secret@fixtures.example", "https://fixtures.example/?token=secret", "https://fixtures.example?", "https://fixtures.example/%2f"} {
 		_, err := DFLOPVerificationPublishedMedia(origin)
 		require.Error(t, err)
 	}
@@ -547,10 +633,15 @@ func TestDFLOPVerificationHumanFixtureRequiresRightsMetadata(t *testing.T) {
 	require.ErrorContains(t, ValidateDFLOPVerificationMedia(media), "FIXTURE_PROVENANCE_REQUIRED")
 	media.Provenance = "unknown internet photo"
 	media.RequiresFace = true
+	media.AssetType = "portrait"
+	media.IdentityClassification = "CONSENTED_TEST_PERFORMER"
+	media.CreatedAt = "2026-10-02T00:00:00Z"
+	media.RightsBasis = "Organization-owned explicit API verification consent"
 	media.Synthetic = false
-	require.ErrorContains(t, ValidateDFLOPVerificationMedia(media), "OPERATOR_ASSET_REQUIRED")
+	require.ErrorContains(t, ValidateDFLOPVerificationMedia(media), "FIXTURE_AUTHORIZATION_REQUIRED")
 	media.RightsClassification = "organization-performer-explicit-consent"
-	require.ErrorContains(t, ValidateDFLOPVerificationMedia(media), "OPERATOR_ASSET_REQUIRED")
+	require.ErrorContains(t, ValidateDFLOPVerificationMedia(media), "FIXTURE_AUTHORIZATION_REQUIRED")
+	media.Provenance = "Organization-owned test performer with recorded processing consent"
 	media.AuthorizationRecord = "operator-owned explicit API verification consent reference"
 	require.NoError(t, ValidateDFLOPVerificationMedia(media))
 	assert.Equal(t, "rights-cleared-human-v1", verificationFixtureCategory(media))

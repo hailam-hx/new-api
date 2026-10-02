@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -22,7 +23,12 @@ const VerificationFixtureVersion = "synthetic-v1"
 // It has no upload, filesystem, task artifact, or user media access.
 func VerificationFixtureHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
 		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if r.URL.RawQuery != "" || r.URL.ForceQuery || r.URL.EscapedPath() != r.URL.Path {
+		http.NotFound(w, r)
 		return
 	}
 	for _, media := range DFLOPVerificationMediaInventory() {
@@ -43,10 +49,7 @@ func VerificationFixtureHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		w.Header().Set("ETag", `"sha256-`+media.SHA256+`"`)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.WriteHeader(http.StatusOK)
-		if r.Method == http.MethodGet {
-			_, _ = w.Write(data)
-		}
+		http.ServeContent(w, r, path.Base(media.Path), time.Time{}, bytes.NewReader(data))
 		return
 	}
 	http.NotFound(w, r)
@@ -54,7 +57,7 @@ func VerificationFixtureHandler(w http.ResponseWriter, r *http.Request) {
 
 func DFLOPVerificationPublishedMedia(origin string) (map[string]VerificationMediaFixture, error) {
 	parsed, err := url.Parse(origin)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Path != "" && parsed.Path != "/" {
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" || parsed.Opaque != "" || parsed.Path != "" && parsed.Path != "/" {
 		return nil, errors.New("FIXTURE_PUBLIC_HTTPS_ORIGIN_REQUIRED")
 	}
 	result := map[string]VerificationMediaFixture{}
@@ -68,12 +71,12 @@ func DFLOPVerificationPublishedMedia(origin string) (map[string]VerificationMedi
 	return result, nil
 }
 
-// VerifyDFLOPPublicMedia validates both HEAD and GET. DNS is checked at dial
+// VerifyDFLOPPublicMedia validates HEAD, GET, and byte-range reads. DNS is checked at dial
 // time; redirects, credentials, private addresses, and response size overruns
 // cannot turn the public fixture probe into a private-network fetch.
 func VerifyDFLOPPublicMedia(ctx context.Context, media VerificationMediaFixture) error {
 	parsed, err := url.Parse(media.PublicURL)
-	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || media.Bytes <= 0 || media.Bytes > 16<<20 {
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" || parsed.Opaque != "" || media.Bytes <= 0 || media.Bytes > 16<<20 {
 		return errors.New("FIXTURE_PUBLIC_URL_REQUIRED")
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
@@ -105,29 +108,64 @@ func VerifyDFLOPPublicMedia(ctx context.Context, media VerificationMediaFixture)
 }
 
 func verifyDFLOPPublicMediaResponses(ctx context.Context, media VerificationMediaFixture, client *http.Client) error {
-	for _, method := range []string{http.MethodHead, http.MethodGet} {
-		request, err := http.NewRequestWithContext(ctx, method, media.PublicURL, nil)
+	probeClient := *client
+	probeClient.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	var fullBody []byte
+	rangeBytes := min(1024, media.Bytes)
+	for _, probe := range []struct {
+		method    string
+		rangeRead bool
+	}{
+		{method: http.MethodHead},
+		{method: http.MethodGet},
+		{method: http.MethodGet, rangeRead: true},
+	} {
+		request, err := http.NewRequestWithContext(ctx, probe.method, media.PublicURL, nil)
 		if err != nil {
 			return err
 		}
 		request.Header.Set("Accept-Encoding", "identity")
-		response, err := client.Do(request)
+		expectedStatus, expectedBytes := http.StatusOK, media.Bytes
+		if probe.rangeRead {
+			request.Header.Set("Range", "bytes=0-1023")
+			expectedStatus, expectedBytes = http.StatusPartialContent, rangeBytes
+		}
+		response, err := probeClient.Do(request)
 		if err != nil {
 			return errors.New("FIXTURE_PUBLIC_REACHABILITY_REQUIRED")
 		}
-		if response.StatusCode != http.StatusOK || response.ContentLength != int64(media.Bytes) || strings.Split(response.Header.Get("Content-Type"), ";")[0] != media.MIMEType || !strings.Contains(response.Header.Get("Cache-Control"), "immutable") {
+		if response.StatusCode != expectedStatus || response.ContentLength != int64(expectedBytes) ||
+			response.Header.Get("Content-Type") != media.MIMEType ||
+			response.Header.Get("Accept-Ranges") != "bytes" ||
+			response.Header.Get("Cache-Control") != "public, max-age=31536000, immutable" ||
+			response.Header.Get("Content-Encoding") != "" ||
+			response.Header.Get("Content-Disposition") != "" {
 			response.Body.Close()
 			return errors.New("FIXTURE_PUBLIC_METADATA_MISMATCH")
 		}
-		if method == http.MethodGet {
-			body, readErr := io.ReadAll(io.LimitReader(response.Body, int64(media.Bytes)+1))
+		if probe.rangeRead && response.Header.Get("Content-Range") != fmt.Sprintf("bytes 0-%d/%d", rangeBytes-1, media.Bytes) {
 			response.Body.Close()
-			if readErr != nil || len(body) != media.Bytes || fmt.Sprintf("%x", sha256.Sum256(body)) != media.SHA256 {
-				return errors.New("FIXTURE_PUBLIC_CHECKSUM_MISMATCH")
-			}
-		} else {
-			response.Body.Close()
+			return errors.New("FIXTURE_PUBLIC_RANGE_MISMATCH")
 		}
+		if probe.method == http.MethodHead {
+			response.Body.Close()
+			continue
+		}
+		body, readErr := io.ReadAll(io.LimitReader(response.Body, int64(expectedBytes)+1))
+		response.Body.Close()
+		if readErr != nil || len(body) != expectedBytes {
+			return errors.New("FIXTURE_PUBLIC_CHECKSUM_MISMATCH")
+		}
+		if probe.rangeRead {
+			if !bytes.Equal(body, fullBody[:rangeBytes]) {
+				return errors.New("FIXTURE_PUBLIC_RANGE_MISMATCH")
+			}
+			continue
+		}
+		if fmt.Sprintf("%x", sha256.Sum256(body)) != media.SHA256 {
+			return errors.New("FIXTURE_PUBLIC_CHECKSUM_MISMATCH")
+		}
+		fullBody = body
 	}
 	return nil
 }

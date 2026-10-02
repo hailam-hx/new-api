@@ -116,6 +116,9 @@ func TestVerificationAuthorizationCannotBeInferredOrRolledOver(t *testing.T) {
 	v2.Targets[0].FixtureHash, v2.Targets[0].ConfigHash, v2.Targets[0].PluginHash = "fixture", "config", "plugin"
 	v2.Targets[0].MaximumProviderPoints = "0.1"
 	require.NoError(t, ValidateDFLOPVerificationAuthorization(v2, run, item, "0.1", now))
+	oldManifest := v2
+	oldManifest.PlanVersion = "canary-plan-v2"
+	require.ErrorContains(t, ValidateDFLOPVerificationAuthorization(oldManifest, run, item, "0.1", now), "SUPERSEDED_MANIFEST_REQUIRES_NEW_APPROVAL")
 	v2.Targets[0].FixtureHash = "changed"
 	require.ErrorContains(t, ValidateDFLOPVerificationAuthorization(v2, run, item, "0.1", now), "BINDING_MISMATCH")
 	v2.Targets[0].FixtureHash = "fixture"
@@ -1012,4 +1015,84 @@ func TestVerificationFrozenLiteProvenanceSupportsRecovery(t *testing.T) {
 	frozen.ContractOverrides[0].SourceReferenceHash = "changed"
 	_, err = verificationProviderFromSnapshot(frozen)
 	require.Error(t, err)
+}
+
+func TestVerificationPlanContractAuditAll83Modes(t *testing.T) {
+	data, err := os.ReadFile("testdata/dflop-verification/catalog-v1.json")
+	require.NoError(t, err)
+	var catalog []dflop.Item
+	require.NoError(t, common.Unmarshal(data, &catalog))
+	fixtures := DFLOPVerificationFixtures(catalog)
+	require.Len(t, fixtures, 83)
+	for _, fixture := range fixtures {
+		index := slices.IndexFunc(catalog, func(item dflop.Item) bool { return item.ModelID == fixture.Model })
+		require.GreaterOrEqual(t, index, 0)
+		audit := AuditDFLOPVerificationPlanContract(fixture, catalog[index])
+		assert.True(t, audit.ModeSupported, "%s: %s %v", fixture.Model, fixture.Mode, audit.SupportedModes)
+		if audit.Blocker != "" {
+			assert.Equal(t, audit.Blocker, fixture.BlockedReason, fixture.Model)
+		}
+		assert.NotEmpty(t, audit.Capabilities, fixture.Model)
+	}
+}
+
+func TestVerificationGrok15ExactModeContract(t *testing.T) {
+	data, err := os.ReadFile("testdata/dflop-verification/catalog-v1.json")
+	require.NoError(t, err)
+	var catalog []dflop.Item
+	require.NoError(t, common.Unmarshal(data, &catalog))
+	index := slices.IndexFunc(catalog, func(item dflop.Item) bool { return item.ModelID == "grok-imagine-video-1.5-preview" })
+	require.GreaterOrEqual(t, index, 0)
+	item := catalog[index]
+	var row map[string]any
+	require.NoError(t, common.Unmarshal(item.Raw, &row))
+	caps := row["caps"].(map[string]any)
+	video := caps["video"].(map[string]any)
+	video["modes"] = map[string]any{"t2v": false, "i2v": true, "r2v": false}
+	item.Raw, err = common.Marshal(row)
+	require.NoError(t, err)
+	catalog[index] = item
+	media := dflopVerificationMedia("reference-grid-v1")
+	media.PublicURL = "https://fixtures.example/reference-grid-v1.png"
+	fixtures := DFLOPVerificationFixturesWithOptions(catalog, VerificationFixtureOptions{PublishedMedia: map[string]VerificationMediaFixture{media.ID: media}, VerifyPublicMedia: func(context.Context, VerificationMediaFixture) error { return nil }})
+	fixture := fixtures[slices.IndexFunc(fixtures, func(f VerificationFixture) bool { return f.Model == item.ModelID })]
+	assert.Equal(t, "i2v", fixture.Mode)
+	assert.Equal(t, "openai_video", fixture.Protocol)
+	assert.Equal(t, "/v1/videos/generations", fixture.Endpoint)
+	require.Len(t, fixture.Media, 1)
+	assert.Equal(t, "reference-grid-v1", fixture.Media[0].ID)
+	assert.Empty(t, fixture.BlockedReason)
+	request, err := ValidateDFLOPVerificationFixture(t.Context(), fixture, verificationFixturePlugin(t, fixture.Plugin))
+	require.NoError(t, err)
+	var body map[string]any
+	require.NoError(t, common.Unmarshal(request.Body, &body))
+	content := body["content"].([]any)
+	assert.Equal(t, map[string]any{"type": "image_url", "image_url": map[string]any{"url": media.PublicURL}}, content[1])
+	fixture.Request["content"] = content[:1]
+	_, err = ValidateDFLOPVerificationFixture(t.Context(), fixture, verificationFixturePlugin(t, fixture.Plugin))
+	require.ErrorContains(t, err, "PROVIDER_CONTRACT_REQUEST_SCHEMA_CONFLICT")
+	fixture.Request["content"] = content
+	fixture.Mode = "t2v"
+	_, err = ValidateDFLOPVerificationFixture(t.Context(), fixture, verificationFixturePlugin(t, fixture.Plugin))
+	require.ErrorContains(t, err, "PROVIDER_CONTRACT_MODE_CONFLICT")
+	fixture.Mode = "i2v"
+	video["modes"] = map[string]any{"t2v": true, "i2v": true, "r2v": true}
+	item.Raw, err = common.Marshal(row)
+	require.NoError(t, err)
+	audit := AuditDFLOPVerificationPlanContract(fixture, item)
+	assert.Empty(t, audit.Blocker)
+	assert.Equal(t, []string{"i2v", "r2v", "t2v"}, audit.AuthenticatedCatalogModes)
+	assert.Equal(t, []string{"i2v"}, audit.ExactEndpointContractModes)
+	assert.Equal(t, []string{"i2v"}, audit.EffectiveModes)
+	for _, mode := range []string{"t2v", "r2v"} {
+		fixture.Mode = mode
+		assert.Equal(t, "PROVIDER_CONTRACT_MODE_CONFLICT", AuditDFLOPVerificationPlanContract(fixture, item).Blocker)
+	}
+	fixture.Mode = "i2v"
+	video["modes"] = map[string]any{"t2v": true, "i2v": false, "r2v": true}
+	item.Raw, err = common.Marshal(row)
+	require.NoError(t, err)
+	audit = AuditDFLOPVerificationPlanContract(fixture, item)
+	assert.Empty(t, audit.EffectiveModes)
+	assert.Equal(t, "PROVIDER_CONTRACT_MODE_CONFLICT", audit.Blocker)
 }

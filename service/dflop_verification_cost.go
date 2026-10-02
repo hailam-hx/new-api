@@ -22,20 +22,22 @@ import (
 )
 
 type DFLOPVerificationTarget struct {
-	FixtureHash           string   `json:"fixture_hash"`
-	FixturePublicURLs     []string `json:"fixture_public_urls"`
-	Endpoint              string   `json:"endpoint"`
-	Operation             string   `json:"operation"`
-	MaximumProviderPoints string   `json:"maximum_provider_points"`
-	ConfigHash            string   `json:"config_hash"`
-	PluginHash            string   `json:"plugin_hash"`
-	Model                 string   `json:"model"`
-	Protocol              string   `json:"protocol"`
-	Mode                  string   `json:"mode"`
-	FixtureID             string   `json:"fixture_id"`
-	PricingSnapshotHash   string   `json:"pricing_snapshot_hash"`
-	BillingExprHash       string   `json:"billing_expr_hash"`
-	RequestBodyHash       string   `json:"request_body_hash"`
+	StaticIntentHash       string   `json:"static_intent_hash"`
+	FixturePublicURLHashes []string `json:"fixture_public_url_hashes"`
+	FixtureHash            string   `json:"fixture_hash"`
+	FixturePublicURLs      []string `json:"fixture_public_urls"`
+	Endpoint               string   `json:"endpoint"`
+	Operation              string   `json:"operation"`
+	MaximumProviderPoints  string   `json:"maximum_provider_points"`
+	ConfigHash             string   `json:"config_hash"`
+	PluginHash             string   `json:"plugin_hash"`
+	Model                  string   `json:"model"`
+	Protocol               string   `json:"protocol"`
+	Mode                   string   `json:"mode"`
+	FixtureID              string   `json:"fixture_id"`
+	PricingSnapshotHash    string   `json:"pricing_snapshot_hash"`
+	BillingExprHash        string   `json:"billing_expr_hash"`
+	RequestBodyHash        string   `json:"request_body_hash"`
 }
 
 type DFLOPVerificationAuthorization struct {
@@ -77,6 +79,10 @@ func (a DFLOPVerificationAuthorization) MarshalJSON() ([]byte, error) {
 // catalog access, a family name or a previous invocation. Persistence also
 // atomically claims the cumulative hold/count before any paid submission.
 func ValidateDFLOPVerificationAuthorization(a DFLOPVerificationAuthorization, run model.RuntimeVerificationRun, item model.RuntimeVerificationItem, maximum string, now time.Time) error {
+	if a.PlanVersion != "" && a.PlanVersion != DFLOPVerificationPlanVersion {
+		return errors.New("SUPERSEDED_MANIFEST_REQUIRES_NEW_APPROVAL")
+	}
+
 	if !a.Approved || a.ApprovedBy == "" || a.ApprovalReference == "" || a.ExpiresAt <= now.Unix() {
 		return errors.New("PAID_AUTHORIZATION_REQUIRED")
 	}

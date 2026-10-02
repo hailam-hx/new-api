@@ -135,6 +135,27 @@ func (engine DFLOPVerificationEngine) Execute(ctx context.Context, runID, itemID
 	if err != nil {
 		return err
 	}
+	if fixture.Plan.ID == "AVATAR_SECONDS" {
+		avatar, _ := fixture.Request["avatar"].(string)
+		voice, _ := fixture.Request["voice"].(string)
+		if err = engine.verifyPresetResources(ctx, source.key, avatar, voice); err != nil {
+			return err
+		}
+	}
+	if voice, _ := fixture.Request["voice"].(string); fixture.Plan.ID != "AVATAR_SECONDS" && voice != "" {
+		if err = engine.verifyPresetResources(ctx, source.key, "", voice); err != nil {
+			return err
+		}
+	}
+	if fixture.Plan.ID == "CLIP_COMPOSE_FIXED_TASK" {
+		if fixture.ClipPreparation == nil {
+			return errors.New("FRESH_SAME_SOURCE_ASR_REQUIRED")
+		}
+		prepared := *fixture.ClipPreparation
+		fixture.verifyClipSource = func(ctx context.Context, url, id string) error {
+			return prepared.validate(source.key, url, id, source.hash, time.Now())
+		}
+	}
 	if source.hash != run.CatalogHash || source.fingerprint != run.CredentialFingerprint {
 		return errors.New("DRIFT_REVIEW_REQUIRED")
 	}
@@ -145,6 +166,11 @@ func (engine DFLOPVerificationEngine) Execute(ctx context.Context, runID, itemID
 	providerIndex := slices.IndexFunc(source.items, func(i dflop.Item) bool { return i.ModelID == item.Model })
 	if providerIndex < 0 {
 		return errors.New("SOURCE_MODEL_NOT_IN_AUTHENTICATED_CATALOG")
+	}
+	fixture.catalogContract = &source.items[providerIndex]
+	audit := AuditDFLOPVerificationPlanContract(fixture, source.items[providerIndex])
+	if audit.Blocker != "" {
+		return errors.New(audit.Blocker)
 	}
 	plugin, ok := jsplugin.DefaultRegistry.Generation().Get(fixture.Plugin)
 	if !ok {
@@ -166,8 +192,13 @@ func (engine DFLOPVerificationEngine) Execute(ctx context.Context, runID, itemID
 				urls = append(urls, media.PublicURL)
 			}
 		}
+		intentJSON, _ := common.Marshal(fixture.Request)
+		hashes := []string{}
+		for _, url := range urls {
+			hashes = append(hashes, verificationHash([]byte(url)))
+		}
 		if !slices.ContainsFunc(authorization.Targets, func(target DFLOPVerificationTarget) bool {
-			return target.Model == item.Model && slices.Equal(target.FixturePublicURLs, urls)
+			return target.Model == item.Model && target.StaticIntentHash == verificationHash(intentJSON) && slices.Equal(target.FixturePublicURLHashes, hashes) && slices.Equal(target.FixturePublicURLs, urls)
 		}) {
 			return errors.New("PAID_FIXTURE_URL_BINDING_MISMATCH")
 		}
