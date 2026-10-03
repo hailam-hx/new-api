@@ -73,6 +73,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Switch } from '@/components/ui/switch'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Tooltip,
   TooltipContent,
@@ -1072,7 +1073,7 @@ function ChannelTestDialogContent({
             <span className='min-w-0 truncate'>{currentRow.name}</span>
           </span>
         }
-        contentClassName='max-h-[min(90dvh,var(--dialog-available-height))] overflow-y-auto sm:max-w-4xl'
+        contentClassName='max-h-[min(90dvh,var(--dialog-available-height))] overflow-hidden sm:max-w-6xl'
         contentHeight='auto'
         bodyClassName='space-y-4'
         footer={
@@ -1081,7 +1082,7 @@ function ChannelTestDialogContent({
           </Button>
         }
       >
-        <div className='max-h-[78vh] space-y-4 overflow-y-auto py-4 pr-1'>
+        <div className='space-y-4'>
           <div className='grid gap-4 md:grid-cols-2'>
             <div className='grid gap-2'>
               <Label htmlFor='endpoint-type'>{t('Endpoint Type')}</Label>
@@ -1118,181 +1119,208 @@ function ChannelTestDialogContent({
             </div>
           </div>
 
-          <div className='space-y-3 max-sm:has-[div[role="toolbar"]]:pb-16'>
-            <ChannelRuntimeVerification
-              key={currentRow.id}
-              channelId={currentRow.id}
-              channelName={currentRow.name}
-              open={open}
-              models={models}
-              filteredModels={filteredModels}
-              results={testResults}
-              onBusyChange={setIsUpdatingModelVisibility}
-              disabled={isAnyTesting || isDeletingFailed}
-            />
-            <div className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
-              <div className='min-w-0 space-y-2'>
-                <p className='text-sm font-medium'>{t('Channel models')}</p>
-                <p className='text-muted-foreground text-xs'>
-                  {t('Select models to run batch tests.')}
-                </p>
-                <p className='text-muted-foreground text-xs'>
-                  {t(
-                    'Channel request tests are separate from persisted verification. A successful connection test does not verify generation, billing, or the provider ledger.'
-                  )}
-                </p>
-                <div className='flex flex-wrap items-center gap-2'>
-                  {isBatchTesting ? (
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      onClick={handleStopBatchTest}
-                      disabled={isBatchStopRequested}
-                    >
-                      {isBatchStopRequested
-                        ? t('Stopping...')
-                        : t('Stop testing')}
-                    </Button>
-                  ) : (
-                    <>
-                      <Button
-                        size='sm'
-                        onClick={() => handleBatchTest(filteredModels)}
-                        disabled={isAnyTesting || filteredModels.length === 0}
-                      >
-                        {testAllButtonLabel}
-                      </Button>
-                      {successModels.length > 0 && (
-                        <Button
-                          variant='outline'
-                          size='sm'
-                          onClick={handleSelectSuccessfulModels}
-                        >
-                          <CheckCircle2 data-icon='inline-start' />
-                          {t('Select successful models ({{count}})', {
-                            count: successModels.length,
-                          })}
-                        </Button>
-                      )}
-                      {successModels.length > 0 && (
-                        <ChannelTestModelVisibilityAction
-                          action='show'
-                          models={successModels}
-                          disabled={isAnyTesting || isDeletingFailed}
-                          onBusyChange={setIsUpdatingModelVisibility}
-                        />
-                      )}
-                      {failedModels.length > 0 && (
-                        <ChannelTestModelVisibilityAction
-                          action='hide'
-                          models={failedModels}
-                          disabled={isAnyTesting || isDeletingFailed}
-                          onBusyChange={setIsUpdatingModelVisibility}
-                        />
-                      )}
-                      {failedModels.length > 0 && (
-                        <Button
-                          variant='outline'
-                          size='sm'
-                          onClick={() => setIsDeleteFailedDialogOpen(true)}
-                        >
-                          <Trash2 data-icon='inline-start' />
-                          {t('Delete failed models ({{count}})', {
-                            count: failedModels.length,
-                          })}
-                        </Button>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-              <div className='flex flex-col gap-2 sm:w-64'>
-                <Label htmlFor='channel-model-visibility'>
-                  {t('Model visibility')}
-                </Label>
-                <Combobox
-                  id='channel-model-visibility'
-                  options={[
-                    { value: 'all', label: t('All') },
-                    { value: 'visible', label: t('Displayed') },
-                    { value: 'hidden', label: t('Listing hidden') },
-                  ]}
-                  value={visibilityFilter}
-                  disabled={visibilityQuery.isPending || isAnyTesting}
-                  onValueChange={(value) => {
-                    if (
-                      value !== 'all' &&
-                      value !== 'visible' &&
-                      value !== 'hidden'
-                    ) {
-                      return
-                    }
-                    setVisibilityFilter(value)
-                    setRowSelection({})
-                    setPagination((prev) => ({ ...prev, pageIndex: 0 }))
-                  }}
-                  className='w-full'
-                />
-                {visibilityQuery.isError && (
-                  <ErrorState
-                    title={t('Failed to load models')}
-                    onRetry={() => {
-                      void visibilityQuery.refetch()
-                    }}
-                    className='min-h-0 p-2'
-                  />
-                )}
-                <Input
-                  placeholder={t('Filter models...')}
-                  value={searchTerm}
-                  onChange={handleSearchTermChange}
-                  className='sm:w-64'
-                />
-              </div>
-            </div>
-
-            <div className='space-y-3'>
-              <DataTableView
-                table={table}
-                containerClassName='rounded-md'
-                containerProps={{
-                  role: 'region',
-                  'aria-label': t('Channel models'),
-                }}
-                tableContainerClassName='max-h-90 overflow-auto **:data-[slot=table-container]:overflow-visible'
-                tableClassName='w-max min-w-full table-auto'
-                pinnedColumns={[
-                  {
-                    columnId: 'actions',
-                    side: 'right',
-                    cellClassName: 'bg-popover',
-                  },
+          <div className='grid gap-2 sm:grid-cols-2 sm:items-end'>
+            <div className='grid gap-2'>
+              <Label htmlFor='channel-model-visibility'>
+                {t('Model visibility')}
+              </Label>
+              <Combobox
+                id='channel-model-visibility'
+                options={[
+                  { value: 'all', label: t('All') },
+                  { value: 'visible', label: t('Displayed') },
+                  { value: 'hidden', label: t('Listing hidden') },
                 ]}
-                colgroup={
-                  <colgroup>
-                    <col className='w-10 min-w-10' />
-                    <col className='w-auto' />
-                    <col className='w-28' />
-                    <col className='w-80' />
-                    <col className='w-px' />
-                  </colgroup>
-                }
-                getColumnClassName={(columnId) =>
-                  getTestTableColumnClass(columnId)
-                }
-                emptyContent={
-                  models.length
-                    ? t('No models matched your search.')
-                    : t('This channel has no configured models.')
-                }
-                emptyCellClassName='text-muted-foreground h-16 text-center text-sm'
+                value={visibilityFilter}
+                disabled={visibilityQuery.isPending || isAnyTesting}
+                onValueChange={(value) => {
+                  if (
+                    value !== 'all' &&
+                    value !== 'visible' &&
+                    value !== 'hidden'
+                  ) {
+                    return
+                  }
+                  setVisibilityFilter(value)
+                  setRowSelection({})
+                  setPagination((prev) => ({ ...prev, pageIndex: 0 }))
+                }}
+                className='w-full'
               />
-
-              <DataTablePagination table={table} />
+              {visibilityQuery.isError && (
+                <ErrorState
+                  title={t('Failed to load models')}
+                  onRetry={() => {
+                    void visibilityQuery.refetch()
+                  }}
+                  className='min-h-0 p-2'
+                />
+              )}
             </div>
-
-            <TestModelsBulkActions table={table} />
+            <Input
+              placeholder={t('Filter models...')}
+              value={searchTerm}
+              onChange={handleSearchTermChange}
+              aria-label={t('Filter models...')}
+              className='w-full'
+            />
           </div>
+          <Tabs defaultValue='models'>
+            <TabsList className='grid w-full grid-cols-2'>
+              <TabsTrigger value='models'>
+                {t('Channel models')} ({filteredModels.length})
+              </TabsTrigger>
+              <TabsTrigger value='verification'>
+                {t('Current evidence')}
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent
+              value='models'
+              keepMounted
+              className='data-[hidden]:hidden'
+            >
+              <div className='space-y-3 max-sm:has-[div[role="toolbar"]]:pb-16'>
+                <div className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
+                  <div className='min-w-0 space-y-2'>
+                    <p className='text-sm font-medium'>{t('Channel models')}</p>
+                    <p className='text-muted-foreground text-xs'>
+                      {t('Select models to run batch tests.')}
+                    </p>
+                    <p className='text-muted-foreground text-xs'>
+                      {t(
+                        'Channel request tests are separate from persisted verification. A successful connection test does not verify generation, billing, or the provider ledger.'
+                      )}
+                    </p>
+                    <div className='flex flex-wrap items-center gap-2'>
+                      {isBatchTesting ? (
+                        <Button
+                          variant='outline'
+                          size='sm'
+                          onClick={handleStopBatchTest}
+                          disabled={isBatchStopRequested}
+                        >
+                          {isBatchStopRequested
+                            ? t('Stopping...')
+                            : t('Stop testing')}
+                        </Button>
+                      ) : (
+                        <>
+                          <Button
+                            size='sm'
+                            onClick={() => handleBatchTest(filteredModels)}
+                            disabled={
+                              isAnyTesting || filteredModels.length === 0
+                            }
+                          >
+                            {testAllButtonLabel}
+                          </Button>
+                          {successModels.length > 0 && (
+                            <Button
+                              variant='outline'
+                              size='sm'
+                              onClick={handleSelectSuccessfulModels}
+                            >
+                              <CheckCircle2 data-icon='inline-start' />
+                              {t('Select successful models ({{count}})', {
+                                count: successModels.length,
+                              })}
+                            </Button>
+                          )}
+                          {successModels.length > 0 && (
+                            <ChannelTestModelVisibilityAction
+                              action='show'
+                              models={successModels}
+                              disabled={isAnyTesting || isDeletingFailed}
+                              onBusyChange={setIsUpdatingModelVisibility}
+                            />
+                          )}
+                          {failedModels.length > 0 && (
+                            <ChannelTestModelVisibilityAction
+                              action='hide'
+                              models={failedModels}
+                              disabled={isAnyTesting || isDeletingFailed}
+                              onBusyChange={setIsUpdatingModelVisibility}
+                            />
+                          )}
+                          {failedModels.length > 0 && (
+                            <Button
+                              variant='outline'
+                              size='sm'
+                              onClick={() => setIsDeleteFailedDialogOpen(true)}
+                            >
+                              <Trash2 data-icon='inline-start' />
+                              {t('Delete failed models ({{count}})', {
+                                count: failedModels.length,
+                              })}
+                            </Button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className='space-y-3'>
+                  <DataTableView
+                    table={table}
+                    containerClassName='rounded-md'
+                    containerProps={{
+                      role: 'region',
+                      'aria-label': t('Channel models'),
+                    }}
+                    tableContainerClassName='max-h-90 overflow-auto **:data-[slot=table-container]:overflow-visible'
+                    tableClassName='w-max min-w-full table-auto'
+                    pinnedColumns={[
+                      {
+                        columnId: 'actions',
+                        side: 'right',
+                        cellClassName: 'bg-popover',
+                      },
+                    ]}
+                    colgroup={
+                      <colgroup>
+                        <col className='w-10 min-w-10' />
+                        <col className='w-auto' />
+                        <col className='w-28' />
+                        <col className='w-80' />
+                        <col className='w-px' />
+                      </colgroup>
+                    }
+                    getColumnClassName={(columnId) =>
+                      getTestTableColumnClass(columnId)
+                    }
+                    emptyContent={
+                      models.length
+                        ? t('No models matched your search.')
+                        : t('This channel has no configured models.')
+                    }
+                    emptyCellClassName='text-muted-foreground h-16 text-center text-sm'
+                  />
+
+                  <DataTablePagination table={table} />
+                </div>
+
+                <TestModelsBulkActions table={table} />
+              </div>
+            </TabsContent>
+            <TabsContent
+              value='verification'
+              keepMounted
+              className='data-[hidden]:hidden'
+            >
+              <ChannelRuntimeVerification
+                key={currentRow.id}
+                channelId={currentRow.id}
+                channelName={currentRow.name}
+                open={open}
+                models={models}
+                filteredModels={filteredModels}
+                results={testResults}
+                onBusyChange={setIsUpdatingModelVisibility}
+                disabled={isAnyTesting || isDeletingFailed}
+              />
+            </TabsContent>
+          </Tabs>
         </div>
       </Dialog>
       <ConfirmDialog

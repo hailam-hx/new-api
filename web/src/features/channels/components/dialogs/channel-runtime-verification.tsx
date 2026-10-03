@@ -239,80 +239,49 @@ export function ChannelRuntimeVerification(
       ),
     },
     {
-      id: 'config',
-      header: t('Config'),
-      cell: (item) => (
-        <VerificationBadge label={t('Config')} status={item.config_status} />
-      ),
-    },
-    {
-      id: 'connectivity',
-      header: t('Connectivity'),
-      cell: (item) => (
-        <VerificationBadge
-          label={t('Connectivity')}
-          status={item.connectivity_status}
-        />
-      ),
-    },
-    {
-      id: 'request',
+      id: 'preparation',
       header: t('Request'),
+      className: 'w-48 min-w-48',
       cell: (item) => (
-        <VerificationBadge label={t('Request')} status={item.request_status} />
-      ),
-    },
-    {
-      id: 'usage',
-      header: t('Usage'),
-      cell: (item) => (
-        <VerificationBadge label={t('Usage')} status={item.parser_status} />
+        <div className='flex flex-col items-start gap-1.5'>
+          <VerificationBadge label={t('Config')} status={item.config_status} />
+          <VerificationBadge
+            label={t('Connectivity')}
+            status={item.connectivity_status}
+          />
+          <VerificationBadge
+            label={t('Request')}
+            status={item.request_status}
+          />
+        </div>
       ),
     },
     {
       id: 'runtime',
       header: t('Runtime'),
+      className: 'w-48 min-w-48',
       cell: (item) => (
-        <VerificationBadge
-          label={t('Runtime')}
-          status={verificationRuntimeStatus(item)}
-        />
-      ),
-    },
-    {
-      id: 'billing',
-      header: t('Billing'),
-      cell: (item) => (
-        <VerificationBadge label={t('Billing')} status={item.billing_status} />
-      ),
-    },
-    {
-      id: 'ledger',
-      header: t('Ledger'),
-      cell: (item) => (
-        <VerificationBadge label={t('Ledger')} status={item.ledger_status} />
+        <div className='flex flex-col items-start gap-1.5'>
+          <VerificationBadge label={t('Usage')} status={item.parser_status} />
+          <VerificationBadge
+            label={t('Runtime')}
+            status={verificationRuntimeStatus(item)}
+          />
+          <VerificationBadge
+            label={t('Billing')}
+            status={item.billing_status}
+          />
+          <VerificationBadge label={t('Ledger')} status={item.ledger_status} />
+        </div>
       ),
     },
     {
       id: 'evidence',
       header: t('Runtime evidence'),
-      className: 'min-w-80',
+      className: 'w-72 min-w-72',
       cell: (item) => {
-        const layers = [
-          [t('Config'), item.config_status],
-          [t('Connectivity'), item.connectivity_status],
-          [t('Request'), item.request_status],
-          [t('Generation'), item.generation_status],
-          [t('Parser'), item.parser_status],
-          [t('Billing'), item.billing_status],
-          [t('Ledger'), item.ledger_status],
-        ]
-        const openLayers = layers
-          .filter(([, state]) => state !== 'PASS')
-          .map(([label, state]) => `${label}: ${state}`)
-          .join(' · ')
         return (
-          <div className='space-y-1 text-xs'>
+          <div className='w-72 space-y-1 text-xs whitespace-normal'>
             <p className='font-mono wrap-break-word'>
               {item.status ?? item.result}
             </p>
@@ -321,23 +290,12 @@ export function ChannelRuntimeVerification(
                 {redactVerificationEvidence(item.reason_code)}
               </p>
             )}
-            {openLayers && (
-              <p className='text-muted-foreground whitespace-normal'>
-                {t('Open layers: {{layers}}', { layers: openLayers })}
-              </p>
-            )}
             <p>
               {t('Last verified at')}:{' '}
               {verificationTimestamp(item.verified_at) || t('Not verified')}
             </p>
             <p className='font-mono wrap-break-word'>
               {redactVerificationEvidence(item.endpoint)}
-            </p>
-            <p className='wrap-break-word'>
-              {t('Catalog hash')}:{' '}
-              <span className='font-mono'>
-                {item.catalog_hash ?? query.data?.run?.catalog_hash ?? '-'}
-              </span>
             </p>
             <p className='wrap-break-word'>
               {t('Billing source')}:{' '}
@@ -361,18 +319,6 @@ export function ChannelRuntimeVerification(
                       item.historical_evidence.status ??
                       item.historical_evidence.result,
                   })}
-                </p>
-                <p>
-                  {t('Last verified at')}:{' '}
-                  {verificationTimestamp(
-                    item.historical_evidence.verified_at
-                  ) || t('Not verified')}
-                </p>
-                <p className='wrap-break-word'>
-                  {t('Catalog hash')}:{' '}
-                  <span className='font-mono'>
-                    {item.historical_evidence.catalog_hash || '-'}
-                  </span>
                 </p>
               </div>
             )}
@@ -551,7 +497,7 @@ export function ChannelRuntimeVerification(
             data={items}
             columns={columns}
             getRowKey={(item, index) => item.id ?? index}
-            tableClassName='w-max min-w-full'
+            tableClassName='w-max min-w-full [&_td]:align-top [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10 [&_thead]:bg-popover'
             containerProps={{
               role: 'region',
               'aria-label': t('Verification layers'),
