@@ -81,7 +81,7 @@ function setup(open = true) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
-  const content = (nextOpen: boolean) => (
+  const content = (nextOpen: boolean, filteredModels?: string[]) => (
     <QueryClientProvider client={client}>
       <I18nextProvider i18n={i18n}>
         <ChannelRuntimeVerification
@@ -89,6 +89,7 @@ function setup(open = true) {
           channelName='DFLOP'
           open={nextOpen}
           models={['image-model']}
+          filteredModels={filteredModels}
           results={{}}
         />
       </I18nextProvider>
@@ -98,6 +99,8 @@ function setup(open = true) {
   return {
     ...view,
     setOpen: (nextOpen: boolean) => view.rerender(content(nextOpen)),
+    setFilteredModels: (models: string[]) =>
+      view.rerender(content(open, models)),
   }
 }
 
@@ -308,6 +311,42 @@ test('unrecoverable history does not block a fresh untested canary', async () =>
       /Historical result unrecoverable: EXACT_PROVIDER_ID_NOT_CAPTURED/
     )
   ).toBeVisible()
+})
+
+test('evidence table, visibility counts and export follow the shared model filter', async () => {
+  const full = {
+    ...evidence.items[0],
+    config_status: 'PASS',
+    connectivity_status: 'PASS',
+    request_status: 'PASS',
+    generation_status: 'PASS',
+    parser_status: 'PASS',
+    billing_status: 'PASS',
+    ledger_status: 'PASS',
+  } as const
+  const get = vi.spyOn(api, 'get').mockResolvedValue({
+    data: { success: true, data: { ...evidence, items: [full] } },
+  })
+  const view = setup()
+  expect(await screen.findByRole('row', { name: /image-model/ })).toBeVisible()
+  expect(
+    screen.getByRole('button', { name: 'Show models passing three layers (1)' })
+  ).toBeEnabled()
+  view.setFilteredModels([])
+  expect(
+    screen.queryByRole('row', { name: /image-model/ })
+  ).not.toBeInTheDocument()
+  expect(
+    screen.getByRole('button', { name: 'Show models passing three layers (0)' })
+  ).toBeDisabled()
+  expect(
+    screen.getByRole('button', { name: 'Show successful models (0)' })
+  ).toBeDisabled()
+  expect(screen.getByRole('button', { name: 'Export CSV' })).toBeDisabled()
+  view.setFilteredModels(['image-model'])
+  expect(screen.getByRole('row', { name: /image-model/ })).toBeVisible()
+  expect(screen.getByRole('button', { name: 'Export CSV' })).toBeEnabled()
+  expect(get).toHaveBeenCalledTimes(1)
 })
 
 test('shows only current models whose every verification target passes all seven layers', async () => {

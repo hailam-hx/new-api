@@ -1125,6 +1125,7 @@ function ChannelTestDialogContent({
               channelName={currentRow.name}
               open={open}
               models={models}
+              filteredModels={filteredModels}
               results={testResults}
               onBusyChange={setIsUpdatingModelVisibility}
               disabled={isAnyTesting || isDeletingFailed}

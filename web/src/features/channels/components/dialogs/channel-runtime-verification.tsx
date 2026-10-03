@@ -53,6 +53,7 @@ type ChannelRuntimeVerificationProps = {
   channelName: string
   open: boolean
   models: string[]
+  filteredModels?: string[]
   results: Record<string, ChannelTestResult>
   disabled?: boolean
   onBusyChange?: (busy: boolean) => void
@@ -173,7 +174,10 @@ export function ChannelRuntimeVerification(
     query.isFetching ||
     runtimeBusy ||
     visibilityBusy
-  const items = query.data?.items ?? []
+  const filteredModels = props.filteredModels ?? props.models
+  const items = (query.data?.items ?? []).filter((item) =>
+    filteredModels.includes(item.model)
+  )
   const threeLayerPassedModels = [
     ...new Set(items.map((item) => item.model)),
   ].filter(
@@ -470,7 +474,7 @@ export function ChannelRuntimeVerification(
       <div className='flex flex-wrap gap-2'>
         <ChannelRuntimeAction
           channelId={props.channelId}
-          models={props.models}
+          models={filteredModels}
           verification={query.isError ? undefined : query.data}
           disabled={Boolean(
             props.disabled || prepare.isPending || visibilityBusy
@@ -544,7 +548,7 @@ export function ChannelRuntimeVerification(
       {!query.isPending && !query.isError && (
         <div className='max-h-80 overflow-auto'>
           <StaticDataTable
-            data={query.data?.items ?? []}
+            data={items}
             columns={columns}
             getRowKey={(item, index) => item.id ?? index}
             tableClassName='w-max min-w-full'
@@ -559,9 +563,11 @@ export function ChannelRuntimeVerification(
       <ChannelTestExport
         channelId={props.channelId}
         channelName={props.channelName}
-        models={props.models}
+        models={filteredModels}
         results={props.results}
-        verification={query.isError ? undefined : query.data}
+        verification={
+          query.isError || !query.data ? undefined : { ...query.data, items }
+        }
         disabled={isBusy || query.isError}
       />
       <Dialog
