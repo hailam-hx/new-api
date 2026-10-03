@@ -14,9 +14,10 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-const DFLOPVerificationPlanVersion = "canary-plan-v3"
+const DFLOPVerificationPlanVersion = "canary-plan-v6"
 
 type DFLOPVerificationPlannedTarget struct {
+	ExecutorBlocker        string                        `json:"executor_blocker,omitempty"`
 	PricingSnapshotKind    string                        `json:"pricing_snapshot_kind"`
 	ContractAudit          VerificationPlanContractAudit `json:"contract_audit"`
 	FixtureHash            string                        `json:"fixture_hash"`
@@ -82,7 +83,7 @@ func (engine DFLOPVerificationEngine) Plan(ctx context.Context, runID int64) (DF
 	if err != nil {
 		return plan, err
 	}
-	plan = DFLOPVerificationPlan{Version: DFLOPVerificationPlanVersion, Supersedes: "canary-plan-v2", SupersededPlanStatus: "SUPERSEDED", Currency: "points", WaveMaximumProviderPoints: map[int]string{}, PointsPerCNY: source.pointsPerCNY, ConfiguredCNYToUSD: source.config.CNYToUSD, RunID: run.ID, CatalogHash: run.CatalogHash, SourceChannel: run.ChannelID, CredentialFingerprint: run.CredentialFingerprint, Concurrency: 1, ExpiryRecommendation: "30 minutes after explicit approval", Authorization: DFLOPVerificationAuthorization{Approved: false, ChannelID: run.ChannelID, FundingUserID: run.FundingUserID, CatalogHash: run.CatalogHash, CredentialFingerprint: run.CredentialFingerprint, MaxCostPerRequest: map[string]string{}, PlanVersion: DFLOPVerificationPlanVersion, Concurrency: 1}}
+	plan = DFLOPVerificationPlan{Version: DFLOPVerificationPlanVersion, Supersedes: "canary-plan-v5", SupersededPlanStatus: "SUPERSEDED", Currency: "points", WaveMaximumProviderPoints: map[int]string{}, PointsPerCNY: source.pointsPerCNY, ConfiguredCNYToUSD: source.config.CNYToUSD, RunID: run.ID, CatalogHash: run.CatalogHash, SourceChannel: run.ChannelID, CredentialFingerprint: run.CredentialFingerprint, Concurrency: 1, ExpiryRecommendation: "30 minutes after explicit approval", Authorization: DFLOPVerificationAuthorization{Approved: false, ChannelID: run.ChannelID, FundingUserID: run.FundingUserID, CatalogHash: run.CatalogHash, CredentialFingerprint: run.CredentialFingerprint, MaxCostPerRequest: map[string]string{}, PlanVersion: DFLOPVerificationPlanVersion, Concurrency: 1}}
 	options := engine.FixtureOptions
 	options.SourceCatalogHash = source.hash
 	fixtures := DFLOPVerificationFixturesWithOptions(source.items, options)
@@ -190,10 +191,33 @@ func (engine DFLOPVerificationEngine) Plan(ctx context.Context, runID int64) (DF
 		}
 		plan.Targets = append(plan.Targets, target)
 	}
+	for _, item := range items {
+		if !slices.Contains(DFLOPAmbiguousVerificationModels, item.Model) {
+			continue
+		}
+		index := slices.IndexFunc(source.items, func(provider dflop.Item) bool { return provider.ModelID == item.Model })
+		if index < 0 {
+			continue
+		}
+		var evidence model.RuntimeVerificationEvidence
+		_ = common.UnmarshalJsonStr(item.EvidenceJSON, &evidence)
+		target := DFLOPFreshCanaryTarget(source.items[index], run.CatalogHash, evidence.ConfigHash)
+		plan.Targets = append(plan.Targets, target)
+		if target.MaximumProviderPoints == nil {
+			continue
+		}
+		maximum := *target.MaximumProviderPoints
+		points, _ := decimal.NewFromString(maximum)
+		total = total.Add(points)
+		plan.Authorization.Models = append(plan.Authorization.Models, item.Model)
+		plan.Authorization.MaxCostPerRequest[item.Model] = maximum
+		plan.Authorization.Targets = append(plan.Authorization.Targets, DFLOPVerificationTarget{StaticIntentHash: target.StaticIntentHash, Model: item.Model, Protocol: target.Fixture.Protocol, Mode: target.Fixture.Mode, FixtureID: target.Fixture.ID, PricingSnapshotHash: target.PricingSnapshotHash, BillingExprHash: target.BillingExprHash, RequestBodyHash: target.RequestBodyHash, FixtureHash: target.FixtureHash, FixturePublicURLs: target.FixturePublicURLs, FixturePublicURLHashes: target.FixturePublicURLHashes, Endpoint: target.Fixture.Endpoint, Operation: target.Fixture.Operation, MaximumProviderPoints: maximum, ConfigHash: target.ConfigHash, PluginHash: target.PluginHash})
+	}
+
 	// Select the cheapest eligible representative of each contract family.
 	cheapest := map[string]int{}
 	for i, target := range plan.Targets {
-		if target.MaximumProviderPoints == nil {
+		if target.MaximumProviderPoints == nil || target.Wave == 3 {
 			continue
 		}
 		previous, found := cheapest[target.Fixture.Plan.ID]
@@ -222,12 +246,12 @@ func (engine DFLOPVerificationEngine) Plan(ctx context.Context, runID int64) (DF
 	conversion, _ := decimal.NewFromString(source.config.CNYToUSD)
 	pointsPerCNY, _ := decimal.NewFromString(source.pointsPerCNY)
 	plan.InformationalUSD = total.Mul(conversion).DivRound(pointsPerCNY, 12).String()
-	plan.FixturePlans = len(fixtures)
+	plan.FixturePlans = len(plan.Targets)
 	plan.PlannedPOSTs = len(plan.Authorization.Targets)
 	plan.Authorization.MaxRequests = plan.PlannedPOSTs
 	plan.KnownMaximumProviderPoints = total.String()
 	plan.Authorization.MaxTotalProviderPoints = total.String()
-	if plan.PlannedPOSTs == len(fixtures) {
+	if plan.PlannedPOSTs == len(plan.Targets) {
 		value := total.String()
 		plan.CompleteMaximumProviderPoints = &value
 	}

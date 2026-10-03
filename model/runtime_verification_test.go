@@ -349,7 +349,7 @@ func TestRuntimeVerificationHistoryDoesNotPromoteOldCatalogEvidence(t *testing.T
 	require.NoError(t, CreateRuntimeVerificationRun(current, []RuntimeVerificationItem{{Model: "image-a", Protocol: "openai_image", Mode: "default", ConfigStatus: "PASS", ConnectivityStatus: "PASS"}}))
 	run, items, err := LatestRuntimeVerificationEvidence(1)
 	require.NoError(t, err)
-	require.Len(t, items, 1)
+	require.Len(t, items, 3)
 	assert.Equal(t, current.ID, run.ID)
 	assert.Equal(t, current.ID, items[0].RunID)
 	assert.Equal(t, current.CatalogHash, items[0].CatalogHash)
@@ -363,6 +363,44 @@ func TestRuntimeVerificationHistoryDoesNotPromoteOldCatalogEvidence(t *testing.T
 	stored, err := ListRuntimeVerificationItems(current.ID)
 	require.NoError(t, err)
 	assert.Nil(t, stored[0].HistoricalEvidence, "the composition must never write old evidence to the new item")
+}
+
+func TestRuntimeVerificationCurrentKeepsExactIdentityAndUnpaidHistoryAfterRestart(t *testing.T) {
+	path := runtimeVerificationDatabase(t)
+	old := &RuntimeVerificationRun{ChannelID: 1, Source: "dflop", CatalogHash: strings.Repeat("a", 64), CredentialFingerprint: strings.Repeat("b", 64), Mode: "ZERO_COST"}
+	require.NoError(t, CreateRuntimeVerificationRun(old, []RuntimeVerificationItem{
+		{Model: "image-a", Protocol: "openai_image", Mode: "default", RequestStatus: "BLOCKED", ReasonCode: "PROVIDER_TOKEN_CEILING_REQUIRED"},
+		{Model: "image-b", Protocol: "openai_image", Mode: "default", ConfigStatus: "PASS"},
+		{Model: "image-a", Protocol: "openai_video", Mode: "i2v", RequestStatus: "BLOCKED", ReasonCode: "FIXTURE_PUBLIC_URL_REQUIRED"},
+	}))
+	fresh := &RuntimeVerificationRun{ChannelID: 1, Source: "dflop", CatalogHash: old.CatalogHash, CredentialFingerprint: old.CredentialFingerprint, Mode: "ZERO_COST_SINGLE"}
+	require.NoError(t, CreateRuntimeVerificationRun(fresh, []RuntimeVerificationItem{{Model: "image-a", Protocol: "openai_image", Mode: "default", RequestStatus: "PASS", ReasonCode: "LIVE_CANARY_REQUIRED"}}))
+	sqlDB, err := DB.DB()
+	require.NoError(t, err)
+	require.NoError(t, sqlDB.Close())
+	DB, err = gorm.Open(sqlite.Open(path), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	_, items, err := LatestRuntimeVerificationEvidence(1)
+	require.NoError(t, err)
+	require.Len(t, items, 3)
+	for _, item := range items {
+		if item.Model == "image-a" && item.Protocol == "openai_image" {
+			assert.Equal(t, "PASS", item.RequestStatus)
+			assert.Equal(t, "LIVE_CANARY_REQUIRED", item.ReasonCode)
+			require.NotNil(t, item.HistoricalEvidence)
+			assert.Equal(t, "PROVIDER_TOKEN_CEILING_REQUIRED", item.HistoricalEvidence.ReasonCode)
+		} else {
+			assert.Equal(t, old.ID, item.RunID)
+			assert.Nil(t, item.HistoricalEvidence)
+		}
+	}
+	require.NoError(t, DB.Model(fresh).Update("status", "SUPERSEDED").Error)
+	_, items, err = LatestRuntimeVerificationEvidence(1)
+	require.NoError(t, err)
+	require.Len(t, items, 3)
+	for _, item := range items {
+		assert.Equal(t, old.ID, item.RunID)
+	}
 }
 
 func TestRuntimeVerificationPluginRecoverySelectorsRemainSanitizedAndDurable(t *testing.T) {
@@ -576,6 +614,16 @@ func TestRuntimeVerificationDatabaseMatrix(t *testing.T) {
 			require.NoError(t, DB.Where(commonKeyCol+" = ?", "runtime-verification-preserve").First(&preserved).Error)
 			assert.Equal(t, "previous-value", preserved.Value)
 			run, items := runtimeVerificationRunFixture(t, "0.3", 1)
+			retired := RuntimeVerificationEvidence{HistoricalRuntimeState: "HISTORICAL_RUNTIME_UNRECOVERABLE", HistoricalReasonCode: "EXACT_PROVIDER_ID_NOT_CAPTURED", HistoricalRunID: run.ID, CurrentCanaryReadiness: "READY_FOR_FRESH_CANARY"}
+			body, err := common.Marshal(retired)
+			require.NoError(t, err)
+			items[0].EvidenceJSON = string(body)
+			require.NoError(t, UpdateRuntimeVerificationItem(&items[0]))
+			loaded, err := ListRuntimeVerificationItems(run.ID)
+			require.NoError(t, err)
+			var reloaded RuntimeVerificationEvidence
+			require.NoError(t, common.UnmarshalJsonStr(loaded[0].EvidenceJSON, &reloaded))
+			assert.Equal(t, retired, reloaded)
 			require.NoError(t, ClaimRuntimeVerificationSubmit(run.ID, items[0].ID, strings.Repeat("e", 64), strings.Repeat("f", 64), "0.3"))
 			require.NoError(t, migrateDB())
 			saved, err := GetRuntimeVerificationRun(run.ID)
@@ -611,6 +659,26 @@ func TestRuntimeVerificationDatabaseMatrix(t *testing.T) {
 			assert.Equal(t, 1, successes, "run locking must serialize different item submit claims")
 			runtimeVerificationConsumeReceiptFixture(t, concurrentRun, &concurrentItems[0])
 			runtimeVerificationCanonicalUsageFixture(t, concurrentRun, &concurrentItems[2])
+
+			old := &RuntimeVerificationRun{ChannelID: 1, Source: "dflop", CatalogHash: strings.Repeat("a", 64), CredentialFingerprint: strings.Repeat("b", 64), Mode: "ZERO_COST"}
+			require.NoError(t, CreateRuntimeVerificationRun(old, []RuntimeVerificationItem{{Model: "current-v5", Protocol: "openai_image", Mode: "default", RequestStatus: "BLOCKED", ReasonCode: "PROVIDER_TOKEN_CEILING_REQUIRED"}}))
+			fresh := &RuntimeVerificationRun{ChannelID: 1, Source: "dflop", CatalogHash: old.CatalogHash, CredentialFingerprint: old.CredentialFingerprint, Mode: "ZERO_COST"}
+			require.NoError(t, CreateRuntimeVerificationRun(fresh, []RuntimeVerificationItem{{Model: "current-v5", Protocol: "openai_image", Mode: "default", RequestStatus: "PASS", ReasonCode: "LIVE_CANARY_REQUIRED"}}))
+			require.NoError(t, migrateDB())
+			_, current, err := LatestRuntimeVerificationEvidence(1)
+			require.NoError(t, err)
+			found := false
+			for _, item := range current {
+				if item.Model == "current-v5" {
+					found = true
+					assert.Equal(t, fresh.ID, item.RunID)
+					assert.Equal(t, "PASS", item.RequestStatus)
+					require.NotNil(t, item.HistoricalEvidence)
+					assert.Equal(t, old.ID, item.HistoricalEvidence.RunID)
+					assert.Equal(t, "PROVIDER_TOKEN_CEILING_REQUIRED", item.HistoricalEvidence.ReasonCode)
+				}
+			}
+			require.True(t, found)
 		})
 	}
 }

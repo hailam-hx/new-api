@@ -60,6 +60,9 @@ export function ChannelRuntimeVerification(
 ) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const [evidenceSection, setEvidenceSection] = useState<
+    'all' | 'ids' | 'billing'
+  >('all')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const queryKey = ['channels', props.channelId, 'runtime-verification']
   const query = useQuery({
@@ -103,14 +106,49 @@ export function ChannelRuntimeVerification(
   )
   const evidence = selectedItem
     ? JSON.stringify(
-        verificationEvidenceRecord(
-          selectedItem,
-          evidenceQuery.data?.run,
-          query.data?.items.some(
-            (item) => item.historical_evidence?.id === selectedId
+        Object.fromEntries(
+          Object.entries(
+            verificationEvidenceRecord(
+              selectedItem,
+              evidenceQuery.data?.run,
+              query.data?.items.some(
+                (item) => item.historical_evidence?.id === selectedId
+              )
+                ? 'historical'
+                : 'current'
+            )
+          ).filter(
+            ([key]) =>
+              evidenceSection === 'all' ||
+              (evidenceSection === 'ids'
+                ? [
+                    'model',
+                    'protocol',
+                    'mode',
+                    'request_id',
+                    'task_id',
+                    'trace_id',
+                    'correlation_quality',
+                    'run_id',
+                    'evidence_scope',
+                  ].includes(key)
+                : [
+                    'model',
+                    'billing_state',
+                    'usage_state',
+                    'ledger_state',
+                    'billing_expr_hash',
+                    'pricing_snapshot_hash',
+                    'provider_usage',
+                    'normalized_usage',
+                    'provider_cost_points',
+                    'newapi_quota',
+                    'wallet_delta',
+                    'evidence',
+                    'run_id',
+                    'evidence_scope',
+                  ].includes(key))
           )
-            ? 'historical'
-            : 'current'
         ),
         null,
         2
@@ -130,6 +168,18 @@ export function ChannelRuntimeVerification(
               .filter(Boolean)
               .join(' · ')}
           </p>
+          {item.historical_runtime_state ===
+            'HISTORICAL_RUNTIME_UNRECOVERABLE' && (
+            <p className='text-muted-foreground text-xs'>
+              {t('Historical result unrecoverable')}:{' '}
+              {item.historical_reason_code}
+            </p>
+          )}
+          {item.current_canary_readiness === 'READY_FOR_FRESH_CANARY' && (
+            <p className='text-muted-foreground text-xs'>
+              {t('Fresh verification required')}
+            </p>
+          )}
         </div>
       ),
     },
@@ -148,6 +198,20 @@ export function ChannelRuntimeVerification(
           label={t('Connectivity')}
           status={item.connectivity_status}
         />
+      ),
+    },
+    {
+      id: 'request',
+      header: t('Request'),
+      cell: (item) => (
+        <VerificationBadge label={t('Request')} status={item.request_status} />
+      ),
+    },
+    {
+      id: 'usage',
+      header: t('Usage'),
+      cell: (item) => (
+        <VerificationBadge label={t('Usage')} status={item.parser_status} />
       ),
     },
     {
@@ -275,9 +339,34 @@ export function ChannelRuntimeVerification(
             }
             aria-label={t('View evidence for {{model}}', { model: item.model })}
             aria-haspopup='dialog'
-            onClick={() => setSelectedId(item.id ?? null)}
+            onClick={() => {
+              setEvidenceSection('all')
+              setSelectedId(item.id ?? null)
+            }}
           >
             {t('View evidence')}
+          </Button>
+          <Button
+            variant='ghost'
+            size='sm'
+            disabled={item.id === undefined}
+            onClick={() => {
+              setEvidenceSection('ids')
+              setSelectedId(item.id ?? null)
+            }}
+          >
+            {t('View exact IDs')}
+          </Button>
+          <Button
+            variant='ghost'
+            size='sm'
+            disabled={item.id === undefined}
+            onClick={() => {
+              setEvidenceSection('billing')
+              setSelectedId(item.id ?? null)
+            }}
+          >
+            {t('View billing reconciliation')}
           </Button>
           {item.historical_evidence && (
             <Button
@@ -291,9 +380,10 @@ export function ChannelRuntimeVerification(
                 model: item.model,
               })}
               aria-haspopup='dialog'
-              onClick={() =>
+              onClick={() => (
+                setEvidenceSection('all'),
                 setSelectedId(item.historical_evidence?.id ?? null)
-              }
+              )}
             >
               {t('View previous evidence')}
             </Button>
@@ -316,7 +406,7 @@ export function ChannelRuntimeVerification(
   return (
     <section className='space-y-3' aria-label={t('Persisted verification')}>
       <div className='flex flex-wrap items-center justify-between gap-2'>
-        <h3 className='text-sm font-medium'>{t('Persisted verification')}</h3>
+        <h3 className='text-sm font-medium'>{t('Current evidence')}</h3>
         <Button
           variant='outline'
           size='sm'

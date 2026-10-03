@@ -1819,6 +1819,7 @@
     "Current domain: {{domain}}": "Domaine actuel : {{domain}}",
     "Current email verification code": "Code de vérification de l’adresse actuelle",
     "Current email: {{email}}. Enter a new email to change.": "E-mail actuel : {{email}}. Saisissez un nouvel e-mail pour le modifier.",
+    "Current evidence": "Preuves actuelles",
     "Current exchange rate: 1 USD = {{rate}} {{currency}}": "Taux actuel : 1 USD = {{rate}} {{currency}}",
     "Current key": "Clé actuelle",
     "Current key disable requested": "Désactivation de la clé actuelle demandée",
@@ -7421,6 +7422,7 @@
     "View API token key": "Consulter la clé d’un jeton API",
     "View API token keys in batch": "Consulter les clés de jetons API par lot",
     "View audit records from user and admin roles. Root records are always excluded.": "Consulter les audits des rôles user et admin. Les événements du rôle root sont toujours exclus.",
+    "View billing reconciliation": "Voir le rapprochement des coûts",
     "View changelog source": "Voir le fichier source",
     "View channel lists and details without secrets.": "Afficher les listes et détails des canaux sans secrets.",
     "View channel secrets": "Voir les secrets des canaux",
@@ -7429,6 +7431,7 @@
     "View document": "Afficher le document",
     "View evidence": "Voir les preuves",
     "View evidence for {{model}}": "Voir les preuves de {{model}}",
+    "View exact IDs": "Voir les ID exacts",
     "View issued reset credits, grant dates, and expiration.": "Voir les crédits de réinitialisation émis, les dates d'attribution et d'expiration.",
     "View key for API token “{{name}}”": "Consulter la clé du jeton API « {{name}} »",
     "View logs": "Voir les logs",
@@ -7682,5 +7685,7 @@
     "Zhipu GLM · channel type 26. ": "Zhipu GLM · channel type 26. ",
     "Zhipu V4": "Zhipu V4",
     "Zoom": "Zoom"
-  }
+  },
+  "Historical result unrecoverable": "Résultat historique irrécupérable",
+  "Fresh verification required": "Nouvelle vérification requise"
 }

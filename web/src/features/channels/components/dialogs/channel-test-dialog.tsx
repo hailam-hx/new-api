@@ -1340,7 +1340,9 @@ function TestStatusCell({ result }: { result?: TestResult }) {
   if (result.diagnostic && result.diagnostic.outcome !== 'fail') {
     let label = t('Upstream not tested')
     if (result.status === 'pass') label = t('Preflight valid')
-    if (result.status === 'partial') label = t('Partial verification')
+    if (result.status === 'partial' && result.diagnostic.mode === 'runtime') {
+      label = `${t('Runtime')}: AMBIGUOUS`
+    }
     return <StatusBadge label={label} variant='info' copyable={false} />
   }
 

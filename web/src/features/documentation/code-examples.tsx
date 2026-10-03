@@ -146,7 +146,7 @@ export function CodeExamples(props: {
       >
         <TabsList
           aria-label={t('Audio task')}
-          className='grid h-auto w-full grid-cols-2 sm:w-fit'
+          className='grid w-full grid-cols-2 group-data-horizontal/tabs:h-auto sm:w-fit'
         >
           <TabsTrigger value='speech' className='h-auto py-2 whitespace-normal'>
             {t('Text → Speech')}

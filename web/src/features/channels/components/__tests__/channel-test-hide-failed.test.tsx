@@ -273,7 +273,6 @@ test('mixed task batch keeps partial and untested rows out of hide/delete and ne
     await screen.findByRole('button', { name: /Test all 3 models/ })
   )
   await screen.findByRole('button', { name: 'Hide failed models (1)' })
-  expect(screen.getByText('Partial verification')).toBeInTheDocument()
   expect(screen.getAllByText('Upstream not tested').length).toBeGreaterThan(0)
   expect(
     screen.getByRole('button', { name: 'Delete failed models (1)' })

@@ -249,3 +249,62 @@ test('previous paid evidence stays historical and opens its original run without
   )
   expect(within(dialog).getByText(/previous-catalog-sha/)).toBeVisible()
 })
+
+test('preparation blocker leaves runtime untested and shows request and usage independently', async () => {
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: {
+      success: true,
+      data: {
+        ...evidence,
+        items: [
+          {
+            ...evidence.items[0],
+            request_status: 'BLOCKED',
+            generation_status: 'NOT_TESTED',
+            reason_code: 'OPERATOR_DEPLOY_REQUIRED',
+          },
+        ],
+      },
+    },
+  })
+  setup()
+  const row = await screen.findByRole('row', { name: /image-model/ })
+  expect(within(row).getByText('Request: BLOCKED')).toBeVisible()
+  expect(within(row).getByText('Usage: NOT_TESTED')).toBeVisible()
+  expect(within(row).getByText('Runtime: NOT_TESTED')).toBeVisible()
+})
+
+test('unrecoverable history does not block a fresh untested canary', async () => {
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: {
+      success: true,
+      data: {
+        ...evidence,
+        items: [
+          {
+            ...evidence.items[0],
+            request_status: 'PASS',
+            generation_status: 'NOT_TESTED',
+            billing_status: 'NOT_TESTED',
+            status: 'READY_FOR_FRESH_CANARY',
+            reason_code: 'LIVE_CANARY_REQUIRED',
+            historical_runtime_state: 'HISTORICAL_RUNTIME_UNRECOVERABLE',
+            historical_reason_code: 'EXACT_PROVIDER_ID_NOT_CAPTURED',
+            historical_run_id: 6,
+            current_canary_readiness: 'READY_FOR_FRESH_CANARY',
+          },
+        ],
+      },
+    },
+  })
+  setup()
+  const row = await screen.findByRole('row', { name: /image-model/ })
+  expect(within(row).getByText('Request: PASS')).toBeVisible()
+  expect(within(row).getByText('Runtime: NOT_TESTED')).toBeVisible()
+  expect(within(row).getByText('Fresh verification required')).toBeVisible()
+  expect(
+    within(row).getByText(
+      /Historical result unrecoverable: EXACT_PROVIDER_ID_NOT_CAPTURED/
+    )
+  ).toBeVisible()
+})

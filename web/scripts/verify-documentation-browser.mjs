@@ -44,6 +44,24 @@ let restricted = false,
 const page = await context.newPage()
 const errors = []
 page.on('pageerror', (e) => errors.push(e.message))
+async function assertAudioTabsFit(label) {
+  const fits = await page
+    .getByRole('tablist', { name: label, exact: true })
+    .evaluate((element) => {
+      const bounds = element.getBoundingClientRect()
+      return [...element.querySelectorAll('[role="tab"]')].every((tab) => {
+        const box = tab.getBoundingClientRect()
+        return (
+          box.top >= bounds.top + 2 &&
+          box.bottom <= bounds.bottom - 2 &&
+          box.left >= bounds.left &&
+          box.right <= bounds.right
+        )
+      })
+    })
+  assert(fits, 'Audio task tabs must stay inside their container with padding')
+}
+
 await context.route('**/api/**', async (route) => {
   const path = new URL(route.request().url()).pathname
   let status = 200,
@@ -664,6 +682,7 @@ for (const [task, label, endpoint, basicRows] of [
   ['transcription', 'Speech → Text', '/v1/audio/transcriptions', 3],
 ]) {
   await page.getByRole('tab', { name: label, exact: true }).click()
+  await assertAudioTabsFit('Audio task')
   const taskPanel = page.getByRole('tabpanel', { name: label, exact: true })
   await taskPanel
     .locator('#endpoint')
@@ -816,6 +835,18 @@ assert(
         .every((link) => link.scrollWidth <= link.clientWidth)
     )
 )
+const pricingShortcut = await header
+  .getByRole('navigation', { name: 'Liên kết nhanh tài liệu', exact: true })
+  .getByRole('link', { name: 'Giá cả', exact: true })
+  .boundingBox()
+const searchShortcut = await header
+  .getByRole('button', { name: 'Tìm tài liệu', exact: true })
+  .boundingBox()
+assert(pricingShortcut && searchShortcut)
+assert(
+  searchShortcut.x - (pricingShortcut.x + pricingShortcut.width) >= 16,
+  'Documentation shortcuts must have breathing room before search'
+)
 await page.screenshot({ path: '/tmp/new-api-docs-header-vi.png' })
 await page.setViewportSize({ width: 1440, height: 1000 })
 const documentation = JSON.parse(
@@ -949,7 +980,7 @@ for (const [locale, label] of [
     .getByRole('link', { name: currentLocale['Image API'], exact: true })
     .click()
   await page
-    .getByRole('heading', { name: currentLocale['Image'], exact: true })
+    .getByRole('heading', { name: currentLocale['Image API'], exact: true })
     .waitFor()
   assert(
     (await page.locator('#quick-example pre').textContent()).includes(
@@ -1056,7 +1087,7 @@ for (const [locale, label] of [
     .getByRole('link', { name: currentLocale['Audio API'], exact: true })
     .click()
   await page
-    .getByRole('heading', { name: currentLocale['Audio'], exact: true })
+    .getByRole('heading', { name: currentLocale['Audio API'], exact: true })
     .waitFor()
   for (const [task, taskLabel] of [
     ['speech', 'Text → Speech'],
@@ -1065,6 +1096,7 @@ for (const [locale, label] of [
     await page
       .getByRole('tab', { name: currentLocale[taskLabel], exact: true })
       .click()
+    await assertAudioTabsFit(currentLocale['Audio task'])
     const taskPanel = page.getByRole('tabpanel', {
       name: currentLocale[taskLabel],
       exact: true,
@@ -1102,6 +1134,7 @@ for (const [locale, label] of [
           () => document.documentElement.scrollWidth <= innerWidth
         )
       )
+      await assertAudioTabsFit(currentLocale['Audio task'])
       await page.screenshot({
         path: `/tmp/new-api-audio-${task}-vi-mobile-dark.png`,
       })

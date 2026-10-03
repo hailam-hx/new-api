@@ -7,7 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -238,6 +240,40 @@ func TestDFLOPLegacyPricingRejectsBlockedProfilesBeforeOutbound(t *testing.T) {
 			response, err := DoRequest(c, req, info)
 			require.ErrorContains(t, err, tc.reason)
 			assert.Nil(t, response)
+		})
+	}
+}
+
+func TestDFLOPPassiveTraceSurvivesEveryHTTPOutcome(t *testing.T) {
+	service.InitHttpClient()
+	for _, tc := range []struct {
+		code  int
+		trace string
+	}{{200, "exact-provider-trace"}, {400, "exact-provider-trace"}, {500, "exact-provider-trace"}, {400, ""}} {
+		code := tc.code
+		t.Run(http.StatusText(code), func(t *testing.T) {
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("X-Gateway-Trace", tc.trace)
+				w.Header().Set("X-Request-Id", "upstream-lane-id")
+				w.Header().Set(common.RequestIdKey, "another-lane-id")
+				w.WriteHeader(code)
+			}))
+			defer upstream.Close()
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest("GET", "/v1/catalog", nil)
+			request, err := http.NewRequest("GET", upstream.URL+"/v1/catalog", nil)
+			request.Body = http.NoBody
+			require.NoError(t, err)
+			info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://api.dflop.top"}}
+			response, err := DoRequest(c, request, info)
+			require.NoError(t, err)
+			defer response.Body.Close()
+			assert.Equal(t, code, response.StatusCode)
+			assert.Equal(t, tc.trace, info.PassiveRequestID)
+			assert.Equal(t, tc.trace, info.PassiveTraceID)
+			assert.Equal(t, tc.trace, c.GetString(common.UpstreamRequestIdKey))
+			assert.False(t, service.ShouldCopyUpstreamHeader(c, common.RequestIdKey, []string{"later-lane-id"}))
+			assert.Equal(t, tc.trace, c.GetString(common.UpstreamRequestIdKey))
 		})
 	}
 }

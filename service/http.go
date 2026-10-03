@@ -34,7 +34,11 @@ func ShouldCopyUpstreamHeader(c *gin.Context, k string, v []string) bool {
 	}
 	if strings.EqualFold(k, common.RequestIdKey) {
 		if c != nil && len(v) > 0 {
-			c.Set(common.UpstreamRequestIdKey, v[0])
+			if c.GetBool("dflop_ledger_trace_binding") {
+				c.Set(common.UpstreamRequestIdKey, c.GetString("dflop_gateway_trace"))
+			} else {
+				c.Set(common.UpstreamRequestIdKey, v[0])
+			}
 		}
 		return false
 	}

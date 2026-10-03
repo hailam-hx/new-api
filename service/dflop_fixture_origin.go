@@ -139,7 +139,9 @@ func verifyDFLOPPublicMediaResponses(ctx context.Context, media VerificationMedi
 			response.Header.Get("Accept-Ranges") != "bytes" ||
 			response.Header.Get("Cache-Control") != "public, max-age=31536000, immutable" ||
 			response.Header.Get("Content-Encoding") != "" ||
-			response.Header.Get("Content-Disposition") != "" {
+			response.Header.Get("Content-Disposition") != "" ||
+			len(response.Header.Values("Set-Cookie")) != 0 ||
+			response.Header.Get("ETag") != `"sha256-`+media.SHA256+`"` {
 			response.Body.Close()
 			return errors.New("FIXTURE_PUBLIC_METADATA_MISMATCH")
 		}

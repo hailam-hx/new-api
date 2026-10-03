@@ -1819,6 +1819,7 @@
     "Current domain: {{domain}}": "Текущий домен: {{domain}}",
     "Current email verification code": "Код подтверждения текущей почты",
     "Current email: {{email}}. Enter a new email to change.": "Текущий email: {{email}}. Введите новый email для изменения.",
+    "Current evidence": "Текущие доказательства",
     "Current exchange rate: 1 USD = {{rate}} {{currency}}": "Текущий курс: 1 USD = {{rate}} {{currency}}",
     "Current key": "Текущий ключ",
     "Current key disable requested": "Запрошено отключение текущего ключа",
@@ -7421,6 +7422,7 @@
     "View API token key": "Просмотр ключа токена API",
     "View API token keys in batch": "Массовый просмотр ключей токенов API",
     "View audit records from user and admin roles. Root records are always excluded.": "Просмотр записей аудита ролей user и admin. Записи роли root всегда исключены.",
+    "View billing reconciliation": "Сверка стоимости",
     "View changelog source": "Открыть исходный файл",
     "View channel lists and details without secrets.": "Просмотр списков и сведений о каналах без секретов.",
     "View channel secrets": "Просматривать секреты каналов",
@@ -7429,6 +7431,7 @@
     "View document": "Просмотреть документ",
     "View evidence": "Просмотреть доказательства",
     "View evidence for {{model}}": "Просмотреть доказательства для {{model}}",
+    "View exact IDs": "Точные ID",
     "View issued reset credits, grant dates, and expiration.": "Показать выданные сбросы лимита, даты выдачи и истечения.",
     "View key for API token “{{name}}”": "Просмотр ключа токена API «{{name}}»",
     "View logs": "Просмотреть логи",
@@ -7682,5 +7685,7 @@
     "Zhipu GLM · channel type 26. ": "Zhipu GLM · channel type 26. ",
     "Zhipu V4": "Zhipu V4",
     "Zoom": "Zoom"
-  }
+  },
+  "Historical result unrecoverable": "Исторический результат невосстановим",
+  "Fresh verification required": "Требуется новая проверка"
 }

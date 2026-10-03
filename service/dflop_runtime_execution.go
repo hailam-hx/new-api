@@ -39,6 +39,9 @@ func (engine DFLOPVerificationEngine) request(ctx context.Context, key, method, 
 	if err != nil {
 		return nil, nil, 0, err
 	}
+	if method == http.MethodPost {
+		request.GetBody = nil
+	}
 	request.Header.Set("Authorization", "Bearer "+key)
 	request.Header.Set("Content-Type", "application/json")
 	if intentKey != "" {
@@ -73,7 +76,9 @@ func verificationCaptureIDs(item *model.RuntimeVerificationItem, headers http.He
 		values      []string
 	}{
 		{&item.TraceID, []string{headers.Get("x-gateway-trace")}},
-		{&item.RequestID, []string{headers.Get("x-request-id"), headers.Get("request-id"), envelope.RequestID}},
+		// DFLOP's ledger request_id is x-gateway-trace. Other request-id
+		// headers may identify an upstream lane and are not interchangeable.
+		{&item.RequestID, []string{headers.Get("x-gateway-trace")}},
 		{&item.TaskID, []string{envelope.TaskID}},
 	} {
 		for _, value := range capture.values {

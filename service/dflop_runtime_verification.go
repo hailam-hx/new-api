@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -211,8 +212,47 @@ func verificationFrozenSnapshot(source verificationSource, fixture VerificationF
 	return snapshot, frozen, request, points.String(), nil
 }
 
+// These original channel-test outcomes need exact upstream evidence before any
+// recovery or new paid intent. Catalog visibility alone cannot resolve them.
+var DFLOPAmbiguousVerificationModels = []string{
+	"grok-3-mini", "grok-3-mini-fast", "grok-4.20-0309-non-reasoning", "grok-4.20-0309-reasoning", "grok-4.20-multi-agent-0309", "grok-4.3", "grok-4.5", "grok-4.6", "grok-4.7", "grok-build-0.1", "grok-composer-2.5-fast", "grok-imagine-image", "grok-imagine-image-quality", "gemini-3.7-flash",
+}
+
 func PrepareDFLOPRuntimeVerification(ctx context.Context, channelID int, modelFilter string, userID int) (*model.RuntimeVerificationRun, []model.RuntimeVerificationItem, error) {
-	return (DFLOPVerificationEngine{}).Prepare(ctx, channelID, modelFilter, userID)
+	engine := DFLOPVerificationEngine{}
+	if origin := os.Getenv("VERIFICATION_FIXTURE_PUBLIC_BASE_URL"); origin != "" {
+		media, err := DFLOPVerificationPublishedMedia(origin)
+		if err != nil {
+			return nil, nil, err
+		}
+		engine.FixtureOptions.PublishedMedia = media
+		engine.FixtureOptions.VerifyPublicMedia = VerifyDFLOPPublicMedia
+	}
+	avatar, voice, err := engine.PreparePresetResources(ctx, channelID)
+	if err != nil {
+		return nil, nil, err
+	}
+	engine.FixtureOptions.PresetAvatar, engine.FixtureOptions.PresetVoice = avatar.ID, voice.ID
+	engine.FixtureOptions.AvatarPresetEvidence, engine.FixtureOptions.VoicePresetEvidence = &avatar, &voice
+	if file := os.Getenv("VERIFICATION_CLIP_PREPARATION_FILE"); file != "" {
+		data, readErr := os.ReadFile(file)
+		var saved struct {
+			Prepared VerificationClipPreparation `json:"clip_preparation"`
+		}
+		media, published := engine.FixtureOptions.PublishedMedia["speaking-square-v1"]
+		if readErr == nil && len(data) <= 2<<20 && common.Unmarshal(data, &saved) == nil && published && saved.Prepared.SourceURL == media.PublicURL && saved.Prepared.SourceSHA256 == media.SHA256 {
+			p := saved.Prepared
+			verifier := engine.ClipPreparationVerifier(channelID, p)
+			if verifier(ctx, media.PublicURL, p.ASRID) == nil {
+				engine.FixtureOptions.ClipPreparation = &p
+				engine.FixtureOptions.ClipASRID = p.ASRID
+				engine.FixtureOptions.ClipSourceVideoURL = p.SourceURL
+				engine.FixtureOptions.ClipStyleID = p.StyleID
+				engine.FixtureOptions.VerifyClipSource = verifier
+			}
+		}
+	}
+	return engine.Prepare(ctx, channelID, modelFilter, userID)
 }
 
 // Prepare performs GETs and production hook replay only. No funding operation
@@ -226,8 +266,10 @@ func (engine DFLOPVerificationEngine) Prepare(ctx context.Context, channelID int
 	if err != nil {
 		return nil, nil, err
 	}
-	fixtures := DFLOPVerificationFixturesWithOptions(source.items, engine.FixtureOptions)
-	if modelFilter != "" && !slices.ContainsFunc(fixtures, func(f VerificationFixture) bool { return f.Model == modelFilter }) {
+	options := engine.FixtureOptions
+	options.SourceCatalogHash = source.hash
+	fixtures := DFLOPVerificationFixturesWithOptions(source.items, options)
+	if modelFilter != "" && !slices.Contains(DFLOPAmbiguousVerificationModels, modelFilter) && !slices.ContainsFunc(fixtures, func(f VerificationFixture) bool { return f.Model == modelFilter }) {
 		return nil, nil, errors.New("MODEL_NOT_IN_VERIFICATION_REGISTRY")
 	}
 	providerItems := make(map[string]dflop.Item, len(source.items))
@@ -236,10 +278,19 @@ func (engine DFLOPVerificationEngine) Prepare(ctx context.Context, channelID int
 	}
 	rows := make([]model.RuntimeVerificationItem, 0, len(fixtures))
 	for _, fixture := range fixtures {
+		if modelFilter != "" && fixture.Model != modelFilter {
+			continue
+		}
 		fixture.SourceCatalogHash = source.hash
 		row := model.RuntimeVerificationItem{Model: fixture.Model, Protocol: fixture.Protocol, Operation: fixture.Operation, Mode: fixture.Mode, FixtureID: fixture.ID, Endpoint: fixture.Endpoint, CatalogHash: source.hash, ConfigStatus: "PASS", ConnectivityStatus: "PASS", Result: "CONNECTIVITY_VERIFIED", ReasonCode: "LIVE_CANARY_REQUIRED"}
 		evidence := model.RuntimeVerificationEvidence{DocsHash: verificationHash(DFLOPVerificationDocumentationSnapshot()), RequiredFacts: fixture.Plan.RequiredUsageFacts, ContractPlan: fixture.Plan.ID, CatalogSchemaVersion: source.metadata.SchemaVersion, Currency: source.metadata.Currency, OpenReasons: map[string]string{"request": "PAID_AUTHORIZATION_REQUIRED", "generation": "LIVE_CANARY_REQUIRED", "usage": "NOT_TESTED", "billing": "NOT_TESTED", "ledger": "NOT_TESTED"}}
 		provider, visible := providerItems[fixture.Model]
+		fixtureJSON, _ := common.Marshal(fixture)
+		evidence.FixtureHash = verificationHash(fixtureJSON)
+		if visible {
+			providerJSON, _ := common.Marshal(provider)
+			row.PricingSnapshotHash = verificationHash(providerJSON)
+		}
 		evidence.CatalogTraceID, evidence.CurrencyTraceID = source.catalogTraceID, source.currencyTraceID
 		callable := visible && provider.Callable
 		evidence.Callable = &callable
@@ -253,6 +304,9 @@ func (engine DFLOPVerificationEngine) Prepare(ctx context.Context, channelID int
 		if loaded && callable {
 			plan := billing_setting.ResolveTaskBillingPlan(fixture.Plugin, fixture.Model, fixture.Model, plugin, true)
 			row.BillingSource = plan.BillingSource
+			if plan.Resolved {
+				row.BillingExprHash = billingexpr.ExprHashString(plan.Expression)
+			}
 			if !plan.Resolved {
 				row.ConfigStatus, row.Result, row.ReasonCode = "BLOCKED", "CONTRACT_BLOCKED", plan.Reason
 			}
@@ -270,6 +324,8 @@ func (engine DFLOPVerificationEngine) Prepare(ctx context.Context, channelID int
 				}
 			} else {
 				body, _ := common.Marshal(snap)
+				row.RequestStatus = "PASS"
+				evidence.OpenReasons["request"] = "PAID_AUTHORIZATION_REQUIRED"
 				row.BillingSnapshotJSON = string(body)
 				row.BillingExprHash = snap.ExprHash
 				body, _ = common.Marshal(frozen)
@@ -279,10 +335,57 @@ func (engine DFLOPVerificationEngine) Prepare(ctx context.Context, channelID int
 			}
 		}
 		evidenceJSON, _ := common.Marshal(evidence)
+		var boundEvidence map[string]any
+		_ = common.Unmarshal(evidenceJSON, &boundEvidence)
+		configJSON, _ := common.Marshal(map[string]any{"pricing_config": source.config, "channel_type": source.channel.Type, "channel_setting": source.channel.GetSetting(), "model_mapping": source.channel.GetModelMapping()})
+		boundEvidence["config_hash"] = verificationHash(configJSON)
+		audit := AuditDFLOPVerificationPlanContract(fixture, provider)
+		boundEvidence["warning_codes"] = audit.Warnings
+		evidenceJSON, _ = common.Marshal(boundEvidence)
 		row.EvidenceJSON = string(evidenceJSON)
 		rows = append(rows, row)
 	}
+	previousRun, previousItems, historyErr := model.LatestRuntimeVerificationEvidence(channelID)
+	if historyErr != nil {
+		return nil, nil, historyErr
+	}
+	for _, name := range DFLOPAmbiguousVerificationModels {
+		provider, visible := providerItems[name]
+		if !visible || modelFilter != "" && modelFilter != name {
+			continue
+		}
+		configJSON, _ := common.Marshal(map[string]any{"pricing_config": source.config, "channel_setting": source.channel.GetSetting(), "model_mapping": source.channel.GetModelMapping(), "catalog_hash": source.hash})
+		target := DFLOPFreshCanaryTarget(provider, source.hash, verificationHash(configJSON))
+		row := model.RuntimeVerificationItem{Model: name, Protocol: target.Fixture.Protocol, Operation: target.Fixture.Operation, Mode: target.Fixture.Mode, FixtureID: target.Fixture.ID, Endpoint: target.Fixture.Endpoint, CatalogHash: source.hash, PricingSnapshotHash: target.PricingSnapshotHash, BillingExprHash: target.BillingExprHash, ConfigStatus: "PASS", ConnectivityStatus: "PASS", RequestStatus: "PASS", GenerationStatus: "NOT_TESTED", Result: "READY_FOR_FRESH_CANARY", ReasonCode: "LIVE_CANARY_REQUIRED", CorrelationQuality: "NONE"}
+		evidence := model.RuntimeVerificationEvidence{ConfigHash: target.ConfigHash, FixtureHash: target.FixtureHash, CatalogSchemaVersion: source.metadata.SchemaVersion, Currency: source.metadata.Currency, HistoricalRuntimeState: "HISTORICAL_RUNTIME_UNRECOVERABLE", HistoricalReasonCode: "EXACT_PROVIDER_ID_NOT_CAPTURED", CurrentCanaryReadiness: "READY_FOR_FRESH_CANARY", RequiredFacts: target.Fixture.Plan.RequiredUsageFacts, OpenReasons: map[string]string{"generation": "LIVE_CANARY_REQUIRED", "usage": "NOT_TESTED", "billing": "NOT_TESTED", "ledger": "NOT_TESTED"}}
+		if previousRun != nil {
+			evidence.HistoricalRunID = previousRun.ID
+			for _, previous := range previousItems {
+				if previous.Model != name {
+					continue
+				}
+				var prior model.RuntimeVerificationEvidence
+				if common.UnmarshalJsonStr(previous.EvidenceJSON, &prior) == nil && prior.HistoricalRunID > 0 {
+					evidence.HistoricalRunID = prior.HistoricalRunID
+				}
+			}
+		}
+		if target.Blocker != "" {
+			row.RequestStatus, row.Result, row.ReasonCode = "BLOCKED", "CONTRACT_BLOCKED", target.Blocker
+			evidence.CurrentCanaryReadiness = "BLOCKED_BY_PROVIDER_CONTRACT"
+		}
+		if !provider.Callable {
+			row.ConnectivityStatus = "BLOCKED"
+		}
+		evidenceJSON, _ := common.Marshal(evidence)
+		row.EvidenceJSON = string(evidenceJSON)
+		rows = append(rows, row)
+	}
+
 	run := &model.RuntimeVerificationRun{ChannelID: channelID, Source: "DFLOP_AUTHENTICATED", CatalogHash: source.hash, CredentialFingerprint: source.fingerprint, Mode: "ZERO_COST", Status: "CONNECTIVITY_VERIFIED", FundingUserID: userID}
+	if modelFilter != "" {
+		run.Mode = "ZERO_COST_SINGLE"
+	}
 	if err := model.CreateRuntimeVerificationRun(run, rows); err != nil {
 		return nil, nil, err
 	}

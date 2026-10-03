@@ -137,6 +137,28 @@ func channelRuntimeVerificationItemView(item model.RuntimeVerificationItem) gin.
 		"newapi_raw_cost": item.NewapiRawCost, "evidence_json": item.EvidenceJSON,
 		"correlation_quality": item.CorrelationQuality, "verified_at": item.VerifiedAt,
 	}
+	var frozen model.RuntimeVerificationProviderSnapshot
+	_ = common.UnmarshalJsonStr(item.FrozenProviderJSON, &frozen)
+	var evidence struct {
+		FixtureHash            string   `json:"fixture_hash"`
+		ConfigHash             string   `json:"config_hash"`
+		WarningCodes           []string `json:"warning_codes"`
+		HistoricalRuntimeState string   `json:"historical_runtime_state"`
+		HistoricalReasonCode   string   `json:"historical_reason_code"`
+		HistoricalRunID        int64    `json:"historical_run_id"`
+		CurrentCanaryReadiness string   `json:"current_canary_readiness"`
+	}
+	_ = common.UnmarshalJsonStr(item.EvidenceJSON, &evidence)
+	if frozen.FixtureHash != "" {
+		evidence.FixtureHash = frozen.FixtureHash
+	}
+	if frozen.ConfigHash != "" {
+		evidence.ConfigHash = frozen.ConfigHash
+	}
+	view["fixture_hash"], view["config_hash"], view["warning_codes"] = evidence.FixtureHash, evidence.ConfigHash, evidence.WarningCodes
+	view["usage_state"], view["current_run_id"] = item.ParserStatus, item.RunID
+	view["historical_runtime_state"], view["historical_reason_code"], view["historical_run_id"], view["current_canary_readiness"] = evidence.HistoricalRuntimeState, evidence.HistoricalReasonCode, evidence.HistoricalRunID, evidence.CurrentCanaryReadiness
+
 	if item.NewapiQuota != nil {
 		view["newapi_quota"] = *item.NewapiQuota
 	}

@@ -120,7 +120,7 @@ export function Documentation(props: { slug?: string; modelId?: string }) {
       navContent={
         <nav
           aria-label={t('Documentation shortcuts')}
-          className='flex items-center gap-5 text-sm'
+          className='flex items-center gap-5 pr-4 text-sm'
         >
           <Link to='/docs'>{t('Docs')}</Link>
           <Link to='/docs/$slug' params={{ slug: 'models' }}>

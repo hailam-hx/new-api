@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -95,33 +96,40 @@ type RuntimeVerificationItem struct {
 // RuntimeVerificationEvidence holds facts about outputs, never their payloads
 // or locations. Only the server engine may provide these facts.
 type RuntimeVerificationEvidence struct {
-	OutputValid          *bool             `json:"output_valid,omitempty"`
-	ReplayIdempotent     *bool             `json:"replay_idempotent,omitempty"`
-	JournalState         string            `json:"journal_state,omitempty"`
-	BillingSource        string            `json:"billing_source,omitempty"`
-	ContractPlan         string            `json:"contract_plan,omitempty"`
-	FixtureHash          string            `json:"fixture_hash,omitempty"`
-	OutputHash           string            `json:"output_hash,omitempty"`
-	DocsHash             string            `json:"docs_hash,omitempty"`
-	CatalogSchemaVersion string            `json:"catalog_schema_version,omitempty"`
-	Currency             string            `json:"currency,omitempty"`
-	Callable             *bool             `json:"callable,omitempty"`
-	OutputCount          *int              `json:"output_count,omitempty"`
-	ProviderStatusCode   *int              `json:"provider_status_code,omitempty"`
-	PollAttempts         int               `json:"poll_attempts,omitempty"`
-	PollTraceIDs         []string          `json:"poll_trace_ids,omitempty"`
-	LedgerID             string            `json:"ledger_id,omitempty"`
-	LedgerModel          string            `json:"ledger_model,omitempty"`
-	LedgerStatus         string            `json:"ledger_status,omitempty"`
-	LedgerTraceID        string            `json:"ledger_trace_id,omitempty"`
-	CatalogTraceID       string            `json:"catalog_trace_id,omitempty"`
-	CurrencyTraceID      string            `json:"currency_trace_id,omitempty"`
-	LedgerFacts          map[string]string `json:"ledger_facts,omitempty"`
-	RequiredFacts        []string          `json:"required_facts,omitempty"`
-	MissingFacts         []string          `json:"missing_facts,omitempty"`
-	BlockingReasons      []string          `json:"blocking_reasons,omitempty"`
-	OpenReasons          map[string]string `json:"open_reasons,omitempty"`
-	Layers               map[string]string `json:"layers,omitempty"`
+	HistoricalRuntimeState string            `json:"historical_runtime_state,omitempty"`
+	HistoricalReasonCode   string            `json:"historical_reason_code,omitempty"`
+	HistoricalRunID        int64             `json:"historical_run_id,omitempty"`
+	CurrentCanaryReadiness string            `json:"current_canary_readiness,omitempty"`
+	ConfigHash             string            `json:"config_hash,omitempty"`
+	WarningCodes           []string          `json:"warning_codes,omitempty"`
+	OutcomeClass           string            `json:"outcome_class,omitempty"`
+	OutputValid            *bool             `json:"output_valid,omitempty"`
+	ReplayIdempotent       *bool             `json:"replay_idempotent,omitempty"`
+	JournalState           string            `json:"journal_state,omitempty"`
+	BillingSource          string            `json:"billing_source,omitempty"`
+	ContractPlan           string            `json:"contract_plan,omitempty"`
+	FixtureHash            string            `json:"fixture_hash,omitempty"`
+	OutputHash             string            `json:"output_hash,omitempty"`
+	DocsHash               string            `json:"docs_hash,omitempty"`
+	CatalogSchemaVersion   string            `json:"catalog_schema_version,omitempty"`
+	Currency               string            `json:"currency,omitempty"`
+	Callable               *bool             `json:"callable,omitempty"`
+	OutputCount            *int              `json:"output_count,omitempty"`
+	ProviderStatusCode     *int              `json:"provider_status_code,omitempty"`
+	PollAttempts           int               `json:"poll_attempts,omitempty"`
+	PollTraceIDs           []string          `json:"poll_trace_ids,omitempty"`
+	LedgerID               string            `json:"ledger_id,omitempty"`
+	LedgerModel            string            `json:"ledger_model,omitempty"`
+	LedgerStatus           string            `json:"ledger_status,omitempty"`
+	LedgerTraceID          string            `json:"ledger_trace_id,omitempty"`
+	CatalogTraceID         string            `json:"catalog_trace_id,omitempty"`
+	CurrencyTraceID        string            `json:"currency_trace_id,omitempty"`
+	LedgerFacts            map[string]string `json:"ledger_facts,omitempty"`
+	RequiredFacts          []string          `json:"required_facts,omitempty"`
+	MissingFacts           []string          `json:"missing_facts,omitempty"`
+	BlockingReasons        []string          `json:"blocking_reasons,omitempty"`
+	OpenReasons            map[string]string `json:"open_reasons,omitempty"`
+	Layers                 map[string]string `json:"layers,omitempty"`
 }
 
 // RuntimeVerificationProviderSnapshot freezes provider point tariffs and the
@@ -304,27 +312,61 @@ func LatestRuntimeVerification(channelID int) (*RuntimeVerificationRun, []Runtim
 // state distinct from prior paid attempts, including attempts on an old catalog
 // or credential. Historical evidence retains its original run and provenance.
 func LatestRuntimeVerificationEvidence(channelID int) (*RuntimeVerificationRun, []RuntimeVerificationItem, error) {
-	run, items, err := LatestRuntimeVerification(channelID)
-	if err != nil || run == nil || len(items) == 0 {
-		return run, items, err
+	var run RuntimeVerificationRun
+	err := DB.Where("channel_id = ? AND status <> ?", channelID, "SUPERSEDED").Order("started_at desc, id desc").First(&run).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil, nil
 	}
-	priorRuns := DB.Model(&RuntimeVerificationRun{}).Select("id").Where("channel_id = ? AND source = ? AND id <> ?", channelID, run.Source, run.ID)
-	var historical []RuntimeVerificationItem
-	if err := DB.Where("run_id IN (?) AND request_body_hash <> ?", priorRuns, "").Order("created_at desc, id desc").Find(&historical).Error; err != nil {
+	if err != nil {
 		return nil, nil, err
 	}
-	latestPaid := make(map[[3]string]*RuntimeVerificationItem, len(items))
-	for i := range historical {
-		item := &historical[i]
-		identity := [3]string{item.Model, item.Protocol, item.Mode}
-		if _, exists := latestPaid[identity]; !exists {
-			latestPaid[identity] = item
+	runs := DB.Model(&RuntimeVerificationRun{}).Select("id").Where("channel_id = ? AND source = ? AND status <> ?", channelID, run.Source, "SUPERSEDED")
+	var candidates []RuntimeVerificationItem
+	if err := DB.Where("run_id IN (?)", runs).Order("run_id desc, id desc").Find(&candidates).Error; err != nil {
+		return nil, nil, err
+	}
+	// A full catalog refresh defines the current target set. Later single-model
+	// refreshes replace only their exact identity; removed modes stay in history.
+	var baseline RuntimeVerificationRun
+	baselineErr := DB.Where("channel_id = ? AND source = ? AND mode = ? AND status <> ?", channelID, run.Source, "ZERO_COST", "SUPERSEDED").Order("id desc").First(&baseline).Error
+	if baselineErr != nil && !errors.Is(baselineErr, gorm.ErrRecordNotFound) {
+		return nil, nil, baselineErr
+	}
+	active := map[[3]string]bool{}
+	if baselineErr == nil {
+		for _, item := range candidates {
+			if item.RunID >= baseline.ID {
+				active[[3]string{item.Model, item.Protocol, item.Mode}] = true
+			}
 		}
 	}
-	for i := range items {
-		items[i].HistoricalEvidence = latestPaid[[3]string{items[i].Model, items[i].Protocol, items[i].Mode}]
+	items := make([]RuntimeVerificationItem, 0, len(candidates))
+	current := make(map[[3]string]int)
+	for _, item := range candidates {
+		identity := [3]string{item.Model, item.Protocol, item.Mode}
+		if baselineErr == nil && !active[identity] {
+			continue
+		}
+		if index, exists := current[identity]; exists {
+			if items[index].HistoricalEvidence == nil {
+				previous := item
+				items[index].HistoricalEvidence = &previous
+			}
+			continue
+		}
+		current[identity] = len(items)
+		items = append(items, item)
 	}
-	return run, items, nil
+	slices.SortFunc(items, func(a, b RuntimeVerificationItem) int {
+		if order := strings.Compare(a.Model, b.Model); order != 0 {
+			return order
+		}
+		if order := strings.Compare(a.Protocol, b.Protocol); order != 0 {
+			return order
+		}
+		return strings.Compare(a.Mode, b.Mode)
+	})
+	return &run, items, nil
 }
 
 // UpdateRuntimeVerificationItem is an engine repository operation. HTTP callers
@@ -800,17 +842,20 @@ func sanitizeRuntimeVerificationItem(item *RuntimeVerificationItem) error {
 		if err := common.UnmarshalJsonStr(item.EvidenceJSON, &evidence); err != nil {
 			return ErrRuntimeVerificationEvidence
 		}
-		for _, value := range []string{evidence.JournalState, evidence.BillingSource, evidence.ContractPlan, evidence.CatalogSchemaVersion, evidence.Currency, evidence.LedgerID, evidence.LedgerModel, evidence.LedgerStatus, evidence.LedgerTraceID, evidence.CatalogTraceID, evidence.CurrencyTraceID} {
+		if evidence.HistoricalRunID < 0 {
+			return ErrRuntimeVerificationEvidence
+		}
+		for _, value := range []string{evidence.JournalState, evidence.BillingSource, evidence.ContractPlan, evidence.CatalogSchemaVersion, evidence.Currency, evidence.LedgerID, evidence.LedgerModel, evidence.LedgerStatus, evidence.LedgerTraceID, evidence.CatalogTraceID, evidence.CurrencyTraceID, evidence.OutcomeClass, evidence.HistoricalRuntimeState, evidence.HistoricalReasonCode, evidence.CurrentCanaryReadiness} {
 			if !runtimeVerificationIdentifier(value, 128, true) {
 				return ErrRuntimeVerificationEvidence
 			}
 		}
-		for _, hash := range []string{evidence.FixtureHash, evidence.OutputHash, evidence.DocsHash} {
+		for _, hash := range []string{evidence.FixtureHash, evidence.OutputHash, evidence.DocsHash, evidence.ConfigHash} {
 			if !runtimeVerificationHash(hash, true) {
 				return ErrRuntimeVerificationEvidence
 			}
 		}
-		for _, values := range [][]string{evidence.RequiredFacts, evidence.MissingFacts, evidence.BlockingReasons} {
+		for _, values := range [][]string{evidence.RequiredFacts, evidence.MissingFacts, evidence.BlockingReasons, evidence.WarningCodes} {
 			for _, value := range values {
 				if !runtimeVerificationIdentifier(value, 128, false) {
 					return ErrRuntimeVerificationEvidence

@@ -1819,6 +1819,7 @@
     "Current domain: {{domain}}": "Tên miền hiện tại: {{domain}}",
     "Current email verification code": "Mã xác minh email hiện tại",
     "Current email: {{email}}. Enter a new email to change.": "Email hiện tại: {{email}}. Nhập email mới để thay đổi.",
+    "Current evidence": "Bằng chứng hiện tại",
     "Current exchange rate: 1 USD = {{rate}} {{currency}}": "Tỷ giá hiện tại: 1 USD = {{rate}} {{currency}}",
     "Current key": "Khóa hiện tại",
     "Current key disable requested": "Đã yêu cầu vô hiệu hóa khóa hiện tại",
@@ -7421,6 +7422,7 @@
     "View API token key": "Xem khóa mã thông báo API",
     "View API token keys in batch": "Xem hàng loạt khóa mã thông báo API",
     "View audit records from user and admin roles. Root records are always excluded.": "Xem bản ghi kiểm toán của vai trò user và admin. Luôn loại trừ bản ghi của vai trò root.",
+    "View billing reconciliation": "Xem đối soát chi phí",
     "View changelog source": "Xem tệp nguồn",
     "View channel lists and details without secrets.": "Xem danh sách và chi tiết kênh không chứa bí mật.",
     "View channel secrets": "Xem bí mật kênh",
@@ -7429,6 +7431,7 @@
     "View document": "Xem tài liệu",
     "View evidence": "Xem bằng chứng",
     "View evidence for {{model}}": "Xem bằng chứng cho {{model}}",
+    "View exact IDs": "Xem ID chính xác",
     "View issued reset credits, grant dates, and expiration.": "Xem các lượt đặt lại đã cấp, ngày cấp và thời điểm hết hạn.",
     "View key for API token “{{name}}”": "Xem khóa mã thông báo API “{{name}}”",
     "View logs": "Xem nhật ký",
@@ -7682,5 +7685,7 @@
     "Zhipu GLM · channel type 26. ": "Zhipu GLM · channel type 26. ",
     "Zhipu V4": "Zhipu V4",
     "Zoom": "Zoom"
-  }
+  },
+  "Historical result unrecoverable": "Kết quả lịch sử không thể khôi phục",
+  "Fresh verification required": "Cần xác minh mới"
 }

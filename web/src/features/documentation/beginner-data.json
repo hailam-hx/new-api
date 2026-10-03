@@ -186,7 +186,7 @@
     {
       "slug": "image",
       "group": "API",
-      "title": "Image",
+      "title": "Image API",
       "description": "Create an image from a description with AI.",
       "kind": "image",
       "sources": [
@@ -304,7 +304,7 @@
     {
       "slug": "audio",
       "group": "API",
-      "title": "Audio",
+      "title": "Audio API",
       "description": "Turn text into speech or audio into text.",
       "kind": "audio",
       "sources": [

@@ -1819,6 +1819,7 @@
     "Current domain: {{domain}}": "当前域名：{{domain}}",
     "Current email verification code": "当前邮箱验证码",
     "Current email: {{email}}. Enter a new email to change.": "当前邮箱：{{email}}。输入新邮箱以更改。",
+    "Current evidence": "当前证据",
     "Current exchange rate: 1 USD = {{rate}} {{currency}}": "当前汇率：1 USD = {{rate}} {{currency}}",
     "Current key": "当前密钥",
     "Current key disable requested": "已请求停用当前密钥",
@@ -7421,6 +7422,7 @@
     "View API token key": "查看 API 令牌密钥",
     "View API token keys in batch": "批量查看 API 令牌密钥",
     "View audit records from user and admin roles. Root records are always excluded.": "查看 user 和 admin 角色的审计记录，始终排除 root 级别记录。",
+    "View billing reconciliation": "查看计费对账",
     "View changelog source": "查看日志源文件",
     "View channel lists and details without secrets.": "查看不含密钥的渠道列表和详情。",
     "View channel secrets": "查看渠道密钥",
@@ -7429,6 +7431,7 @@
     "View document": "查看文档",
     "View evidence": "查看证据",
     "View evidence for {{model}}": "查看 {{model}} 的证据",
+    "View exact IDs": "查看精确 ID",
     "View issued reset credits, grant dates, and expiration.": "查看已发放的重置次数、发放日期和到期时间。",
     "View key for API token “{{name}}”": "查看 API 令牌「{{name}}」的密钥",
     "View logs": "查看日志",
@@ -7682,5 +7685,7 @@
     "Zhipu GLM · channel type 26. ": "Zhipu GLM · channel type 26. ",
     "Zhipu V4": "智谱 V4",
     "Zoom": "缩放"
-  }
+  },
+  "Historical result unrecoverable": "历史结果无法恢复",
+  "Fresh verification required": "需要重新验证"
 }

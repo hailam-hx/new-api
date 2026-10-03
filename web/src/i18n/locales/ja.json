@@ -1819,6 +1819,7 @@
     "Current domain: {{domain}}": "現在のドメイン：{{domain}}",
     "Current email verification code": "現在のメールアドレスの確認コード",
     "Current email: {{email}}. Enter a new email to change.": "現在のメール: {{email}}。変更するには新しいメールアドレスを入力してください。",
+    "Current evidence": "現在の証拠",
     "Current exchange rate: 1 USD = {{rate}} {{currency}}": "現在の為替レート：1 USD = {{rate}} {{currency}}",
     "Current key": "現在のキー",
     "Current key disable requested": "現在のキーの無効化を要求",
@@ -7421,6 +7422,7 @@
     "View API token key": "API トークンキーを表示",
     "View API token keys in batch": "API トークンキーを一括表示",
     "View audit records from user and admin roles. Root records are always excluded.": "user と admin ロールの監査記録を表示します。root ロールの記録は常に除外されます。",
+    "View billing reconciliation": "料金照合を表示",
     "View changelog source": "変更履歴のソースを表示",
     "View channel lists and details without secrets.": "シークレットを含まないチャネル一覧と詳細を表示します。",
     "View channel secrets": "チャンネルシークレットを表示",
@@ -7429,6 +7431,7 @@
     "View document": "ドキュメントを表示",
     "View evidence": "証拠を表示",
     "View evidence for {{model}}": "{{model}} の証拠を表示",
+    "View exact IDs": "正確な ID を表示",
     "View issued reset credits, grant dates, and expiration.": "発行済みリセット回数、付与日時、有効期限を表示します。",
     "View key for API token “{{name}}”": "API トークン「{{name}}」のキーを表示",
     "View logs": "ログを表示",
@@ -7682,5 +7685,7 @@
     "Zhipu GLM · channel type 26. ": "Zhipu GLM · channel type 26. ",
     "Zhipu V4": "Zhipu V 4",
     "Zoom": "ズーム"
-  }
+  },
+  "Historical result unrecoverable": "過去の結果を復元できません",
+  "Fresh verification required": "新しい検証が必要です"
 }

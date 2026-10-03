@@ -41,6 +41,8 @@ type VerificationBound struct {
 }
 
 type VerificationContractPlan struct {
+	ExactEndpointModes        []string          `json:"exact_endpoint_modes"`
+	DocumentationSnapshotHash string            `json:"documentation_snapshot_hash"`
 	ID                        string            `json:"id"`
 	Version                   string            `json:"version"`
 	RequiredFields            []string          `json:"required_fields"`
@@ -82,6 +84,8 @@ type VerificationMediaFixture struct {
 }
 
 type VerificationPlanContractAudit struct {
+	Warnings                   []string                   `json:"warnings,omitempty"`
+	ExactModeScope             string                     `json:"exact_mode_scope"`
 	AuthenticatedCatalogModes  []string                   `json:"authenticated_catalog_modes"`
 	ExactEndpointContractModes []string                   `json:"exact_endpoint_contract_modes,omitempty"`
 	EffectiveModes             []string                   `json:"effective_modes"`
@@ -215,27 +219,43 @@ func AuditDFLOPVerificationPlanContract(fixture VerificationFixture, item dflop.
 	}
 	slices.Sort(audit.SupportedModes)
 	audit.AuthenticatedCatalogModes = slices.Clone(audit.SupportedModes)
-	// Exact endpoint restrictions narrow authenticated capabilities. Extra
-	// catalog modes are never permission to exceed the endpoint contract.
+	// Most registry entries review one exact target mode. This is not a claim
+	// that every other catalog mode is documented or explicitly rejected.
+	audit.ExactEndpointContractModes = slices.Clone(fixture.Plan.ExactEndpointModes)
+	audit.ExactModeScope = "SELECTED_MODE"
 	if item.ModelID == "grok-imagine-video-1.5-preview" {
 		audit.ExactEndpointContractModes = []string{"i2v"}
-		audit.SupportedModes = nil
-		for _, mode := range audit.AuthenticatedCatalogModes {
-			if slices.Contains(audit.ExactEndpointContractModes, mode) {
-				audit.SupportedModes = append(audit.SupportedModes, mode)
-			}
-		}
+		audit.ExactModeScope = "COMPLETE_MODE_SET"
 	}
-	audit.EffectiveModes = slices.Clone(audit.SupportedModes)
+	audit.EffectiveModes, audit.Warnings = effectiveDFLOPVerificationModes(audit.AuthenticatedCatalogModes, audit.ExactEndpointContractModes, audit.ExactModeScope == "COMPLETE_MODE_SET")
+	audit.SupportedModes = slices.Clone(audit.EffectiveModes)
 	audit.ModeSupported = slices.Contains(audit.EffectiveModes, fixture.Mode)
 	if item.ModelID != fixture.Model || !item.Callable {
 		audit.Blocker = "SOURCE_MODEL_NOT_IN_AUTHENTICATED_CATALOG"
 	} else if endpoint == "" || fixture.Endpoint != endpoint || fixture.Protocol != protocol {
 		audit.Blocker = "PROVIDER_CONTRACT_ENDPOINT_CONFLICT"
+	} else if slices.Contains(audit.ExactEndpointContractModes, fixture.Mode) && !slices.Contains(audit.AuthenticatedCatalogModes, fixture.Mode) {
+		audit.Blocker = "PROVIDER_CAPABILITY_NOT_GRANTED"
 	} else if !audit.ModeSupported {
 		audit.Blocker = "PROVIDER_CONTRACT_MODE_CONFLICT"
 	}
 	return audit
+}
+
+// Only the intersection can be used. Overclaim requires a complete reviewed
+// mode set, since silence in a selected-mode review is not explicit rejection.
+func effectiveDFLOPVerificationModes(catalog, contract []string, complete bool) ([]string, []string) {
+	modes := []string{}
+	warnings := []string{}
+	for _, mode := range catalog {
+		if slices.Contains(contract, mode) {
+			modes = append(modes, mode)
+		} else if complete && len(warnings) == 0 {
+			warnings = append(warnings, "PROVIDER_CAPABILITY_OVERCLAIM")
+		}
+	}
+	slices.Sort(modes)
+	return slices.Compact(modes), warnings
 }
 
 type VerificationFixture struct {
@@ -434,6 +454,7 @@ func DFLOPVerificationFixturesWithOptions(catalog []dflop.Item, options Verifica
 				break
 			}
 		}
+		fixture.Plan.DocumentationSnapshotHash = verificationHash(DFLOPVerificationDocumentationSnapshot())
 		fixture.Plan.Documentation = append(fixture.Plan.Documentation, "https://model.dflop.top/models/"+model)
 		if len(item.RequiredFacts) > 0 {
 			fixture.Plan.RequiredUsageFacts = slices.Clone(item.RequiredFacts)
@@ -617,6 +638,7 @@ func DFLOPVerificationFixturesWithOptions(catalog []dflop.Item, options Verifica
 					fixture.RequiresPublishedFixture = true
 				} else {
 					fixture.BlockedReason = "CLIP_PUBLIC_SPEECH_SOURCE_REQUIRED"
+					fixture.Plan.ExactEndpointModes = []string{fixture.Mode}
 					fixtures = append(fixtures, fixture)
 					continue
 				}
@@ -647,6 +669,46 @@ func DFLOPVerificationFixturesWithOptions(catalog []dflop.Item, options Verifica
 		if fixture.Mode == "i2v" || fixture.Mode == "r2v" || fixture.Mode == "video_edit" || fixture.Mode == "reference_video" {
 			fixture.Plan.RequiredFields = []string{"model", "content", "duration"}
 			delete(fixture.Request, "prompt")
+		}
+		if fixture.BlockedReason == "OPERATOR_ASSET_REQUIRED" && options.VerifyPublicMedia != nil {
+			portrait, p := options.PublishedMedia["human-portrait-v1"]
+			face, f := options.PublishedMedia["human-face-video-v1"]
+			motion, m := options.PublishedMedia["human-motion-video-v1"]
+			audio, a := options.PublishedMedia["synthetic-speech-v1"]
+			switch planID {
+			case "AVATAR_CREATE_FIXED_UNIT":
+				if p && portrait.PublicURL != "" && ValidateDFLOPVerificationMedia(portrait) == nil {
+					fixture.Media = []VerificationMediaFixture{portrait}
+					fixture.Request["source_url"] = portrait.PublicURL
+					fixture.BlockedReason = ""
+					fixture.RequiredInputs = nil
+					fixture.RequiresPublishedFixture = true
+				}
+			case "LIPSYNC_SECONDS":
+				if f && a && face.PublicURL != "" && audio.PublicURL != "" && source.Caps.Video != nil && audio.Seconds >= float64(source.Caps.Video.Duration.Min) && audio.Seconds <= float64(source.Caps.Video.Duration.Max) && face.Seconds >= audio.Seconds && ValidateDFLOPVerificationMedia(face) == nil {
+					fixture.Media = []VerificationMediaFixture{face, audio}
+					fixture.Request["source_video_url"] = face.PublicURL
+					fixture.Request["audio_url"] = audio.PublicURL
+					fixture.Request["duration"] = audio.Seconds
+					fixture.Bounds["duration"] = VerificationBound{Min: audio.Seconds, Max: audio.Seconds}
+					fixture.Plan.RequiredFields = []string{"model", "source_video_url", "audio_url", "duration"}
+					fixture.BlockedReason = ""
+					fixture.RequiredInputs = nil
+					fixture.RequiresPublishedFixture = true
+				}
+			case "MOTION_SOURCE_SECONDS":
+				if p && m && portrait.PublicURL != "" && motion.PublicURL != "" && source.Caps.Video != nil && motion.Seconds >= float64(source.Caps.Video.Duration.Min) && motion.Seconds <= float64(source.Caps.Video.Duration.Max) && ValidateDFLOPVerificationMedia(portrait) == nil && ValidateDFLOPVerificationMedia(motion) == nil {
+					fixture.Media = []VerificationMediaFixture{motion, portrait}
+					fixture.Request["source_video_url"] = motion.PublicURL
+					fixture.Request["content"] = []any{map[string]any{"type": "image_url", "image_url": map[string]any{"url": portrait.PublicURL}}}
+					fixture.Request["duration"] = motion.Seconds
+					fixture.Bounds["duration"] = VerificationBound{Min: motion.Seconds, Max: motion.Seconds}
+					fixture.Plan.RequiredFields = []string{"model", "source_video_url", "content", "duration", "face_count", "resolution"}
+					fixture.BlockedReason = ""
+					fixture.RequiredInputs = nil
+					fixture.RequiresPublishedFixture = true
+				}
+			}
 		}
 		if fixture.BlockedReason == "OPERATOR_ASSET_REQUIRED" {
 			switch planID {
@@ -699,6 +761,7 @@ func DFLOPVerificationFixturesWithOptions(catalog []dflop.Item, options Verifica
 			fixture.BlockedReason = "PROVIDER_DOCUMENTED_OVERRIDE_STALE"
 		}
 
+		fixture.Plan.ExactEndpointModes = []string{fixture.Mode}
 		fixture.catalogContract = &item
 		audit := AuditDFLOPVerificationPlanContract(fixture, item)
 		if audit.Blocker != "" {
@@ -712,6 +775,14 @@ func DFLOPVerificationFixturesWithOptions(catalog []dflop.Item, options Verifica
 // ValidateDFLOPVerificationMedia validates immutable local fixture bytes before
 // any canary can be submitted. Public hosting is a separate explicit blocker.
 func ValidateDFLOPVerificationMedia(fixture VerificationMediaFixture) error {
+	data, err := verificationMediaBytes(fixture)
+	if err != nil {
+		return fmt.Errorf("FIXTURE_CHECKSUM_MISMATCH: %s", fixture.ID)
+	}
+	return validateDFLOPVerificationMediaBytes(fixture, data)
+}
+
+func validateDFLOPVerificationMediaBytes(fixture VerificationMediaFixture, data []byte) error {
 	if fixture.Provenance == "" || fixture.RightsClassification == "" {
 		return fmt.Errorf("FIXTURE_PROVENANCE_REQUIRED: %s", fixture.ID)
 	}
@@ -745,8 +816,7 @@ func ValidateDFLOPVerificationMedia(fixture VerificationMediaFixture) error {
 		return fmt.Errorf("FIXTURE_RIGHTS_CLASSIFICATION_REQUIRED: %s", fixture.ID)
 	}
 
-	data, err := dflopVerificationFiles.ReadFile(fixture.Path)
-	if err != nil || len(data) != fixture.Bytes || fmt.Sprintf("%x", sha256.Sum256(data)) != fixture.SHA256 {
+	if len(data) != fixture.Bytes || fmt.Sprintf("%x", sha256.Sum256(data)) != fixture.SHA256 {
 		return fmt.Errorf("FIXTURE_CHECKSUM_MISMATCH: %s", fixture.ID)
 	}
 	switch fixture.MIMEType {
@@ -1301,6 +1371,11 @@ func verificationOutputURL(value any) bool {
 }
 
 func dflopVerificationMedia(id string) VerificationMediaFixture {
+	for _, fixture := range verificationHumanRegistry() {
+		if fixture.ID == id {
+			return fixture
+		}
+	}
 	data, _ := dflopVerificationFiles.ReadFile("testdata/dflop-verification/media-v1.json")
 	var media []VerificationMediaFixture
 	if common.Unmarshal(data, &media) == nil {
@@ -1320,7 +1395,7 @@ func DFLOPVerificationMediaInventory() []VerificationMediaFixture {
 	if common.Unmarshal(data, &media) != nil {
 		return nil
 	}
-	return media
+	return append(media, verificationHumanRegistry()...)
 }
 
 func DFLOPVerificationMediaBytes(id string) ([]byte, error) {
@@ -1328,5 +1403,5 @@ func DFLOPVerificationMediaBytes(id string) ([]byte, error) {
 	if err := ValidateDFLOPVerificationMedia(fixture); err != nil {
 		return nil, err
 	}
-	return dflopVerificationFiles.ReadFile(fixture.Path)
+	return verificationMediaBytes(fixture)
 }

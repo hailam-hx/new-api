@@ -616,6 +616,11 @@ func FinalizeDFLOPVerificationAuthorization(plan DFLOPVerificationPlan, operator
 	if plan.Version != DFLOPVerificationPlanVersion || a.Approved || a.ExpiresAt != 0 || a.PlanVersion != plan.Version || a.Concurrency != 1 || len(a.Targets) == 0 || len(key) != ed25519.PrivateKeySize || operator == "" || reference == "" {
 		return a, errors.New("EXPLICIT_V2_APPROVAL_REQUIRED")
 	}
+	for _, target := range plan.Targets {
+		if target.ExecutorBlocker != "" && slices.ContainsFunc(a.Targets, func(intent DFLOPVerificationTarget) bool { return intent.Model == target.Model }) {
+			return a, errors.New(target.ExecutorBlocker)
+		}
+	}
 	a.Approved = true
 	a.ApprovedBy = operator
 	a.ApprovalReference = reference

@@ -25,13 +25,15 @@ import (
 func run(args []string) error {
 	common.BatchUpdateEnabled = os.Getenv("BATCH_UPDATE_ENABLED") == "true"
 	flags := flag.NewFlagSet("dflop-runtime-verify", flag.ContinueOnError)
-	mode := flags.String("mode", "prepare", "prepare, verify-public (HEAD/GET/Range only), approve, execute, or resume")
+	mode := flags.String("mode", "prepare", "prepare, import-human, verify-public (HEAD/GET/Range only), approve, execute, or resume")
+	humanPack := flags.String("human-pack", "", "operator-owned directory with metadata.json, portrait.png, face-video.mp4 and motion-video.mp4")
 	database := flags.String("sqlite-db", "one-api.db", "existing SQLite database, SQL_DSN may select another engine")
 	channel := flags.Int("channel-id", 1, "selected authenticated DFLOP channel")
 	user := flags.Int("funding-user-id", 0, "admin user for pricing group; paid mode requires manifest binding")
 	output := flags.String("output", "", "non-secret plan JSON output path")
 	fixtureOrigin := flags.String("fixture-origin", os.Getenv("VERIFICATION_FIXTURE_PUBLIC_BASE_URL"), "deployed public HTTPS origin for immutable embedded fixtures")
 	presetAvatar := flags.String("preset-avatar", "", "fresh GET-confirmed ready provider preset avatar ID")
+	preparedClipFile := flags.String("prepared-clip-file", "", "reuse fresh same-source zero-cost ASR evidence without another POST")
 	prepareClip := flags.Bool("prepare-clip", false, "prepare-only opt in: verified public source + current zero-price subtitle contract, then require new exact approval")
 	presetVoice := flags.String("preset-voice", "", "fresh GET-confirmed provider preset voice ID")
 	planPath := flags.String("plan", "", "frozen fixture plan JSON")
@@ -47,8 +49,32 @@ func run(args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	if flags.NArg() != 0 || !slices.Contains([]string{"prepare", "verify-public", "approve", "execute", "resume"}, *mode) {
+	if flags.NArg() != 0 || !slices.Contains([]string{"prepare", "import-human", "verify-public", "approve", "execute", "resume"}, *mode) {
 		return errors.New("INVALID_COMMAND")
+	}
+	if *mode == "import-human" {
+		if *execute || *prepareClip || *manifestPath != "" || *humanPack == "" {
+			return errors.New("OFFLINE_IMPORT_ONLY")
+		}
+		fixtures, err := service.ImportDFLOPHumanPack(*humanPack)
+		if err != nil {
+			return err
+		}
+		body, err := common.Marshal(fixtures)
+		if err != nil {
+			return err
+		}
+		path := *output
+		if path == "" {
+			path = *humanPack + "/registry.json"
+		}
+		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		_, err = file.Write(body)
+		return err
 	}
 	if *mode == "verify-public" {
 		if *execute || *prepareClip || *manifestPath != "" {
@@ -87,7 +113,7 @@ func run(args []string) error {
 		}
 		return nil
 	}
-	if *prepareClip && *mode != "prepare" {
+	if (*prepareClip || *preparedClipFile != "") && *mode != "prepare" {
 		return errors.New("CLIP_PREPARATION_ONLY_BEFORE_NEW_APPROVAL")
 	}
 	if *mode != "execute" && (*execute || *manifestPath != "" || *confirm != "") {
@@ -229,6 +255,41 @@ func run(args []string) error {
 			}
 			prepared, err := engine.PrepareClip(ctx, *channel, media)
 			if err != nil {
+				safe, _ := common.Marshal(map[string]any{"clip_preparation": prepared, "status": err.Error(), "paid_requests": 0, "retry": false})
+				if *output != "" {
+					if saveErr := os.WriteFile(*output+".preparation-error.json", safe, 0600); saveErr != nil {
+						return saveErr
+					}
+				}
+				return err
+			}
+			engine.FixtureOptions.ClipPreparation = &prepared
+			engine.FixtureOptions.ClipASRID = prepared.ASRID
+			engine.FixtureOptions.ClipSourceVideoURL = prepared.SourceURL
+			engine.FixtureOptions.ClipStyleID = prepared.StyleID
+			engine.FixtureOptions.VerifyClipSource = engine.ClipPreparationVerifier(*channel, prepared)
+			evidence["clip_preparation"] = prepared
+		}
+		if *preparedClipFile != "" {
+			if *prepareClip {
+				return errors.New("CLIP_PREPARATION_ALREADY_AVAILABLE")
+			}
+			body, err := os.ReadFile(*preparedClipFile)
+			if err != nil {
+				return err
+			}
+			var existing struct {
+				Clip service.VerificationClipPreparation `json:"clip_preparation"`
+			}
+			if common.Unmarshal(body, &existing) != nil {
+				return errors.New("CLIP_PREPARATION_INVALID")
+			}
+			prepared := existing.Clip
+			media, ok := engine.FixtureOptions.PublishedMedia["speaking-square-v1"]
+			if !ok || media.SHA256 != prepared.SourceSHA256 || media.PublicURL != prepared.SourceURL {
+				return errors.New("CLIP_PREPARATION_SOURCE_MISMATCH")
+			}
+			if err := engine.ClipPreparationVerifier(*channel, prepared)(ctx, media.PublicURL, prepared.ASRID); err != nil {
 				return err
 			}
 			engine.FixtureOptions.ClipPreparation = &prepared

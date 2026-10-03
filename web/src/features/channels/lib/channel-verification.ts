@@ -26,11 +26,7 @@ import type {
 export function verificationRuntimeStatus(
   item: ChannelVerificationItem
 ): VerificationLayerStatus {
-  const states = [
-    item.request_status,
-    item.generation_status,
-    item.parser_status,
-  ]
+  const states = [item.generation_status, item.parser_status]
   for (const state of ['FAIL', 'AMBIGUOUS', 'BLOCKED'] as const) {
     if (states.includes(state)) return state
   }
@@ -90,6 +86,10 @@ export function verificationEvidenceRecord(
 ): Record<string, string | number> {
   const evidence: Record<string, string | number> = {
     evidence_scope: scope,
+    historical_runtime_state: item.historical_runtime_state ?? '',
+    historical_reason_code: item.historical_reason_code ?? '',
+    historical_run_id: item.historical_run_id ?? '',
+    current_canary_readiness: item.current_canary_readiness ?? '',
     model: item.model,
     protocol: item.protocol,
     operation: item.operation,
@@ -102,6 +102,11 @@ export function verificationEvidenceRecord(
     request_state: item.request_status,
     generation_state: item.generation_status,
     parser_state: item.parser_status,
+    usage_state: item.parser_status,
+    fixture_hash: item.fixture_hash ?? '',
+    config_hash: item.config_hash ?? '',
+    warning_codes: (item.warning_codes ?? []).join(';'),
+    current_run_id: item.run_id ?? run?.id ?? '',
     billing_state: item.billing_status,
     ledger_state: item.ledger_status,
     runtime_evidence_status: item.status ?? item.result ?? '',

@@ -488,7 +488,7 @@ func TestDFLOPVerificationPublicOriginAllowlist(t *testing.T) {
 	media := DFLOPVerificationMediaInventory()[0]
 	data, err := DFLOPVerificationMediaBytes(media.ID)
 	require.NoError(t, err)
-	for _, failure := range []string{"none", "mime", "length", "cache", "checksum", "status", "accept-ranges", "range-status", "range-body", "range-header", "redirect", "mime-parameter", "content-encoding", "attachment"} {
+	for _, failure := range []string{"none", "mime", "length", "cache", "checksum", "status", "accept-ranges", "range-status", "range-body", "range-header", "redirect", "mime-parameter", "content-encoding", "attachment", "cookie", "etag"} {
 		t.Run(failure, func(t *testing.T) {
 			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				mime, length, cache := media.MIMEType, media.Bytes, "public, max-age=31536000, immutable"
@@ -513,6 +513,13 @@ func TestDFLOPVerificationPublicOriginAllowlist(t *testing.T) {
 				w.Header().Set("Content-Type", mime)
 				w.Header().Set("Content-Length", strconv.Itoa(length))
 				w.Header().Set("Cache-Control", cache)
+				w.Header().Set("ETag", `"sha256-`+media.SHA256+`"`)
+				if failure == "cookie" {
+					w.Header().Set("Set-Cookie", "tracking=test")
+				}
+				if failure == "etag" {
+					w.Header().Set("ETag", "changed")
+				}
 				if failure == "status" {
 					w.WriteHeader(404)
 					return
@@ -618,6 +625,10 @@ func TestDFLOPVerificationFinalManifestRequiresFreshSignature(t *testing.T) {
 	assert.Zero(t, plan.Authorization.ExpiresAt)
 	assert.Equal(t, int64(1800), final.ExpiresAt-final.IssuedAt)
 	require.NoError(t, VerifyDFLOPVerificationManifest(final, public, now))
+	plan.Targets = []DFLOPVerificationPlannedTarget{{Model: "model", ExecutorBlocker: "HOST_RELAY_CANARY_EXECUTOR_REQUIRED"}}
+	_, err = FinalizeDFLOPVerificationAuthorization(plan, "admin", "approval", private, now)
+	require.EqualError(t, err, "HOST_RELAY_CANARY_EXECUTOR_REQUIRED")
+	plan.Targets = nil
 	final.Targets[0].RequestBodyHash = "changed"
 	require.EqualError(t, VerifyDFLOPVerificationManifest(final, public, now), "APPROVAL_SIGNATURE_INVALID")
 	final.Targets[0].RequestBodyHash = "original"

@@ -249,6 +249,11 @@ export interface ChannelVerificationRun {
 
 /** Persisted evidence returned by the administrator verification API. */
 export interface ChannelVerificationItem {
+  historical_runtime_state?: string
+  historical_reason_code?: string
+  historical_run_id?: number
+  current_canary_readiness?: string
+
   id?: number
   run_id?: number
   model: string
@@ -286,6 +291,9 @@ export interface ChannelVerificationItem {
   evidence_json?: string
   correlation_quality?: string
   verified_at?: number | string
+  fixture_hash?: string
+  config_hash?: string
+  warning_codes?: string[]
   historical_evidence?: ChannelVerificationItem
 }
 

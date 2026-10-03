@@ -63,6 +63,32 @@ func TestVerificationBudgetAndExactLedger(t *testing.T) {
 	}
 }
 
+func TestFreshCanaryRetiresHistoryWithoutReusingSubmitIntent(t *testing.T) {
+	for _, name := range DFLOPAmbiguousVerificationModels {
+		provider := dflop.Item{ModelID: name, CanonicalID: name, Category: "text", Callable: true, Protocols: []string{"openai_chat"}, Expression: `tier("test", p * 1 + c * 2)`, Raw: []byte(`{"context_window":1024}`), BillingFeatures: []string{"token"}, Prices: map[string]dflop.Price{"input_per_1m": {EffectiveCredits: "1", SourcePriceKind: "AUTHENTICATED_EFFECTIVE_PRICE"}, "output_per_1m": {EffectiveCredits: "2", SourcePriceKind: "AUTHENTICATED_EFFECTIVE_PRICE"}}}
+		if strings.Contains(name, "imagine-image") {
+			provider.Category, provider.EndpointType = "image", "images_generations"
+			provider.BillingFeatures = []string{"per_image"}
+			provider.Prices["price_per_image"] = dflop.Price{EffectiveCredits: "18", SourcePriceKind: "AUTHENTICATED_EFFECTIVE_PRICE"}
+			provider.Raw = []byte(`{"caps":{"image":{"size":{"default_size":"1024x1024"}}}}`)
+		}
+		target := DFLOPFreshCanaryTarget(provider, strings.Repeat("a", 64), strings.Repeat("b", 64))
+		require.Empty(t, target.Blocker, name)
+		require.NotNil(t, target.MaximumProviderPoints, name)
+		require.NotEmpty(t, target.RequestBodyHash)
+		assert.Equal(t, 3, target.Wave)
+		assert.NotContains(t, string(target.RequestBody), "request_id")
+		assert.NotContains(t, string(target.RequestBody), "Idempotency")
+		if provider.Category == "text" {
+			assert.Contains(t, string(target.RequestBody), `"tool_choice":"none"`)
+			assert.Equal(t, "0.001152", *target.MaximumProviderPoints)
+		}
+	}
+	blocked := DFLOPFreshCanaryTarget(dflop.Item{ModelID: "grok-3-mini", Callable: true}, strings.Repeat("a", 64), strings.Repeat("b", 64))
+	assert.NotEmpty(t, blocked.Blocker)
+	assert.Nil(t, blocked.MaximumProviderPoints)
+}
+
 func TestVerificationLedgerDeploymentCodeRequiresExactTerminalIdentity(t *testing.T) {
 	item := model.RuntimeVerificationItem{Model: "test", TaskID: "task", TraceID: "trace"}
 	for _, test := range []struct{ name, body, result, code string }{
@@ -117,7 +143,7 @@ func TestVerificationAuthorizationCannotBeInferredOrRolledOver(t *testing.T) {
 	v2.Targets[0].MaximumProviderPoints = "0.1"
 	require.NoError(t, ValidateDFLOPVerificationAuthorization(v2, run, item, "0.1", now))
 	oldManifest := v2
-	oldManifest.PlanVersion = "canary-plan-v2"
+	oldManifest.PlanVersion = "canary-plan-v5"
 	require.ErrorContains(t, ValidateDFLOPVerificationAuthorization(oldManifest, run, item, "0.1", now), "SUPERSEDED_MANIFEST_REQUIRES_NEW_APPROVAL")
 	v2.Targets[0].FixtureHash = "changed"
 	require.ErrorContains(t, ValidateDFLOPVerificationAuthorization(v2, run, item, "0.1", now), "BINDING_MISMATCH")
@@ -241,7 +267,7 @@ func (transport *verificationEngineTransport) RoundTrip(request *http.Request) (
 		body = transport.terminal
 	case request.Method == http.MethodGet && request.URL.Path == "/v1/logs":
 		transport.ledgerReads++
-		assert.Contains(transport.t, []string{"engine-task", "engine-request"}, request.URL.Query().Get("ref"))
+		assert.Contains(transport.t, []string{"engine-task", "engine-trace"}, request.URL.Query().Get("ref"))
 		assert.Equal(transport.t, "key", request.URL.Query().Get("scope"))
 		status, body = transport.ledgerStatus, transport.ledger
 	default:
@@ -321,7 +347,7 @@ func newVerificationEngineRig(t *testing.T) *verificationEngineRig {
 	rig.transport = &verificationEngineTransport{t: t, catalogStatus: 200, postStatus: 200, ledgerStatus: 200,
 		catalog:  `{"schema_version":"1.0","currency":"points","aliases":{},"models":[{"id":"voice-tts-pro","pricing":{"category":"audio","endpoint_type":"tts_synthesize","callable":true,"price_per_tts_char":"1"},"billing":{"features":["tts_char"]},"caps":{"surfaces":["voice"]}}]}`,
 		terminal: `{"id":"engine-task","model":"voice-tts-pro","status":"succeeded","characters":6,"audio_url":"https://example.invalid/synthetic.wav"}`,
-		ledger:   `{"currency":"points","scope":"key","logs":[{"id":"engine-ledger","model":"voice-tts-pro","task_id":"engine-task","request_id":"engine-request","x_gateway_trace":"engine-trace","cost":"6","status":"succeeded","unit_type":"audio","unit_count":6}]}`,
+		ledger:   `{"currency":"points","scope":"key","logs":[{"id":"engine-ledger","model":"voice-tts-pro","task_id":"engine-task","request_id":"engine-trace","x_gateway_trace":"engine-trace","cost":"6","status":"succeeded","unit_type":"audio","unit_count":6}]}`,
 	}
 	rig.engine.HTTP = &http.Client{Transport: rig.transport}
 	source, err := rig.engine.source(t.Context(), 1)
@@ -475,7 +501,7 @@ func TestVerificationEngineIncompleteTerminalOrLedgerRetainsHold(t *testing.T) {
 		{name: "wrong ledger currency", ledger: `{"currency":"USD","scope":"key","logs":[]}`, reason: "LEDGER_TEMPORARILY_UNAVAILABLE"},
 		{name: "different task cannot prove charge", ledger: `{"currency":"points","scope":"key","logs":[{"model":"voice-tts-pro","task_id":"another-task","cost":"6","status":"succeeded","unit_type":"audio","unit_count":6}]}`, reason: "INSUFFICIENT_EVIDENCE"},
 		{name: "nonterminal ledger status", ledger: `{"currency":"points","scope":"key","logs":[{"model":"voice-tts-pro","task_id":"engine-task","cost":"6","status":"pending","unit_type":"audio","unit_count":6}]}`, reason: "INSUFFICIENT_EVIDENCE"},
-		{name: "duplicate exact paid ledger rows", ledger: `{"currency":"points","scope":"key","logs":[{"id":"engine-ledger-1","model":"voice-tts-pro","task_id":"engine-task","request_id":"engine-request","x_gateway_trace":"engine-trace","cost":"6","status":"succeeded","unit_type":"audio","unit_count":6},{"id":"engine-ledger-2","model":"voice-tts-pro","task_id":"engine-task","request_id":"engine-request","x_gateway_trace":"engine-trace","cost":"6","status":"succeeded","unit_type":"audio","unit_count":6}]}`, reason: "LEDGER_MISMATCH"},
+		{name: "duplicate exact paid ledger rows", ledger: `{"currency":"points","scope":"key","logs":[{"id":"engine-ledger-1","model":"voice-tts-pro","task_id":"engine-task","request_id":"engine-trace","x_gateway_trace":"engine-trace","cost":"6","status":"succeeded","unit_type":"audio","unit_count":6},{"id":"engine-ledger-2","model":"voice-tts-pro","task_id":"engine-task","request_id":"engine-trace","x_gateway_trace":"engine-trace","cost":"6","status":"succeeded","unit_type":"audio","unit_count":6}]}`, reason: "LEDGER_MISMATCH"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rig := newVerificationEngineRig(t)
@@ -572,7 +598,7 @@ func TestVerificationEngineMissingTaskCannotPromoteLedgerSuccess(t *testing.T) {
 			rig := newVerificationEngineRig(t)
 			rig.transport.postBody = `{"model":"voice-tts-pro","status":"pending"}`
 			rig.transport.omitSubmitIDs = omitIDs
-			rig.transport.ledger = `{"currency":"points","scope":"key","logs":[{"model":"voice-tts-pro","request_id":"engine-request","x_gateway_trace":"engine-trace","cost":"6","status":"succeeded","unit_type":"audio","unit_count":6}]}`
+			rig.transport.ledger = `{"currency":"points","scope":"key","logs":[{"model":"voice-tts-pro","request_id":"engine-trace","x_gateway_trace":"engine-trace","cost":"6","status":"succeeded","unit_type":"audio","unit_count":6}]}`
 			require.NoError(t, rig.engine.Execute(t.Context(), rig.run.ID, rig.item.ID, rig.authorization, rig.fixture))
 			rig.reopen(t)
 			require.NoError(t, rig.engine.Resume(t.Context(), rig.run.ID, rig.item.ID, rig.fixture))
@@ -593,7 +619,7 @@ func TestVerificationEngineMissingTaskCannotPromoteLedgerSuccess(t *testing.T) {
 				assert.Empty(t, saved.TraceID)
 				assert.Zero(t, rig.transport.ledgerReads, "no identifier means no ledger lookup")
 			} else {
-				assert.Equal(t, "engine-request", saved.RequestID)
+				assert.Equal(t, "engine-trace", saved.RequestID)
 				assert.Equal(t, "engine-trace", saved.TraceID)
 				assert.Greater(t, rig.transport.ledgerReads, 0)
 			}
@@ -1033,6 +1059,10 @@ func TestVerificationPlanContractAuditAll83Modes(t *testing.T) {
 			assert.Equal(t, audit.Blocker, fixture.BlockedReason, fixture.Model)
 		}
 		assert.NotEmpty(t, audit.Capabilities, fixture.Model)
+		assert.NotEmpty(t, fixture.Plan.DocumentationSnapshotHash)
+		unreviewed := fixture
+		unreviewed.Mode = "undocumented-mode"
+		assert.Equal(t, "PROVIDER_CONTRACT_MODE_CONFLICT", AuditDFLOPVerificationPlanContract(unreviewed, catalog[index]).Blocker)
 	}
 }
 
@@ -1081,12 +1111,18 @@ func TestVerificationGrok15ExactModeContract(t *testing.T) {
 	require.NoError(t, err)
 	audit := AuditDFLOPVerificationPlanContract(fixture, item)
 	assert.Empty(t, audit.Blocker)
+	fixture.catalogContract = &item
+	_, err = ValidateDFLOPVerificationFixture(t.Context(), fixture, verificationFixturePlugin(t, fixture.Plugin))
+	require.NoError(t, err)
 	assert.Equal(t, []string{"i2v", "r2v", "t2v"}, audit.AuthenticatedCatalogModes)
 	assert.Equal(t, []string{"i2v"}, audit.ExactEndpointContractModes)
 	assert.Equal(t, []string{"i2v"}, audit.EffectiveModes)
+	assert.Equal(t, []string{"PROVIDER_CAPABILITY_OVERCLAIM"}, audit.Warnings)
 	for _, mode := range []string{"t2v", "r2v"} {
 		fixture.Mode = mode
 		assert.Equal(t, "PROVIDER_CONTRACT_MODE_CONFLICT", AuditDFLOPVerificationPlanContract(fixture, item).Blocker)
+		_, err = ValidateDFLOPVerificationFixture(t.Context(), fixture, verificationFixturePlugin(t, fixture.Plugin))
+		require.ErrorContains(t, err, "PROVIDER_CONTRACT_MODE_CONFLICT")
 	}
 	fixture.Mode = "i2v"
 	video["modes"] = map[string]any{"t2v": true, "i2v": false, "r2v": true}
@@ -1094,5 +1130,22 @@ func TestVerificationGrok15ExactModeContract(t *testing.T) {
 	require.NoError(t, err)
 	audit = AuditDFLOPVerificationPlanContract(fixture, item)
 	assert.Empty(t, audit.EffectiveModes)
-	assert.Equal(t, "PROVIDER_CONTRACT_MODE_CONFLICT", audit.Blocker)
+	assert.Equal(t, "PROVIDER_CAPABILITY_NOT_GRANTED", audit.Blocker)
+}
+
+func TestDFLOPTraceIsLedgerRequestIDOnEveryHTTPOutcome(t *testing.T) {
+	for _, code := range []int{200, 400, 500} {
+		t.Run(fmt.Sprint(code), func(t *testing.T) {
+			engine := DFLOPVerificationEngine{HTTP: &http.Client{Transport: preparationTransport(func(r *http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: code, Header: http.Header{"X-Gateway-Trace": {"exact-trace"}, "X-Request-Id": {"lane-id"}}, Body: io.NopCloser(strings.NewReader(`{}`))}, nil
+			})}}
+			body, headers, status, err := engine.request(t.Context(), "key", http.MethodGet, "/v1/logs", "", nil)
+			require.NoError(t, err)
+			assert.Equal(t, code, status)
+			item := model.RuntimeVerificationItem{}
+			require.NoError(t, verificationCaptureIDs(&item, headers, body, "key"))
+			assert.Equal(t, "exact-trace", item.RequestID)
+			assert.Equal(t, "exact-trace", item.TraceID)
+		})
+	}
 }

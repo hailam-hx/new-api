@@ -657,9 +657,19 @@ func doRequest(c *gin.Context, req *http.Request, info *common.RelayInfo) (*http
 		))
 	}
 
+	c.Set("dflop_ledger_trace_binding", false)
 	info.PassiveRequestID = resp.Header.Get("x-request-id")
 	info.PassiveTraceID = resp.Header.Get("x-gateway-trace")
-	if upID := resp.Header.Get(common2.RequestIdKey); upID != "" {
+	if info.ChannelMeta != nil && dflop.DFLOPEndpointSourceApplies(info.ChannelBaseUrl) {
+		if strings.ContainsAny(info.PassiveTraceID, "\r\n\t /\\?#") || len(info.PassiveTraceID) > 128 || info.ApiKey != "" && strings.Contains(info.PassiveTraceID, info.ApiKey) {
+			info.PassiveTraceID = ""
+		}
+		info.PassiveRequestID = info.PassiveTraceID
+		c.Set("dflop_ledger_trace_binding", true)
+		c.Set("dflop_gateway_trace", info.PassiveTraceID)
+		c.Set(common2.UpstreamRequestIdKey, info.PassiveTraceID)
+	}
+	if upID := resp.Header.Get(common2.RequestIdKey); upID != "" && !dflop.DFLOPEndpointSourceApplies(info.ChannelBaseUrl) {
 		c.Set(common2.UpstreamRequestIdKey, upID)
 	}
 

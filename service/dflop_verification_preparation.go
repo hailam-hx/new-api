@@ -31,33 +31,47 @@ type VerificationPresetEvidence struct {
 }
 
 type VerificationClipPreparation struct {
-	Version                  string `json:"version"`
-	CatalogHash              string `json:"catalog_hash"`
-	CredentialFingerprint    string `json:"credential_fingerprint"`
-	SourceSHA256             string `json:"source_sha256"`
-	SourceURL                string `json:"source_url"`
-	SourceURLHash            string `json:"source_url_hash"`
-	TemplatePolicy           string `json:"template_policy"`
-	TemplateResponseHash     string `json:"template_response_hash"`
-	StyleID                  string `json:"style_id"`
-	ASRID                    string `json:"asr_id"`
-	ASRResponseHash          string `json:"asr_response_hash"`
-	DocumentationHash        string `json:"documentation_hash"`
-	MaximumPreparationPoints string `json:"maximum_preparation_points"`
-	PreparedAt               int64  `json:"prepared_at"`
-	ExpiresAt                int64  `json:"expires_at"`
-	Proof                    string `json:"proof"`
+	Version                  string            `json:"version"`
+	CatalogHash              string            `json:"catalog_hash"`
+	CredentialFingerprint    string            `json:"credential_fingerprint"`
+	SourceSHA256             string            `json:"source_sha256"`
+	SourceURL                string            `json:"source_url"`
+	SourceURLHash            string            `json:"source_url_hash"`
+	TemplatePolicy           string            `json:"template_policy"`
+	TemplateResponseHash     string            `json:"template_response_hash"`
+	StyleID                  string            `json:"style_id"`
+	TaskID                   string            `json:"task_id,omitempty"`
+	ASRID                    string            `json:"asr_id"`
+	ASRSegments              common.RawMessage `json:"segments,omitempty"`
+	RequestID                string            `json:"request_id,omitempty"`
+	TraceID                  string            `json:"trace_id,omitempty"`
+	ASRResponseHash          string            `json:"asr_response_hash"`
+	DocumentationHash        string            `json:"documentation_hash"`
+	MaximumPreparationPoints string            `json:"maximum_preparation_points"`
+	PreparedAt               int64             `json:"prepared_at"`
+	ExpiresAt                int64             `json:"expires_at"`
+	Proof                    string            `json:"proof"`
+}
+
+type VerificationPreparationCorrelation struct {
+	RequestID string `json:"request_id,omitempty"`
+	TraceID   string `json:"trace_id,omitempty"`
 }
 
 // Only fixed provider paths are accepted. Redirects cannot leak the source key.
-func (engine DFLOPVerificationEngine) preparationRequest(ctx context.Context, key, method, endpoint string, body []byte, preparationBudget *decimal.Decimal) ([]byte, error) {
-	allowed := method == http.MethodGet && (endpoint == "/v1/videos/avatars/presets" || endpoint == "/v1/audio/voices" || endpoint == "/v1/videos/clip-templates" || endpoint == "/v1/videos/clip-templates/categories") || method == http.MethodPost && endpoint == "/v1/videos/clip-subtitles" && preparationBudget != nil && preparationBudget.IsZero()
+func (engine DFLOPVerificationEngine) preparationRequest(ctx context.Context, key, method, endpoint string, body []byte, preparationBudget *decimal.Decimal, correlation ...*VerificationPreparationCorrelation) ([]byte, error) {
+	pollID := strings.TrimPrefix(endpoint, "/v1/videos/clip-subtitles/")
+	allowedPoll := strings.HasPrefix(endpoint, "/v1/videos/clip-subtitles/") && verificationSecretSafeID(pollID) && !strings.Contains(pollID, "/")
+	allowed := method == http.MethodGet && (allowedPoll || endpoint == "/v1/videos/avatars/presets" || endpoint == "/v1/audio/voices" || endpoint == "/v1/videos/clip-templates" || endpoint == "/v1/videos/clip-templates/categories") || method == http.MethodPost && endpoint == "/v1/videos/clip-subtitles" && preparationBudget != nil && preparationBudget.IsZero()
 	if !allowed || !strings.HasPrefix(endpoint, "/v1/") || strings.ContainsAny(endpoint, "?#") {
 		return nil, errors.New("PREPARATION_ENDPOINT_INVALID")
 	}
 	request, err := http.NewRequestWithContext(ctx, method, "https://api.dflop.top"+endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
+	}
+	if method == http.MethodPost {
+		request.GetBody = nil
 	}
 	request.Header.Set("Authorization", "Bearer "+key)
 	if method == http.MethodPost {
@@ -73,11 +87,21 @@ func (engine DFLOPVerificationEngine) preparationRequest(ctx context.Context, ke
 		return nil, errors.New("PREPARATION_NETWORK_OUTCOME_UNKNOWN")
 	}
 	defer response.Body.Close()
+	if len(correlation) == 1 && correlation[0] != nil {
+		requestID := response.Header.Get("X-Gateway-Trace")
+		traceID := response.Header.Get("X-Gateway-Trace")
+		if verificationSecretSafeID(requestID) && (key == "" || !strings.Contains(requestID, key)) {
+			correlation[0].RequestID = requestID
+		}
+		if verificationSecretSafeID(traceID) && (key == "" || !strings.Contains(traceID, key)) {
+			correlation[0].TraceID = traceID
+		}
+	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, (2<<20)+1))
 	if err != nil || len(data) > 2<<20 {
 		return nil, errors.New("PREPARATION_RESPONSE_INVALID")
 	}
-	if response.StatusCode != http.StatusOK {
+	if response.StatusCode != http.StatusOK && !(method == http.MethodPost && response.StatusCode == http.StatusAccepted) {
 		return nil, fmt.Errorf("PREPARATION_HTTP_%d", response.StatusCode)
 	}
 	return data, nil
@@ -233,19 +257,59 @@ func (engine DFLOPVerificationEngine) PrepareClip(ctx context.Context, channel i
 	if priceErr != nil || !maximumPreparationPoints.IsZero() {
 		return prepared, errors.New("ZERO_COST_BUDGET_REQUIRED")
 	}
-	body, _ := common.Marshal(map[string]any{"video_url": media.PublicURL})
-	asrResponse, err := engine.preparationRequest(ctx, source.key, http.MethodPost, "/v1/videos/clip-subtitles", body, &maximumPreparationPoints)
+	body, _ := common.Marshal(map[string]any{"video_url": media.PublicURL, "async": true})
+	var correlation VerificationPreparationCorrelation
+	asrResponse, err := engine.preparationRequest(ctx, source.key, http.MethodPost, "/v1/videos/clip-subtitles", body, &maximumPreparationPoints, &correlation)
+	prepared = VerificationClipPreparation{CatalogHash: source.hash, CredentialFingerprint: source.fingerprint, SourceSHA256: media.SHA256, SourceURL: media.PublicURL, SourceURLHash: verificationHash([]byte(media.PublicURL)), DocumentationHash: verificationHash(doc), MaximumPreparationPoints: maximumPreparationPoints.String(), StyleID: list.List[0].StyleID, TemplateResponseHash: verificationHash(templates), RequestID: correlation.RequestID, TraceID: correlation.TraceID}
 	if err != nil {
 		return prepared, err
 	}
 	var asr struct {
-		ASRID string `json:"asr_id"`
+		ID       string            `json:"id"`
+		Status   string            `json:"status"`
+		ASRID    string            `json:"asr_id"`
+		Segments common.RawMessage `json:"segments"`
 	}
-	if common.Unmarshal(asrResponse, &asr) != nil || asr.ASRID == "" || !verificationSecretSafeID(asr.ASRID) {
+	if common.Unmarshal(asrResponse, &asr) != nil {
+		return prepared, errors.New("CLIP_ASR_RESULT_REQUIRED")
+	}
+	taskID := asr.ID
+	if taskID != "" && (!verificationSecretSafeID(taskID) || strings.Contains(taskID, source.key)) || asr.ASRID != "" && (!verificationSecretSafeID(asr.ASRID) || strings.Contains(asr.ASRID, source.key)) {
+		return prepared, errors.New("PROVIDER_CORRELATION_ID_INVALID")
+	}
+	prepared.TaskID = taskID
+	prepared.ASRID = asr.ASRID
+	deadline := time.Now().Add(25 * time.Minute)
+	for asr.Status == "running" || asr.Status == "queued" || asr.Status == "pending" {
+		if !verificationSecretSafeID(taskID) || strings.Contains(taskID, "/") {
+			return prepared, errors.New("CLIP_ASR_TASK_ID_REQUIRED")
+		}
+		if time.Now().After(deadline) {
+			return prepared, errors.New("CLIP_ASR_TERMINAL_TIMEOUT")
+		}
+		timer := time.NewTimer(5 * time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return prepared, ctx.Err()
+		case <-timer.C:
+		}
+		asrResponse, err = engine.preparationRequest(ctx, source.key, http.MethodGet, "/v1/videos/clip-subtitles/"+taskID, nil, nil)
+		if err != nil {
+			return prepared, err
+		}
+		if common.Unmarshal(asrResponse, &asr) != nil || asr.ID != taskID {
+			return prepared, errors.New("CLIP_ASR_TASK_MISMATCH")
+		}
+	}
+	if asr.Status != "" && asr.Status != "succeeded" {
+		return prepared, errors.New("CLIP_ASR_TERMINAL_FAILED")
+	}
+	if asr.ASRID == "" || !verificationSecretSafeID(asr.ASRID) || strings.Contains(asr.ASRID, source.key) || len(asr.Segments) == 0 || string(asr.Segments) == "[]" || string(asr.Segments) == "null" {
 		return prepared, errors.New("CLIP_ASR_RESULT_REQUIRED")
 	}
 	now := time.Now().Unix()
-	prepared = VerificationClipPreparation{Version: "clip-zero-cost-prepare-v1", CatalogHash: source.hash, CredentialFingerprint: source.fingerprint, SourceSHA256: media.SHA256, SourceURL: media.PublicURL, SourceURLHash: verificationHash([]byte(media.PublicURL)), TemplatePolicy: "first-listed-valid-style-v1", TemplateResponseHash: verificationHash(templates), StyleID: list.List[0].StyleID, ASRID: asr.ASRID, ASRResponseHash: verificationHash(asrResponse), DocumentationHash: verificationHash(doc), MaximumPreparationPoints: maximumPreparationPoints.String(), PreparedAt: now, ExpiresAt: now + 1800}
+	prepared = VerificationClipPreparation{Version: "clip-zero-cost-prepare-v1", CatalogHash: source.hash, CredentialFingerprint: source.fingerprint, SourceSHA256: media.SHA256, SourceURL: media.PublicURL, SourceURLHash: verificationHash([]byte(media.PublicURL)), TemplatePolicy: "first-listed-valid-style-v1", TemplateResponseHash: verificationHash(templates), StyleID: list.List[0].StyleID, TaskID: taskID, ASRID: asr.ASRID, ASRSegments: asr.Segments, RequestID: correlation.RequestID, TraceID: correlation.TraceID, ASRResponseHash: verificationHash(asrResponse), DocumentationHash: verificationHash(doc), MaximumPreparationPoints: maximumPreparationPoints.String(), PreparedAt: now, ExpiresAt: now + 1800}
 	proofBody, _ := common.Marshal(prepared)
 	mac := hmac.New(sha256.New, []byte(source.key))
 	mac.Write(proofBody)
@@ -273,7 +337,21 @@ func (engine DFLOPVerificationEngine) ClipPreparationVerifier(channel int, prepa
 		if err != nil {
 			return err
 		}
-		return prepared.validate(source.key, url, id, source.hash, time.Now())
+		if err := prepared.validate(source.key, url, id, source.hash, time.Now()); err != nil {
+			return err
+		}
+		media := dflopVerificationMedia("speaking-square-v1")
+		if media.SHA256 != prepared.SourceSHA256 {
+			return errors.New("CLIP_PREPARATION_SOURCE_MISMATCH")
+		}
+		templates, err := engine.preparationRequest(ctx, source.key, http.MethodGet, "/v1/videos/clip-templates", nil, nil)
+		if err != nil {
+			return err
+		}
+		if verificationHash(templates) != prepared.TemplateResponseHash {
+			return errors.New("CLIP_PREPARATION_TEMPLATE_CHANGED")
+		}
+		return nil
 	}
 }
 

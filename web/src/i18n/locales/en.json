@@ -1819,6 +1819,7 @@
     "Current domain: {{domain}}": "Current domain: {{domain}}",
     "Current email verification code": "Current email verification code",
     "Current email: {{email}}. Enter a new email to change.": "Current email: {{email}}. Enter a new email to change.",
+    "Current evidence": "Current evidence",
     "Current exchange rate: 1 USD = {{rate}} {{currency}}": "Current exchange rate: 1 USD = {{rate}} {{currency}}",
     "Current key": "Current key",
     "Current key disable requested": "Current key disable requested",
@@ -7421,6 +7422,7 @@
     "View API token key": "View API token key",
     "View API token keys in batch": "View API token keys in batch",
     "View audit records from user and admin roles. Root records are always excluded.": "View audit records from user and admin roles. Root records are always excluded.",
+    "View billing reconciliation": "View billing reconciliation",
     "View changelog source": "View changelog source",
     "View channel lists and details without secrets.": "View channel lists and details without secrets.",
     "View channel secrets": "View channel secrets",
@@ -7429,6 +7431,7 @@
     "View document": "View document",
     "View evidence": "View evidence",
     "View evidence for {{model}}": "View evidence for {{model}}",
+    "View exact IDs": "View exact IDs",
     "View issued reset credits, grant dates, and expiration.": "View issued reset credits, grant dates, and expiration.",
     "View key for API token “{{name}}”": "View key for API token “{{name}}”",
     "View logs": "View logs",
@@ -7682,5 +7685,7 @@
     "Zhipu GLM · channel type 26. ": "Zhipu GLM · channel type 26. ",
     "Zhipu V4": "Zhipu V4",
     "Zoom": "Zoom"
-  }
+  },
+  "Historical result unrecoverable": "Historical result unrecoverable",
+  "Fresh verification required": "Fresh verification required"
 }
