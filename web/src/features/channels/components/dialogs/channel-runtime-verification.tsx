@@ -174,6 +174,21 @@ export function ChannelRuntimeVerification(
     runtimeBusy ||
     visibilityBusy
   const items = query.data?.items ?? []
+  const threeLayerPassedModels = [
+    ...new Set(items.map((item) => item.model)),
+  ].filter(
+    (model) =>
+      props.models.includes(model) &&
+      items
+        .filter((item) => item.model === model)
+        .every((item) =>
+          [
+            item.config_status,
+            item.connectivity_status,
+            item.request_status,
+          ].every((status) => status === 'PASS')
+        )
+  )
   const passedModels = [...new Set(items.map((item) => item.model))].filter(
     (model) =>
       props.models.includes(model) &&
@@ -478,6 +493,16 @@ export function ChannelRuntimeVerification(
             void queryClient.invalidateQueries({
               queryKey: ['channels', props.channelId, 'runtime-verification'],
             })
+          }}
+        />
+        <ChannelTestModelVisibilityAction
+          action='show'
+          threeLayerPass
+          models={threeLayerPassedModels}
+          disabled={Boolean(isBusy || query.isError || query.isPending)}
+          onBusyChange={(busy) => {
+            setVisibilityBusy(busy)
+            props.onBusyChange?.(busy)
           }}
         />
         <ChannelTestModelVisibilityAction

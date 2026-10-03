@@ -368,6 +368,57 @@ test('keeps show PASS action disabled for mixed modes or historical-only success
   ).toBeDisabled()
 })
 
+test.each(['PASS', 'BLOCKED', 'NOT_TESTED'] as const)(
+  'three-layer visibility requires current request PASS (%s)',
+  async (requestStatus) => {
+    const partial = {
+      ...evidence.items[0],
+      config_status: 'PASS',
+      connectivity_status: 'PASS',
+      request_status: 'PASS',
+    } as const
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          ...evidence,
+          items: [
+            partial,
+            {
+              ...partial,
+              id: 12,
+              mode: 'image',
+              request_status: requestStatus,
+              historical_evidence: partial,
+            },
+          ],
+        },
+      },
+    })
+    setup()
+    const count = requestStatus === 'PASS' ? 1 : 0
+    const button = await screen.findByRole('button', {
+      name: `Show models passing three layers (${count})`,
+    })
+    expect(
+      screen.getByRole('button', { name: 'Show successful models (0)' })
+    ).toBeDisabled()
+    if (requestStatus === 'PASS') {
+      expect(button).toBeEnabled()
+      fireEvent.click(button)
+      const dialog = screen.getByRole('alertdialog')
+      expect(
+        within(dialog).getByText(
+          /Showing models does not change verification states/
+        )
+      ).toBeVisible()
+      expect(within(dialog).getByText('image-model')).toBeVisible()
+    } else {
+      expect(button).toBeDisabled()
+    }
+  }
+)
+
 test('paid runtime execution requires a separate budget confirmation and is never automatically retried', async () => {
   const plan = {
     plan_version: 'canary-plan-v6',

@@ -37,17 +37,28 @@ export function ChannelTestModelVisibilityAction({
   models,
   disabled,
   onBusyChange,
+  threeLayerPass = false,
 }: {
   action: 'hide' | 'show'
   models: string[]
   disabled: boolean
   onBusyChange: (busy: boolean) => void
+  threeLayerPass?: boolean
 }) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const showing = action === 'show'
   const Icon = showing ? Eye : EyeOff
-  const title = showing ? t('Show successful models') : t('Hide failed models')
+  let title = showing ? t('Show successful models') : t('Hide failed models')
+  if (showing && threeLayerPass) title = t('Show models passing three layers')
+  let buttonLabel = showing
+    ? t('Show successful models ({{count}})', { count: models.length })
+    : t('Hide failed models ({{count}})', { count: models.length })
+  if (showing && threeLayerPass) {
+    buttonLabel = t('Show models passing three layers ({{count}})', {
+      count: models.length,
+    })
+  }
   const [confirmedModels, setConfirmedModels] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
 
@@ -105,9 +116,7 @@ export function ChannelTestModelVisibilityAction({
         onClick={() => setConfirmedModels([...new Set(models)])}
       >
         <Icon data-icon='inline-start' />
-        {showing
-          ? t('Show successful models ({{count}})', { count: models.length })
-          : t('Hide failed models ({{count}})', { count: models.length })}
+        {buttonLabel}
       </Button>
       <ConfirmDialog
         open={confirmedModels.length > 0}
@@ -117,6 +126,13 @@ export function ChannelTestModelVisibilityAction({
         title={title}
         desc={
           <div className='space-y-2'>
+            {showing && threeLayerPass && (
+              <p>
+                {t(
+                  'Configuration, connectivity and request validation passed. Generation, parser, billing and ledger verification may still be incomplete. Showing models does not change verification states.'
+                )}
+              </p>
+            )}
             <p>
               {showing
                 ? t(
