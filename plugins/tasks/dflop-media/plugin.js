@@ -221,6 +221,17 @@ function requestIntent(ctx, endpoint) {
     delete requestBody.seconds;
   }
   const contract = contracts[model];
+  // Ordinary video models consume typed content. Keep the public prompt and
+  // all reference items; append only a missing equivalent text item. Decoding
+  // and submit validation can run repeatedly, so normalization is idempotent.
+  // Digital-human/clip operations have distinct content contracts.
+  if (endpoint === "/v1/videos/generations" && !partialClosureModels.includes(model) && typeof requestBody.prompt === "string" && requestBody.prompt.trim()) {
+    if (requestBody.content !== undefined && !Array.isArray(requestBody.content)) throw new Error("Video content must be an array");
+    const content = requestBody.content || [];
+    if (!content.some(item => item && item.type === "text" && item.text === requestBody.prompt)) {
+      requestBody.content = [...content, { type: "text", text: requestBody.prompt }];
+    }
+  }
   if (!["fixed", "music"].includes(contract.shape)) {
     if (typeof requestBody.duration !== "number" || requestBody.duration <= 0) throw new Error("A positive requested duration is required for reservation");
     nonNegativeFact(requestBody.duration, "requested duration", contract.maxDuration || 3600, false);
@@ -245,7 +256,7 @@ function requestIntent(ctx, endpoint) {
     if (requestBody.service_tier !== undefined && requestBody.service_tier !== "default") throw new Error("Unsupported Seedance service tier");
     if (requestBody.content !== undefined && !Array.isArray(requestBody.content)) throw new Error("Seedance content must be an array");
     // Only the documented content representation is accepted for reference
-    // video. No adapter transforms it before submission.
+    // video. Reference items are preserved before submission.
     if (requestBody.video_url !== undefined || requestBody.video_urls !== undefined || requestBody.source_video_url !== undefined) throw new Error("Seedance video references must use content video_url items");
     const videoInput = (requestBody.content || []).some(item => item && item.type === "video_url");
     if (contract.shape === "token_lite" && !requestBody.resolution) throw new Error("MISSING_ORDERED_DELIVERY_TIER");

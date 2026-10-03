@@ -1,12 +1,130 @@
 package plugins_test
 
 import (
+	"testing"
+
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	builtinplugins "github.com/QuantumNous/new-api/plugins"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
 )
+
+func TestDFLOPVideoPublicRequestNormalization(t *testing.T) {
+	source, err := builtinplugins.Source("dflop-media")
+	require.NoError(t, err)
+	plugin, err := jsplugin.NewRegistry().RegisterFactory(source, jsplugin.Options{Key: "dflop-media"})
+	require.NoError(t, err)
+	text := map[string]any{"type": "text", "text": "test"}
+	image := map[string]any{"type": "image_url", "role": "reference_image", "image_url": map[string]any{"url": "https://example.invalid/image.png"}, "portrait_auth": true}
+	video := map[string]any{"type": "video_url", "role": "reference_video", "video_url": map[string]any{"url": "https://example.invalid/video.mp4"}}
+	audio := map[string]any{"type": "audio_url", "role": "reference_audio", "audio_url": map[string]any{"url": "https://example.invalid/audio.wav"}}
+	for _, tc := range []struct {
+		name, model string
+		fields      map[string]any
+		content     []any
+	}{
+		{"prompt seconds", "doubao-seedance-2.0", map[string]any{"prompt": "test", "seconds": 4}, []any{text}},
+		{"duration compatibility", "doubao-seedance-2.0", map[string]any{"prompt": "test", "duration": 4}, []any{text}},
+		{"content only", "doubao-seedance-2.0", map[string]any{"content": []any{text}, "duration": 4}, []any{text}},
+		{"same text", "doubao-seedance-2.0", map[string]any{"prompt": "test", "content": []any{text}, "duration": 4}, []any{text}},
+		{"different text", "doubao-seedance-2.0", map[string]any{"prompt": "test", "content": []any{map[string]any{"type": "text", "text": "other"}}, "duration": 4}, []any{map[string]any{"type": "text", "text": "other"}, text}},
+		{"image metadata", "doubao-seedance-2.0", map[string]any{"prompt": "test", "content": []any{image}, "seconds": 4}, []any{image, text}},
+		{"video audio metadata", "doubao-seedance-2.0", map[string]any{"prompt": "test", "content": []any{video, audio}, "seconds": 4}, []any{video, audio, text}},
+		{"equal duration fields", "doubao-seedance-2.0", map[string]any{"prompt": "test", "seconds": 4, "duration": 4}, []any{text}},
+		{"Seedance family", "doubao-seedance-2.5", map[string]any{"prompt": "test", "seconds": 4}, []any{text}},
+		{"Wan family", "wan3.0-video", map[string]any{"prompt": "test", "seconds": 4}, []any{text}},
+		{"empty prompt", "doubao-seedance-2.0", map[string]any{"prompt": "  ", "content": []any{text}, "duration": 4}, []any{text}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			request := map[string]any{"model": tc.model, "resolution": "720p", "ratio": "16:9", "seed": 0}
+			minimal := tc.name == "prompt seconds" || tc.name == "duration compatibility"
+			if minimal {
+				request = map[string]any{"model": tc.model}
+			}
+			for key, value := range tc.fields {
+				request[key] = value
+			}
+			if tc.name == "image metadata" {
+				request["audio"] = false
+				request["reference_image"] = "reference-extension"
+				request["vendor_options"] = map[string]any{"portrait_auth": true}
+			}
+			before, err := common.Marshal(request)
+			require.NoError(t, err)
+			ctx := map[string]any{"model": tc.model, "operation": "create", "body": map[string]any{"kind": "json", "value": request}}
+			intent, err := plugin.Engine.CallPath(t.Context(), "protocols", []string{"openai_video", "decodeRequest"}, ctx)
+			require.NoError(t, err)
+			normalized := intent.(map[string]any)["requestBody"]
+			driver := map[string]any{"model": tc.model, "requestBody": normalized, "baseUrl": "https://api.dflop.top", "apiKey": "fixture", "requestHeaders": map[string]any{"Idempotency-Key": "stable-host-intent"}}
+			for range 2 {
+				submit, err := plugin.Engine.Call(t.Context(), "buildSubmitRequest", driver)
+				require.NoError(t, err)
+				wire := submit.(map[string]any)
+				body := wire["body"].(map[string]any)
+				actual, err := common.Marshal(body["content"])
+				require.NoError(t, err)
+				expected, err := common.Marshal(tc.content)
+				require.NoError(t, err)
+				assert.JSONEq(t, string(expected), string(actual))
+				assert.EqualValues(t, 4, body["duration"])
+				assert.NotContains(t, body, "seconds")
+				assert.Equal(t, "720p", body["resolution"])
+				if !minimal {
+					assert.Equal(t, "16:9", body["ratio"])
+					assert.EqualValues(t, 0, body["seed"])
+				}
+				if tc.name == "image metadata" {
+					assert.Equal(t, false, body["audio"])
+					assert.Equal(t, "reference-extension", body["reference_image"])
+					assert.Equal(t, map[string]any{"portrait_auth": true}, body["vendor_options"])
+				}
+				assert.Equal(t, "https://api.dflop.top/v1/videos/generations", wire["url"])
+				assert.Equal(t, "stable-host-intent", wire["headers"].(map[string]any)["Idempotency-Key"])
+			}
+			reservation, err := plugin.Engine.Call(t.Context(), "extractUsage", driver)
+			require.NoError(t, err)
+			if tc.model == "wan3.0-video" {
+				assert.EqualValues(t, 4, reservation.(map[string]any)["duration_sec"])
+			} else {
+				assert.Greater(t, reservation.(map[string]any)["completion_tokens"].(int64), int64(0))
+			}
+			after, err := common.Marshal(request)
+			require.NoError(t, err)
+			assert.JSONEq(t, string(before), string(after), "decoder must not mutate caller-owned content")
+			ack, err := plugin.Engine.Call(t.Context(), "parseSubmitResponse", driver, map[string]any{"body": map[string]any{"id": "provider-task", "model": tc.model, "status": "queued", "progress": 0, "created_at": 123}})
+			require.NoError(t, err)
+			assert.Equal(t, "provider-task", ack.(map[string]any)["taskId"])
+			assert.NotContains(t, ack.(map[string]any), "immediate")
+			driver["state"] = ack.(map[string]any)["state"]
+			driver["taskId"] = "provider-task"
+			query, err := plugin.Engine.Call(t.Context(), "buildQueryRequest", driver)
+			require.NoError(t, err)
+			assert.Equal(t, "https://api.dflop.top/v1/videos/generations/provider-task", query.(map[string]any)["url"])
+			terminal := map[string]any{"id": "provider-task", "model": tc.model, "status": "succeeded", "resolution": "720p", "duration_sec": 4, "usage": map[string]any{"completion_tokens": 1000}, "video_url": "https://example.invalid/output.mp4"}
+			result, err := plugin.Engine.Call(t.Context(), "parseTaskResult", driver, terminal)
+			require.NoError(t, err)
+			assert.Equal(t, "SUCCESS", result.(map[string]any)["status"])
+			facts, err := plugin.Engine.Call(t.Context(), "extractUsageOnComplete", driver, result, terminal)
+			require.NoError(t, err)
+			if tc.model == "wan3.0-video" {
+				assert.EqualValues(t, 4, facts.(map[string]any)["duration_sec"])
+			} else {
+				assert.EqualValues(t, 1000, facts.(map[string]any)["completion_tokens"])
+			}
+		})
+	}
+	for name, fields := range map[string]map[string]any{"zero seconds": {"seconds": 0}, "zero duration": {"duration": 0}, "negative duration": {"duration": -1}, "malformed seconds": {"seconds": "bad"}, "null duration": {"duration": nil}, "conflicting durations": {"seconds": 4, "duration": 8}, "malformed content": {"seconds": 4, "content": "bad"}, "oversized duration": {"duration": 3601}} {
+		t.Run(name, func(t *testing.T) {
+			request := map[string]any{"model": "doubao-seedance-2.0", "prompt": "test"}
+			for key, value := range fields {
+				request[key] = value
+			}
+			_, err := plugin.Engine.CallPath(t.Context(), "protocols", []string{"openai_video", "decodeRequest"}, map[string]any{"body": map[string]any{"kind": "json", "value": request}})
+			require.Error(t, err)
+		})
+	}
+}
 
 func TestDFLOPPartialMediaFrozenSettlement(t *testing.T) {
 	source, err := builtinplugins.Source("dflop-media")
