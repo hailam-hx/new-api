@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
@@ -1148,4 +1150,80 @@ func TestDFLOPTraceIsLedgerRequestIDOnEveryHTTPOutcome(t *testing.T) {
 			assert.Equal(t, "exact-trace", item.TraceID)
 		})
 	}
+}
+
+func TestAdminVerificationRequiresExactSignedPlanAndScope(t *testing.T) {
+	rig := newVerificationEngineRig(t)
+	plan, err := rig.engine.Plan(t.Context(), rig.run.ID)
+	require.NoError(t, err)
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	authorization, err := FinalizeDFLOPVerificationAuthorization(plan, "admin", "reviewed-plan", private, time.Now())
+	require.NoError(t, err)
+	raw, err := common.Marshal(authorization)
+	require.NoError(t, err)
+	hash := verificationHash(raw)
+	_, err = ValidateDFLOPAdminExecution(1, 73, plan, string(raw), hash, public, time.Now())
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name          string
+		channel, user int
+		hash          string
+		mutate        func(*DFLOPVerificationPlan)
+	}{
+		{"wrong channel", 2, 73, hash, nil}, {"wrong owner", 1, 74, hash, nil},
+		{"wrong confirmation", 1, 73, "wrong", nil},
+		{"blocked target", 1, 73, hash, func(p *DFLOPVerificationPlan) { p.Targets[0].Blocker = "PUBLIC_FIXTURE_REQUIRED" }},
+		{"changed request", 1, 73, hash, func(p *DFLOPVerificationPlan) { p.Targets[0].RequestBodyHash = "changed" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			changed := plan
+			changed.Targets = slices.Clone(plan.Targets)
+			index := slices.IndexFunc(changed.Targets, func(target DFLOPVerificationPlannedTarget) bool {
+				return target.Model == authorization.Targets[0].Model
+			})
+			require.NotEqual(t, -1, index)
+			changed.Targets[0], changed.Targets[index] = changed.Targets[index], changed.Targets[0]
+			if tc.mutate != nil {
+				tc.mutate(&changed)
+			}
+			_, err := ValidateDFLOPAdminExecution(tc.channel, tc.user, changed, string(raw), tc.hash, public, time.Now())
+			require.Error(t, err)
+		})
+	}
+	_, err = ValidateDFLOPAdminExecution(1, 73, plan, string(raw), hash, public, time.Now().Add(time.Hour))
+	require.ErrorContains(t, err, "FRESH_SIGNED")
+	_, err = rig.engine.ResumeAdminItem(t.Context(), 2, 73, rig.run.ID, rig.item.ID, rig.fixture)
+	require.ErrorContains(t, err, "SCOPE")
+	assert.Zero(t, rig.transport.posts)
+}
+
+func TestAdminVerificationExecutePersistsAllLayersAndRejectsReplay(t *testing.T) {
+	rig := newVerificationEngineRig(t)
+	plan, err := rig.engine.Plan(t.Context(), rig.run.ID)
+	require.NoError(t, err)
+	_, private, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	authorization, err := FinalizeDFLOPVerificationAuthorization(plan, "admin", "exact-budget", private, time.Now())
+	require.NoError(t, err)
+	run, err := rig.engine.ExecuteAdminPlan(t.Context(), 1, 73, plan, authorization)
+	require.NoError(t, err)
+	require.NotNil(t, run)
+	items, err := model.ListRuntimeVerificationItems(run.ID)
+	require.NoError(t, err)
+	require.Len(t, items, 1)
+	item := items[0]
+	assert.Equal(t, "RUNTIME_VERIFIED", item.Result)
+	for _, status := range []string{item.ConfigStatus, item.ConnectivityStatus, item.RequestStatus, item.GenerationStatus, item.ParserStatus, item.BillingStatus, item.LedgerStatus} {
+		assert.Equal(t, "PASS", status)
+	}
+	assert.Equal(t, 1, rig.transport.posts)
+	_, err = rig.engine.ExecuteAdminPlan(t.Context(), 1, 73, plan, authorization)
+	require.Error(t, err)
+	assert.Equal(t, 1, rig.transport.posts, "replay must never create another upstream task")
+	index := slices.IndexFunc(plan.Targets, func(target DFLOPVerificationPlannedTarget) bool { return target.Model == item.Model })
+	require.NotEqual(t, -1, index)
+	_, err = rig.engine.ResumeAdminItem(t.Context(), 1, 73, run.ID, item.ID, plan.Targets[index].Fixture)
+	require.NoError(t, err)
+	assert.Equal(t, 1, rig.transport.posts, "recovery must be GET-only")
 }

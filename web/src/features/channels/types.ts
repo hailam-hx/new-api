@@ -298,6 +298,7 @@ export interface ChannelVerificationItem {
 }
 
 export interface ChannelVerificationData {
+  execution_reason?: string
   run: ChannelVerificationRun | null
   items: ChannelVerificationItem[]
 }
@@ -505,4 +506,38 @@ export interface AddChannelRequest {
   multi_key_mode?: 'random' | 'polling'
   batch_add_set_key_prefix_2_name?: boolean
   channel: Partial<Channel>
+}
+
+/** Exact server-built plan; fixture/request details are opaque to the UI. */
+export interface ChannelVerificationPlan {
+  plan_version: string
+  run_id: number
+  source_channel_id: number
+  catalog_hash: string
+  planned_posts: number
+  known_maximum_provider_points: string
+  proposed_authorization: {
+    funding_user_id: number
+    targets: {
+      model: string
+      fixture_id: string
+      protocol: string
+      mode: string
+    }[]
+  }
+  targets: {
+    model: string
+    fixture: {
+      id: string
+      protocol: string
+      mode: string
+      [key: string]: unknown
+    }
+    maximum_provider_points: string | null
+    blocker?: string
+    executor_blocker?: string
+    request_body?: unknown
+    [key: string]: unknown
+  }[]
+  [key: string]: unknown
 }

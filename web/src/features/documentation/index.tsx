@@ -595,6 +595,43 @@ export function Documentation(props: { slug?: string; modelId?: string }) {
                 ))}
             </>
           )}
+          {article.kind === 'models' && !props.modelId && (
+            <section
+              id='list-models-api'
+              className='mt-8 min-w-0 space-y-4 border-t pt-8'
+            >
+              <h2 className='text-xl font-semibold'>
+                {t('Get the model list with the API')}
+              </h2>
+              <p className='text-sm leading-7'>
+                {t('You can also get the available model list with the API.')}
+              </p>
+              <div className='flex min-w-0 items-center justify-between gap-3 rounded-xl border p-4'>
+                <code className='text-sm break-all'>GET /v1/models</code>
+                <CopyButton value='GET /v1/models' />
+              </div>
+              <DocsCode
+                language='bash'
+                code={
+                  'curl https://hotx-api.com/v1/models \\' +
+                  '\n  -H "Authorization: Bearer YOUR_API_KEY"'
+                }
+              />
+              <p className='text-sm font-medium'>{t('Response')}</p>
+              <DocsCode
+                language='json'
+                code={
+                  '{\n  "object": "list",\n  "data": [\n    {\n      "id": "MODEL_ID",\n      "object": "model"\n    }\n  ]\n}'
+                }
+              />
+              <Markdown className='text-sm leading-7'>
+                {t(
+                  'Model ID is in the `id` field. Use it in the `model` field when sending a request.'
+                )}
+              </Markdown>
+              <code className='block text-sm'>"model": "MODEL_ID"</code>
+            </section>
+          )}
           {article.kind === 'pricing' && <PricingUsageLink />}
           {article.kind === 'reference' && <ApiReference />}
           {article.kind === 'errors' && <ErrorReference />}

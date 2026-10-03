@@ -219,18 +219,27 @@ var DFLOPAmbiguousVerificationModels = []string{
 }
 
 func PrepareDFLOPRuntimeVerification(ctx context.Context, channelID int, modelFilter string, userID int) (*model.RuntimeVerificationRun, []model.RuntimeVerificationItem, error) {
+	engine, err := NewDFLOPVerificationEngine(ctx, channelID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return engine.Prepare(ctx, channelID, modelFilter, userID)
+}
+
+// NewDFLOPVerificationEngine loads only server-configured preparation resources.
+func NewDFLOPVerificationEngine(ctx context.Context, channelID int) (DFLOPVerificationEngine, error) {
 	engine := DFLOPVerificationEngine{}
 	if origin := os.Getenv("VERIFICATION_FIXTURE_PUBLIC_BASE_URL"); origin != "" {
 		media, err := DFLOPVerificationPublishedMedia(origin)
 		if err != nil {
-			return nil, nil, err
+			return engine, err
 		}
 		engine.FixtureOptions.PublishedMedia = media
 		engine.FixtureOptions.VerifyPublicMedia = VerifyDFLOPPublicMedia
 	}
 	avatar, voice, err := engine.PreparePresetResources(ctx, channelID)
 	if err != nil {
-		return nil, nil, err
+		return engine, err
 	}
 	engine.FixtureOptions.PresetAvatar, engine.FixtureOptions.PresetVoice = avatar.ID, voice.ID
 	engine.FixtureOptions.AvatarPresetEvidence, engine.FixtureOptions.VoicePresetEvidence = &avatar, &voice
@@ -252,7 +261,7 @@ func PrepareDFLOPRuntimeVerification(ctx context.Context, channelID int, modelFi
 			}
 		}
 	}
-	return engine.Prepare(ctx, channelID, modelFilter, userID)
+	return engine, nil
 }
 
 // Prepare performs GETs and production hook replay only. No funding operation

@@ -1120,11 +1120,13 @@ function ChannelTestDialogContent({
 
           <div className='space-y-3 max-sm:has-[div[role="toolbar"]]:pb-16'>
             <ChannelRuntimeVerification
+              key={currentRow.id}
               channelId={currentRow.id}
               channelName={currentRow.name}
               open={open}
               models={models}
               results={testResults}
+              onBusyChange={setIsUpdatingModelVisibility}
               disabled={isAnyTesting || isDeletingFailed}
             />
             <div className='flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between'>
@@ -1340,6 +1342,12 @@ function TestStatusCell({ result }: { result?: TestResult }) {
   if (result.diagnostic && result.diagnostic.outcome !== 'fail') {
     let label = t('Upstream not tested')
     if (result.status === 'pass') label = t('Preflight valid')
+    if (
+      result.diagnostic.mode === 'connectivity' &&
+      result.diagnostic.connectivity_status === 'connectivity_pass'
+    ) {
+      label = t('Connectivity PASS; generation not tested')
+    }
     if (result.status === 'partial' && result.diagnostic.mode === 'runtime') {
       label = `${t('Runtime')}: AMBIGUOUS`
     }

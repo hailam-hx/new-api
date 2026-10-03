@@ -1305,3 +1305,47 @@ func TestRuntimeVerificationPrepareRejectsClientEvidenceAndPaidOverrides(t *test
 	}
 	assert.Zero(t, calls)
 }
+
+func TestRuntimeVerificationExecuteRejectsUnsignedAndUnconfirmedBeforeIO(t *testing.T) {
+	oldDB, oldTransport := model.DB, http.DefaultTransport
+	calls := 0
+	model.DB = nil
+	http.DefaultTransport = diagnosticTripwireTransport{calls: &calls}
+	t.Cleanup(func() { model.DB, http.DefaultTransport = oldDB, oldTransport })
+	t.Setenv("DFLOP_VERIFICATION_APPROVAL_PUBLIC_KEY", strings.Repeat("ab", 32))
+	for _, body := range []string{`{}`, `null`, `{"manifest_json":"{\"approved\":true}","confirmed_manifest_hash":"wrong"}`, strings.Repeat("x", (4<<20)+1)} {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Params = gin.Params{{Key: "id", Value: "1"}}
+		c.Set("id", 73)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/channel/1/runtime-verification/execute", strings.NewReader(body))
+		c.Request.Header.Set("Content-Type", "application/json")
+		ExecuteChannelRuntimeVerification(c)
+		var response struct {
+			Success bool `json:"success"`
+		}
+		require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+		assert.False(t, response.Success)
+	}
+	assert.Zero(t, calls)
+}
+
+func TestRuntimeVerificationAdminRejectsSimpleAndCrossSiteRequests(t *testing.T) {
+	for _, handler := range []gin.HandlerFunc{PlanChannelRuntimeVerification, ExecuteChannelRuntimeVerification, ResumeChannelRuntimeVerification} {
+		for _, tc := range []struct{ contentType, site string }{{"text/plain", "same-origin"}, {"application/json", "cross-site"}, {"application/x-www-form-urlencoded", "same-origin"}} {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Params = gin.Params{{Key: "id", Value: "1"}}
+			c.Set("id", 73)
+			c.Request = httptest.NewRequest(http.MethodPost, "/api/channel/1/runtime-verification/execute", strings.NewReader(`{}`))
+			c.Request.Header.Set("Content-Type", tc.contentType)
+			c.Request.Header.Set("Sec-Fetch-Site", tc.site)
+			handler(c)
+			var response struct {
+				Success bool `json:"success"`
+			}
+			require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+			assert.False(t, response.Success)
+		}
+	}
+}

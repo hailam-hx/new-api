@@ -601,3 +601,23 @@ it('uses the shared provider fallback for missing metadata and preserves configu
     claude,
   ])
 })
+
+it('classifies token-billed plugin video from its callable protocol and includes it in the Video filter', () => {
+  const video: PricingModel = {
+    ...model,
+    model_name: 'doubao-seedance-2.0',
+    supported_endpoint_types: ['openai', 'anthropic', 'gemini', 'openai-video'],
+    billing_mode: 'tiered_expr',
+    billing_expr: 'tier("1080p", u("completion_tokens") * 7.65 / 1000000)',
+    billing_usage_schema: {
+      completion_tokens: {
+        type: 'number',
+        unit: 'token',
+        description: { en: 'Video generation token unit price' },
+      },
+    },
+  }
+  expect(getDocumentationModelKinds(video)).toEqual(['video'])
+  expect(filterDocumentationModels([video], 'seedan', 'video')).toEqual([video])
+  expect(filterDocumentationModels([video], '', 'text')).toEqual([])
+})

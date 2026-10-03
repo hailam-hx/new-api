@@ -49,6 +49,9 @@ func TestChannelRuntimeVerificationRequiresAdminAndExpectedPermissions(t *testin
 		{http.MethodGet, "/:id/runtime-verification", "/api/channel/1/runtime-verification", authz.ChannelRead, controller.GetChannelRuntimeVerification},
 		{http.MethodGet, "/:id/runtime-verification/:run_id", "/api/channel/1/runtime-verification/2", authz.ChannelRead, controller.GetChannelRuntimeVerification},
 		{http.MethodPost, "/:id/runtime-verification", "/api/channel/1/runtime-verification", authz.ChannelOperate, controller.PrepareChannelRuntimeVerification},
+		{http.MethodPost, "/:id/runtime-verification/plan", "/api/channel/1/runtime-verification/plan", authz.ChannelOperate, controller.PlanChannelRuntimeVerification},
+		{http.MethodPost, "/:id/runtime-verification/execute", "/api/channel/1/runtime-verification/execute", authz.ChannelOperate, controller.ExecuteChannelRuntimeVerification},
+		{http.MethodPost, "/:id/runtime-verification/resume", "/api/channel/1/runtime-verification/resume", authz.ChannelOperate, controller.ResumeChannelRuntimeVerification},
 	} {
 		t.Run(route.method+route.path, func(t *testing.T) {
 			assertChannelRoutePermission(t, route.method, route.path, route.permission, route.handler)

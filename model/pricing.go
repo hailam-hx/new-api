@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -122,7 +123,46 @@ func GetModelSupportEndpointTypes(model string) []constant.EndpointType {
 
 func getPricingEndpointTypesForAbility(ability AbilityWithChannel, advancedCustomConfigs map[int]*dto.AdvancedCustomConfig) []constant.EndpointType {
 	if ability.ChannelType != constant.ChannelTypeAdvancedCustom {
-		return common.GetEndpointTypesByChannelType(ability.ChannelType, ability.Model)
+		endpoints := common.GetEndpointTypesByChannelType(ability.ChannelType, ability.Model)
+		generation := jsplugin.DefaultRegistry.Generation()
+		// Use the same model-scoped protocol claims and channel bindings as
+		// task routing. A token-priced video is still a video, and an installed
+		// plugin alone does not make its endpoints callable on every channel.
+		for _, media := range []struct {
+			path     string
+			endpoint constant.EndpointType
+		}{
+			{"/v1/videos", constant.EndpointTypeOpenAIVideo},
+			{"/v1/images/generations", constant.EndpointTypeImageGeneration},
+			{"/v1/audio/speech", constant.EndpointType("audio-speech")},
+		} {
+			if slices.Contains(endpoints, media.endpoint) {
+				continue
+			}
+			candidates := generation.LookupEndpointCandidates("POST", media.path, ability.Model)
+			if len(candidates) == 0 {
+				continue
+			}
+			channel, err := CacheGetChannel(ability.ChannelId)
+			if err != nil {
+				continue
+			}
+			for _, candidate := range candidates {
+				plugin := candidate.Plugin
+				bound := slices.Contains(plugin.Meta.ChannelTypes, ability.ChannelType)
+				if ability.ChannelType == constant.ChannelTypeNewAPI || ability.ChannelType == constant.ChannelTypeTaskPlugin {
+					bound = channel.BindsTaskPluginForModel(plugin.Meta.Key, ability.Model, generation)
+				}
+				if ability.ChannelType == constant.ChannelTypeOpenAI && plugin.Meta.Key == "dflop-tts" {
+					bound = channel.GetSetting().BindsTaskPlugin(plugin.Meta.Key)
+				}
+				if bound {
+					endpoints = append(endpoints, media.endpoint)
+					break
+				}
+			}
+		}
+		return endpoints
 	}
 	if config := advancedCustomConfigs[ability.ChannelId]; config != nil {
 		return config.SupportedEndpointTypesForModel(ability.Model)

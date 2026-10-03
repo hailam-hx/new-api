@@ -32,6 +32,7 @@ import { afterEach, expect, test, vi } from 'vitest'
 import { api } from '@/lib/api'
 
 import type { ChannelVerificationData } from '../../types'
+import { ChannelRuntimeAction } from '../dialogs/channel-runtime-action'
 import { ChannelRuntimeVerification } from '../dialogs/channel-runtime-verification'
 
 const i18n = createInstance()
@@ -307,4 +308,248 @@ test('unrecoverable history does not block a fresh untested canary', async () =>
       /Historical result unrecoverable: EXACT_PROVIDER_ID_NOT_CAPTURED/
     )
   ).toBeVisible()
+})
+
+test('shows only current models whose every verification target passes all seven layers', async () => {
+  const full = {
+    ...evidence.items[0],
+    model: 'image-model',
+    config_status: 'PASS',
+    connectivity_status: 'PASS',
+    request_status: 'PASS',
+    generation_status: 'PASS',
+    parser_status: 'PASS',
+    billing_status: 'PASS',
+    ledger_status: 'PASS',
+  } as const
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: { success: true, data: { ...evidence, items: [full] } },
+  })
+  setup()
+  expect(
+    await screen.findByRole('button', { name: 'Show successful models (1)' })
+  ).toBeEnabled()
+  expect(
+    screen.getByRole('button', { name: 'Runtime verification' })
+  ).toBeEnabled()
+})
+
+test('keeps show PASS action disabled for mixed modes or historical-only success', async () => {
+  const full = {
+    ...evidence.items[0],
+    config_status: 'PASS',
+    connectivity_status: 'PASS',
+    request_status: 'PASS',
+    generation_status: 'PASS',
+    parser_status: 'PASS',
+    billing_status: 'PASS',
+    ledger_status: 'PASS',
+  } as const
+  vi.spyOn(api, 'get').mockResolvedValue({
+    data: {
+      success: true,
+      data: {
+        ...evidence,
+        items: [
+          full,
+          {
+            ...full,
+            mode: 'image',
+            ledger_status: 'NOT_TESTED',
+            historical_evidence: full,
+          },
+        ],
+      },
+    },
+  })
+  setup()
+  expect(
+    await screen.findByRole('button', { name: 'Show successful models (0)' })
+  ).toBeDisabled()
+})
+
+test('paid runtime execution requires a separate budget confirmation and is never automatically retried', async () => {
+  const plan = {
+    plan_version: 'canary-plan-v6',
+    run_id: 7,
+    source_channel_id: 1,
+    catalog_hash: 'catalog-sha',
+    known_maximum_provider_points: '0.25',
+    planned_posts: 1,
+    proposed_authorization: { funding_user_id: 9, targets: [] },
+    targets: [
+      {
+        model: 'image-model',
+        fixture: { id: 'image', protocol: 'openai_image', mode: 'text' },
+        maximum_provider_points: '0.25',
+      },
+    ],
+  }
+  const post = vi
+    .spyOn(api, 'post')
+    .mockResolvedValueOnce({ data: { success: true, data: plan } })
+    .mockRejectedValueOnce(new Error('ambiguous timeout'))
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <I18nextProvider i18n={i18n}>
+        <ChannelRuntimeAction
+          channelId={1}
+          models={['image-model']}
+          disabled={false}
+          onComplete={vi.fn()}
+          onBusyChange={vi.fn()}
+        />
+      </I18nextProvider>
+    </QueryClientProvider>
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Runtime verification' }))
+  fireEvent.change(
+    screen.getByRole('textbox', { name: 'Verification plan JSON' }),
+    { target: { value: JSON.stringify(plan) } }
+  )
+  expect(
+    screen.getByRole('button', { name: 'Review paid execution' })
+  ).toBeDisabled()
+  const manifest = {
+    approved: true,
+    signature: 'operator-signed',
+    expires_at: Math.floor(Date.now() / 1000) + 300,
+    max_requests: 1,
+    max_total_provider_points: '0.25',
+    targets: [
+      {
+        model: 'image-model',
+        protocol: 'openai_image',
+        mode: 'text',
+        fixture_id: 'image',
+        maximum_provider_points: '0.25',
+      },
+    ],
+  }
+  fireEvent.change(
+    screen.getByRole('textbox', { name: 'Signed authorization JSON' }),
+    { target: { value: JSON.stringify(manifest) } }
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Review paid execution' }))
+  expect(post).not.toHaveBeenCalled()
+  expect(screen.getByRole('alertdialog')).toHaveTextContent('0.25')
+  // Only the paid boundary is mocked. Real dialog confirmation and hash
+  // computation are used; a transport ambiguity must disable another submit.
+  post.mockReset().mockRejectedValue(new Error('ambiguous timeout'))
+  fireEvent.click(screen.getByRole('button', { name: 'Run paid verification' }))
+  await waitFor(() => expect(post).toHaveBeenCalledTimes(1))
+  expect(post).toHaveBeenCalledWith(
+    '/api/channel/1/runtime-verification/execute',
+    expect.objectContaining({
+      plan,
+      manifest_json: JSON.stringify(manifest),
+      confirmed_manifest_hash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    }),
+    expect.objectContaining({ skipAuthRefresh: true })
+  )
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Review paid execution' })
+    ).toBeDisabled()
+  )
+})
+
+test('saved execution evidence refreshes the seven layers and enables showing the verified model', async () => {
+  const passed = {
+    ...evidence,
+    run: { ...evidence.run, id: 8 },
+    items: [
+      {
+        ...evidence.items[0],
+        run_id: 8,
+        status: 'RUNTIME_VERIFIED',
+        config_status: 'PASS',
+        connectivity_status: 'PASS',
+        request_status: 'PASS',
+        generation_status: 'PASS',
+        parser_status: 'PASS',
+        billing_status: 'PASS',
+        ledger_status: 'PASS',
+      },
+    ],
+  }
+  const get = vi
+    .spyOn(api, 'get')
+    .mockResolvedValueOnce({ data: { success: true, data: evidence } })
+    .mockResolvedValue({ data: { success: true, data: passed } })
+  vi.spyOn(api, 'post').mockResolvedValue({
+    data: { success: true, data: passed },
+  })
+  setup()
+  await screen.findByRole('button', { name: 'Show successful models (0)' })
+  fireEvent.click(screen.getByRole('button', { name: 'Runtime verification' }))
+  fireEvent.change(
+    screen.getByRole('textbox', { name: 'Verification plan JSON' }),
+    {
+      target: {
+        value: JSON.stringify({
+          plan_version: 'canary-plan-v6',
+          targets: [
+            {
+              model: 'image-model',
+              fixture: { id: 'image', protocol: 'openai_image', mode: 'text' },
+              maximum_provider_points: '0.25',
+            },
+          ],
+          known_maximum_provider_points: '0.25',
+          planned_posts: 1,
+        }),
+      },
+    }
+  )
+  fireEvent.change(
+    screen.getByRole('textbox', { name: 'Signed authorization JSON' }),
+    {
+      target: {
+        value: JSON.stringify({
+          approved: true,
+          signature: 'signed',
+          expires_at: Math.floor(Date.now() / 1000) + 300,
+          max_requests: 1,
+          max_total_provider_points: '0.25',
+          targets: [
+            {
+              model: 'image-model',
+              fixture_id: 'image',
+              protocol: 'openai_image',
+              mode: 'text',
+              maximum_provider_points: '0.25',
+            },
+          ],
+        }),
+      },
+    }
+  )
+  fireEvent.click(screen.getByRole('button', { name: 'Review paid execution' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Run paid verification' }))
+  await waitFor(() =>
+    expect(get).toHaveBeenCalledWith(
+      '/api/channel/1/runtime-verification/8',
+      expect.anything()
+    )
+  )
+  // Close the runtime form to inspect the durable evidence table.
+  await waitFor(() =>
+    expect(screen.getAllByRole('button', { name: 'Close' })[0]).toBeEnabled()
+  )
+  fireEvent.click(screen.getAllByRole('button', { name: 'Close' })[0])
+  const row = await screen.findByRole('row', { name: /image-model/ })
+  for (const label of [
+    'Config: PASS',
+    'Connectivity: PASS',
+    'Request: PASS',
+    'Runtime: PASS',
+    'Billing: PASS',
+    'Ledger: PASS',
+  ]) {
+    expect(within(row).getByText(label)).toBeVisible()
+  }
+  expect(
+    await screen.findByRole('button', { name: 'Show successful models (1)' })
+  ).toBeEnabled()
 })

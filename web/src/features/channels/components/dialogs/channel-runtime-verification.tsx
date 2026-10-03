@@ -44,7 +44,9 @@ import type {
   ChannelVerificationItem,
   VerificationLayerStatus,
 } from '../../types'
+import { ChannelRuntimeAction } from './channel-runtime-action'
 import { ChannelTestExport } from './channel-test-export'
+import { ChannelTestModelVisibilityAction } from './channel-test-model-visibility-action'
 
 type ChannelRuntimeVerificationProps = {
   channelId: number
@@ -53,6 +55,7 @@ type ChannelRuntimeVerificationProps = {
   models: string[]
   results: Record<string, ChannelTestResult>
   disabled?: boolean
+  onBusyChange?: (busy: boolean) => void
 }
 
 export function ChannelRuntimeVerification(
@@ -63,14 +66,23 @@ export function ChannelRuntimeVerification(
   const [evidenceSection, setEvidenceSection] = useState<
     'all' | 'ids' | 'billing'
   >('all')
+  const [runtimeBusy, setRuntimeBusy] = useState(false)
+  const [visibilityBusy, setVisibilityBusy] = useState(false)
+  const [activeRunId, setActiveRunId] = useState<number | undefined>()
   const [selectedId, setSelectedId] = useState<number | null>(null)
-  const queryKey = ['channels', props.channelId, 'runtime-verification']
+  const queryKey = [
+    'channels',
+    props.channelId,
+    'runtime-verification',
+    activeRunId,
+  ]
   const query = useQuery({
     queryKey,
     queryFn: async ({ signal }) =>
-      (await getChannelVerification(props.channelId, undefined, signal)).data,
+      (await getChannelVerification(props.channelId, activeRunId, signal)).data,
     enabled: props.open,
     staleTime: 0,
+    refetchInterval: runtimeBusy ? 3000 : false,
     retry: false,
     meta: { errorToast: false },
   })
@@ -80,6 +92,7 @@ export function ChannelRuntimeVerification(
     retry: false,
     onSuccess: async (data) => {
       setSelectedId(null)
+      setActiveRunId(undefined)
       queryClient.setQueryData(queryKey, data)
       await queryClient.invalidateQueries({ queryKey })
     },
@@ -154,7 +167,30 @@ export function ChannelRuntimeVerification(
         2
       )
     : ''
-  const isBusy = props.disabled || prepare.isPending || query.isFetching
+  const isBusy =
+    props.disabled ||
+    prepare.isPending ||
+    query.isFetching ||
+    runtimeBusy ||
+    visibilityBusy
+  const items = query.data?.items ?? []
+  const passedModels = [...new Set(items.map((item) => item.model))].filter(
+    (model) =>
+      props.models.includes(model) &&
+      items
+        .filter((item) => item.model === model)
+        .every((item) =>
+          [
+            item.config_status,
+            item.connectivity_status,
+            item.request_status,
+            item.generation_status,
+            item.parser_status,
+            item.billing_status,
+            item.ledger_status,
+          ].every((status) => status === 'PASS')
+        )
+  )
   const columns: StaticDataTableColumn<ChannelVerificationItem>[] = [
     {
       id: 'model',
@@ -415,6 +451,44 @@ export function ChannelRuntimeVerification(
         >
           {t('Re-run verification')}
         </Button>
+      </div>
+      <div className='flex flex-wrap gap-2'>
+        <ChannelRuntimeAction
+          channelId={props.channelId}
+          models={props.models}
+          verification={query.isError ? undefined : query.data}
+          disabled={Boolean(
+            props.disabled || prepare.isPending || visibilityBusy
+          )}
+          onBusyChange={(busy) => {
+            setRuntimeBusy(busy)
+            props.onBusyChange?.(busy)
+          }}
+          onComplete={(data) => {
+            setActiveRunId(data.run?.id)
+            queryClient.setQueryData(
+              [
+                'channels',
+                props.channelId,
+                'runtime-verification',
+                data.run?.id,
+              ],
+              data
+            )
+            void queryClient.invalidateQueries({
+              queryKey: ['channels', props.channelId, 'runtime-verification'],
+            })
+          }}
+        />
+        <ChannelTestModelVisibilityAction
+          action='show'
+          models={passedModels}
+          disabled={Boolean(isBusy || query.isError || query.isPending)}
+          onBusyChange={(busy) => {
+            setVisibilityBusy(busy)
+            props.onBusyChange?.(busy)
+          }}
+        />
       </div>
       <p className='text-muted-foreground text-xs'>
         {t(

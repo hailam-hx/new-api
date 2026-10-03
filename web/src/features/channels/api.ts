@@ -30,6 +30,7 @@ import type {
   ChannelOpsResponse,
   ChannelTestResponse,
   ChannelVerificationResponse,
+  ChannelVerificationPlan,
   CopyChannelParams,
   CopyChannelResponse,
   FetchModelsResponse,
@@ -65,6 +66,54 @@ export async function prepareChannelVerification(
     `/api/channel/${channelId}/runtime-verification`,
     model ? { model } : {},
     channelActionConfig()
+  )
+  return requireServerSuccess(response.data)
+}
+
+export async function planChannelVerification(
+  channelId: number,
+  model: string
+): Promise<ChannelVerificationPlan> {
+  const response = await api.post<{
+    success: boolean
+    data: ChannelVerificationPlan
+  }>(
+    `/api/channel/${channelId}/runtime-verification/plan`,
+    { model },
+    channelActionConfig({ skipAuthRefresh: true })
+  )
+  return requireServerSuccess(response.data).data
+}
+
+/** No transport/auth replay is permitted for a paid execution intent. */
+export async function executeChannelVerification(
+  channelId: number,
+  plan: ChannelVerificationPlan,
+  manifestJSON: string,
+  confirmedHash: string
+): Promise<ChannelVerificationResponse> {
+  const response = await api.post<ChannelVerificationResponse>(
+    `/api/channel/${channelId}/runtime-verification/execute`,
+    {
+      plan,
+      manifest_json: manifestJSON,
+      confirmed_manifest_hash: confirmedHash,
+    },
+    channelActionConfig({ skipAuthRefresh: true, timeout: 1900000 })
+  )
+  return requireServerSuccess(response.data)
+}
+
+export async function resumeChannelVerification(
+  channelId: number,
+  runId: number,
+  itemId: number,
+  fixture: ChannelVerificationPlan['targets'][number]['fixture']
+): Promise<ChannelVerificationResponse> {
+  const response = await api.post<ChannelVerificationResponse>(
+    `/api/channel/${channelId}/runtime-verification/resume`,
+    { run_id: runId, item_id: itemId, fixture },
+    channelActionConfig({ skipAuthRefresh: true, timeout: 1900000 })
   )
   return requireServerSuccess(response.data)
 }

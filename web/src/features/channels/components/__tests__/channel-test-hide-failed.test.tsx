@@ -386,6 +386,9 @@ test('explicit connectivity appears only for reviewed capability, preserves cata
   fireEvent.click(button)
   await screen.findByText('DFLOP connectivity verified')
   expect(
+    screen.getByText('Connectivity PASS; generation not tested')
+  ).toBeVisible()
+  expect(
     screen.getByText('Model visible to the selected API key')
   ).toBeInTheDocument()
   expect(screen.getByText('Content generation not tested')).toBeInTheDocument()

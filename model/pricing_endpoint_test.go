@@ -6,6 +6,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -291,4 +292,54 @@ func TestCacheUpdateChannelSyncsAdvancedCustomConfig(t *testing.T) {
 	CacheUpdateChannel(channel)
 
 	assert.Nil(t, channel2advancedCustomConfig[401])
+}
+
+func TestPricingIncludesOnlyCallablePluginMediaEndpoints(t *testing.T) {
+	resetPricingEndpointTestTables(t)
+	source := `export const meta = {
+ apiVersion: 1, key: "pricing-media-endpoints", name: "Media", version: "1.0.0", author: {name: "Test"},
+ models: ["opaque-video", "opaque-image", "opaque-audio", "opaque-other"], fetchMode: "per_task", upstreams: ["new_api"],
+ protocols: [{name: "openai_video", models: ["opaque-video"]}, {name: "openai_image", models: ["opaque-image"]}, {name: "openai_audio_speech", models: ["opaque-audio"]}]
+ };
+ export function buildSubmitRequest() { return {}; }
+ export function parseSubmitResponse() { return {}; }
+ export function buildQueryRequest() { return {}; }
+ export function parseTaskResult() { return {}; }
+ export function listArtifacts() {return [];}
+ export function buildContentRequest() {return {};}
+ export const protocols = {openai_video: {decodeRequest() {return {};}, render() {return {};}}, openai_image: {decodeRequest() {return {};}, render() {return {};}}, openai_audio_speech: {decodeRequest() {return {};}}};`
+	_, err := jsplugin.DefaultRegistry.Register(source, jsplugin.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, jsplugin.DefaultRegistry.Unregister("pricing-media-endpoints")) })
+	for _, spec := range []struct {
+		id    int
+		bound bool
+		model string
+	}{
+		{951, true, "opaque-video"}, {952, true, "opaque-other"}, {953, false, "opaque-video"}, {954, true, "opaque-image"}, {955, true, "opaque-audio"},
+	} {
+		channel := &Channel{Id: spec.id, Type: constant.ChannelTypeNewAPI, Key: "test", Status: common.ChannelStatusEnabled, Name: "test"}
+		if spec.bound {
+			channel.SetSetting(dto.ChannelSettings{TaskExtendPluginKeys: []string{"pricing-media-endpoints"}})
+		}
+		require.NoError(t, DB.Create(channel).Error)
+		InitChannelCache()
+		endpoints := getPricingEndpointTypesForAbility(AbilityWithChannel{Ability: Ability{ChannelId: spec.id, Model: spec.model}, ChannelType: channel.Type}, nil)
+		if spec.bound && spec.model == "opaque-video" {
+			assert.Contains(t, endpoints, constant.EndpointTypeOpenAIVideo)
+		} else {
+			assert.NotContains(t, endpoints, constant.EndpointTypeOpenAIVideo)
+		}
+		if spec.model == "opaque-image" {
+			assert.Contains(t, endpoints, constant.EndpointTypeImageGeneration)
+		}
+		if spec.model == "opaque-audio" {
+			assert.Contains(t, endpoints, constant.EndpointType("audio-speech"))
+		}
+	}
+	insertPricingEndpointAbility(t, 951, "opaque-video")
+	insertPricingEndpointAbility(t, 952, "opaque-other")
+	byModel := pricingEndpointTypesByModel(t)
+	assert.Contains(t, byModel["opaque-video"], constant.EndpointTypeOpenAIVideo)
+	assert.NotContains(t, byModel["opaque-other"], constant.EndpointTypeOpenAIVideo)
 }

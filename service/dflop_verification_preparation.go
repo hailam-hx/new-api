@@ -381,7 +381,7 @@ func (engine DFLOPVerificationEngine) RestoreApprovedPreparation(ctx context.Con
 	for _, target := range authorization.Targets {
 		found := false
 		for _, planned := range plan.Targets {
-			if planned.Model != target.Model {
+			if planned.Model != target.Model || planned.Fixture.ID != target.FixtureID || planned.Fixture.Protocol != target.Protocol || planned.Fixture.Mode != target.Mode {
 				continue
 			}
 			encoded, _ := common.Marshal(planned.Fixture)

@@ -405,6 +405,40 @@ assert.deepEqual(
     .allTextContents(),
   ['Model ID', 'Provider', 'Type', 'Price']
 )
+const modelsApi = page.locator('#list-models-api')
+await modelsApi
+  .getByRole('heading', {
+    name: 'Get the model list with the API',
+    exact: true,
+  })
+  .waitFor()
+assert(
+  await modelsApi.evaluate(
+    (section) =>
+      !!(
+        document
+          .querySelector('#live-catalog')
+          .compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING
+      )
+  )
+)
+assert((await modelsApi.innerText()).includes('GET /v1/models'))
+assert.deepEqual(
+  JSON.parse(await modelsApi.locator('pre').nth(1).innerText()),
+  {
+    object: 'list',
+    data: [{ id: 'MODEL_ID', object: 'model' }],
+  }
+)
+await modelsApi
+  .getByRole('button', { name: 'Copy to clipboard', exact: true })
+  .nth(1)
+  .click()
+assert.equal(
+  await page.evaluate(() => navigator.clipboard.readText()),
+  'curl https://hotx-api.com/v1/models \\' +
+    '\n  -H "Authorization: Bearer YOUR_API_KEY"'
+)
 await page.setViewportSize({ width: 390, height: 844 })
 assert(
   await page
@@ -433,6 +467,7 @@ await page
 assert((await page.getByText('Not provided', { exact: true }).count()) >= 1)
 assert(!(await page.getByText('Context', { exact: true }).count()))
 await page.goto(`${baseUrl}/docs/pricing`)
+assert.equal(await page.locator('#list-models-api').count(), 0)
 await page
   .getByRole('heading', { name: 'How to read prices', exact: true })
   .waitFor()

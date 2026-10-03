@@ -1,12 +1,16 @@
 package controller
 
 import (
+	"crypto/ed25519"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -169,4 +173,116 @@ func channelRuntimeVerificationItemView(item model.RuntimeVerificationItem) gin.
 		view["historical_evidence"] = channelRuntimeVerificationItemView(*item.HistoricalEvidence)
 	}
 	return view
+}
+
+// PlanChannelRuntimeVerification prepares a reviewable zero-paid-cost plan.
+// Fixture origins and preset resources come from server configuration only.
+func PlanChannelRuntimeVerification(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	channelID, err := strconv.Atoi(c.Param("id"))
+	var request struct {
+		Model string `json:"model"`
+	}
+	if c.ContentType() != "application/json" || c.GetHeader("Sec-Fetch-Site") == "cross-site" || err != nil || channelID <= 0 || c.GetInt("id") <= 0 || common.DecodeJson(io.LimitReader(c.Request.Body, 4096), &request) != nil || request.Model == "" || len(request.Model) > 128 {
+		common.ApiErrorMsg(c, "INVALID_VERIFICATION_PLAN_REQUEST")
+		return
+	}
+	engine, err := service.NewDFLOPVerificationEngine(c.Request.Context(), channelID)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	run, _, err := engine.Prepare(c.Request.Context(), channelID, request.Model, c.GetInt("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	plan, err := engine.Plan(c.Request.Context(), run.ID)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, plan)
+}
+
+// ExecuteChannelRuntimeVerification cannot authorize from an approved flag or
+// a UI click alone. An operator-signed exact manifest is mandatory.
+func ExecuteChannelRuntimeVerification(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	channelID, err := strconv.Atoi(c.Param("id"))
+	var request struct {
+		Plan          service.DFLOPVerificationPlan `json:"plan"`
+		ManifestJSON  string                        `json:"manifest_json"`
+		ConfirmedHash string                        `json:"confirmed_manifest_hash"`
+	}
+	body, readErr := io.ReadAll(io.LimitReader(c.Request.Body, (4<<20)+1))
+	if c.ContentType() != "application/json" || c.GetHeader("Sec-Fetch-Site") == "cross-site" || err != nil || channelID <= 0 || c.GetInt("id") <= 0 || readErr != nil || len(body) > 4<<20 || common.Unmarshal(body, &request) != nil {
+		common.ApiErrorMsg(c, "INVALID_VERIFICATION_EXECUTION_REQUEST")
+		return
+	}
+	trusted, err := hex.DecodeString(os.Getenv("DFLOP_VERIFICATION_APPROVAL_PUBLIC_KEY"))
+	if err != nil || len(trusted) != ed25519.PublicKeySize {
+		common.ApiErrorMsg(c, "TRUSTED_APPROVAL_KEY_REQUIRED")
+		return
+	}
+	authorization, err := service.ValidateDFLOPAdminExecution(channelID, c.GetInt("id"), request.Plan, request.ManifestJSON, request.ConfirmedHash, trusted, time.Now())
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	// Cancellation leaves a durable claim/reservation recoverable by GET, never
+	// a retryable paid POST. Do not detach work from the administrator request.
+	run, executionErr := (service.DFLOPVerificationEngine{}).ExecuteAdminPlan(c.Request.Context(), channelID, c.GetInt("id"), request.Plan, authorization)
+	if run == nil {
+		common.ApiError(c, executionErr)
+		return
+	}
+	writeRuntimeExecutionResult(c, run.ID, executionErr)
+}
+
+// ResumeChannelRuntimeVerification recovers only this administrator's claimed
+// intent on this channel. It cannot adopt arbitrary operator-supplied task IDs.
+func ResumeChannelRuntimeVerification(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	channelID, err := strconv.Atoi(c.Param("id"))
+	var request struct {
+		RunID   int64                       `json:"run_id"`
+		ItemID  int64                       `json:"item_id"`
+		Fixture service.VerificationFixture `json:"fixture"`
+	}
+	body, readErr := io.ReadAll(io.LimitReader(c.Request.Body, (1<<20)+1))
+	if c.ContentType() != "application/json" || c.GetHeader("Sec-Fetch-Site") == "cross-site" || err != nil || channelID <= 0 || c.GetInt("id") <= 0 || readErr != nil || len(body) > 1<<20 || common.Unmarshal(body, &request) != nil || request.RunID <= 0 || request.ItemID <= 0 {
+		common.ApiErrorMsg(c, "INVALID_VERIFICATION_RECOVERY_REQUEST")
+		return
+	}
+	run, recoveryErr := (service.DFLOPVerificationEngine{}).ResumeAdminItem(c.Request.Context(), channelID, c.GetInt("id"), request.RunID, request.ItemID, request.Fixture)
+	if run == nil {
+		common.ApiError(c, recoveryErr)
+		return
+	}
+	writeRuntimeExecutionResult(c, run.ID, recoveryErr)
+}
+
+func writeRuntimeExecutionResult(c *gin.Context, runID int64, executionErr error) {
+	run, err := model.GetRuntimeVerificationRun(runID)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	items, err := model.ListRuntimeVerificationItems(run.ID)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	// Return the durable run even for unresolved execution, so the UI can recover
+	// the existing intent instead of encouraging a second paid submission.
+	views := make([]gin.H, 0, len(items))
+	for _, item := range items {
+		views = append(views, channelRuntimeVerificationItemView(item))
+	}
+	reason := ""
+	if executionErr != nil {
+		reason = "VERIFICATION_UNRESOLVED_USE_GET_RECOVERY"
+	}
+	common.ApiSuccess(c, gin.H{"run": gin.H{"id": run.ID, "channel_id": run.ChannelID, "catalog_hash": run.CatalogHash, "started_at": run.StartedAt, "status": run.Status, "source": run.Source, "paid_requests": run.PaidRequests}, "items": views, "execution_reason": reason})
 }
