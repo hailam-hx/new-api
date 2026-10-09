@@ -90,6 +90,9 @@ export function PricingGuide({ models }: { models: PricingModel[] }) {
           )
         })}
       </dl>
+      <p className='text-muted-foreground text-sm'>
+        {t('1M token = 1 million tokens.')}
+      </p>
       <Alert>
         <AlertDescription>
           {t('These are the usage prices HOTX API applies to users.')}

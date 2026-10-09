@@ -200,3 +200,73 @@ it('does not present a legacy image base price as a final per-request price', ()
     ).state
   ).toBe('details')
 })
+
+it.each([0.1, 0])(
+  'includes explicit legacy cache read ratio %s using the shared viewer price',
+  (cache_ratio) => {
+    const view = getDocumentationPrice(
+      {
+        ...base,
+        cache_ratio,
+        create_cache_ratio: 1.25,
+        enable_groups: ['premium'],
+        group_ratio: { premium: 2 },
+      },
+      {
+        ...options,
+        selectedGroup: 'premium',
+        groupRatioMultiplier: 2,
+        includeCacheRead: true,
+      }
+    )
+    expect(view.entries.map((e) => e.field)).toEqual([
+      'inputPrice',
+      'outputPrice',
+      'cacheReadPrice',
+    ])
+    expect(view.entries[2].formatted).toBe(cache_ratio === 0 ? '0' : '0.4')
+  }
+)
+it.each([undefined, null, -1, Number.NaN, Infinity])(
+  'omits missing or invalid cache ratio %s without changing input/output',
+  (cache_ratio) => {
+    const view = getDocumentationPrice(
+      { ...base, cache_ratio },
+      { ...options, includeCacheRead: true }
+    )
+    expect(view.entries.map((e) => e.field)).toEqual([
+      'inputPrice',
+      'outputPrice',
+    ])
+  }
+)
+it('includes dynamic cache read pricing but excludes cache creation and incomplete cache tiers', () => {
+  const model = {
+    ...base,
+    billing_mode: 'tiered_expr',
+    billing_expr: 'tier("base",p*3+c*15+cr*0+cc*3.75+cc1h*6)',
+  }
+  const price = getDocumentationPrice(model, {
+    ...options,
+    includeCacheRead: true,
+  })
+  expect(price.entries.map((e) => e.field)).toEqual([
+    'inputPrice',
+    'outputPrice',
+    'cacheReadPrice',
+  ])
+  expect(price.entries[2].formatted).toBe('0')
+  expect(
+    getDocumentationPrice(model, options).entries.map((e) => e.field)
+  ).toEqual(['inputPrice', 'outputPrice'])
+  const partial = {
+    ...model,
+    billing_expr: 'len < 1000 ? tier("a",p*3+c*15+cr*0.3) : tier("b",p*6+c*30)',
+  }
+  expect(
+    getDocumentationPrice(partial, {
+      ...options,
+      includeCacheRead: true,
+    }).entries.some((e) => e.field === 'cacheReadPrice')
+  ).toBe(false)
+})

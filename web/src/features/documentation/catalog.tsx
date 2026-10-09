@@ -644,6 +644,9 @@ export function PricingListPrice({
     userGroup && model.enable_groups.includes(userGroup) ? userGroup : undefined
   const price = getDocumentationPrice(model, {
     tokenUnit: 'M',
+    includeCacheRead:
+      getDocumentationModelKinds(model).length === 1 &&
+      getDocumentationModelKinds(model)[0] === 'text',
     showCurrencySymbol: false,
     groupRatioMultiplier: getDynamicDisplayGroupRatio(model, selectedGroup),
     priceRate: data.priceRate,
@@ -660,7 +663,7 @@ export function PricingListPrice({
         .filter((value) => typeof value === 'number')
     ).size > 1
   const unitLabels: Record<string, string> = {
-    token: t('1M token'),
+    token: t('Compact million-token unit', { defaultValue: '1M token' }),
     image: t('image'),
     second: t('second'),
     request: t('request'),
@@ -692,7 +695,9 @@ export function PricingListPrice({
           let label = t('Price')
           if (entry.field === 'inputPrice') label = t('Input')
           else if (entry.field === 'outputPrice') label = t('Output')
-          else if (entry.labelKind === 'schema') {
+          else if (entry.field === 'cacheReadPrice') {
+            label = t('Cached token price', { defaultValue: 'Cached' })
+          } else if (entry.labelKind === 'schema') {
             label = taskPriceLabel(entry.description, t('Price'), i18n.language)
           } else if (entry.field === 'constant') label = t('Additional charge')
           const unit = taskUsageUnitLabel(

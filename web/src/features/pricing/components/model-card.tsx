@@ -24,6 +24,7 @@ import { CopyButton } from '@/components/copy-button'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import { getLobeIcon } from '@/lib/lobe-icon'
+import { resolveModelProvider } from '@/lib/model-provider'
 import { cn } from '@/lib/utils'
 import { useSystemConfigStore } from '@/stores/system-config-store'
 
@@ -68,6 +69,9 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
   const endpoints = props.model.supported_endpoint_types || []
   const modelIconKey = getPricingModelIconKey(props.model)
   const modelIcon = modelIconKey ? getLobeIcon(modelIconKey, 28) : null
+  const vendorName =
+    props.model.vendor_name?.trim() ||
+    resolveModelProvider(props.model.model_name)?.name
   const initial = props.model.model_name?.charAt(0).toUpperCase() || '?'
   const isUnconfiguredTaskUsage = isUnconfiguredTaskUsageModel(props.model)
   const billingTime = useBillingTime(props.model.billing_expr)
@@ -273,12 +277,12 @@ export const ModelCard = memo(function ModelCard(props: ModelCardProps) {
           >
             {props.model.model_name}
           </h3>
-          {props.model.vendor_name && (
+          {vendorName && (
             <p
               className='text-muted-foreground mt-1 truncate text-xs'
-              title={props.model.vendor_name}
+              title={vendorName}
             >
-              {props.model.vendor_name}
+              {vendorName}
             </p>
           )}
         </div>

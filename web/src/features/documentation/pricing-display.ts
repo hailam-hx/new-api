@@ -39,7 +39,10 @@ export type DocumentationPrice = {
 /** A display of published selling prices, never an evaluator of billing expressions. */
 export function getDocumentationPrice(
   model: PricingModel,
-  options: DynamicPriceOptions & { selectedGroup?: string }
+  options: DynamicPriceOptions & {
+    selectedGroup?: string
+    includeCacheRead?: boolean
+  }
 ): DocumentationPrice {
   const unavailable: DocumentationPrice = {
     state: 'missing',
@@ -132,18 +135,45 @@ export function getDocumentationPrice(
     ) {
       return unavailable
     }
+    const priceTypes: ('input' | 'output' | 'cache')[] = ['input', 'output']
+    if (
+      options.includeCacheRead &&
+      typeof model.cache_ratio === 'number' &&
+      Number.isFinite(model.cache_ratio) &&
+      model.cache_ratio >= 0 &&
+      Number.isFinite(model.model_ratio * model.cache_ratio)
+    ) {
+      priceTypes.push('cache')
+    }
     return {
       state: 'priced',
       variable: false,
-      entries: (['input', 'output'] as const).map((type) => ({
+      entries: priceTypes.map((type) => ({
         key: type,
-        field: type === 'input' ? 'inputPrice' : 'outputPrice',
-        label: type === 'input' ? 'Input' : 'Output',
-        shortLabel: type === 'input' ? 'Input' : 'Output',
+        field: {
+          input: 'inputPrice',
+          output: 'outputPrice',
+          cache: 'cacheReadPrice',
+        }[type],
+        label: {
+          input: 'Input',
+          output: 'Output',
+          cache: 'Cached token price',
+        }[type],
+        shortLabel: {
+          input: 'Input',
+          output: 'Output',
+          cache: 'Cached token price',
+        }[type],
         labelKind: 'i18n',
         unit: 'token',
         value:
-          model.model_ratio * (type === 'output' ? model.completion_ratio : 1),
+          model.model_ratio *
+          {
+            input: 1,
+            output: model.completion_ratio,
+            cache: model.cache_ratio ?? 0,
+          }[type],
         formatted: formatPrice(
           model,
           type,
@@ -234,12 +264,24 @@ export function getDocumentationPrice(
   }
   if (!entries.length) return { ...unavailable, state: 'details' }
   const variable = entries.some((entry) => entry.minValue !== entry.maxValue)
-  // Cache remains in Model Detail. Preserve non-token terms (including a base task fee).
+  // Only expose a separate read price when every published tier has one.
+  // Missing tier data must not become a free cached-input price.
+  const showCacheRead =
+    options.includeCacheRead &&
+    summary.tiers.every(
+      (tier) =>
+        !('unitPrices' in tier) &&
+        typeof tier.cacheReadPrice === 'number' &&
+        Number.isFinite(tier.cacheReadPrice) &&
+        tier.cacheReadPrice >= 0
+    )
+  // Preserve non-token terms (including a base task fee); cache writes stay in detail.
   const primary = entries.filter(
     (entry) =>
       entry.unit !== 'token' ||
       !entry.variable ||
-      ['inputPrice', 'outputPrice'].includes(entry.field)
+      ['inputPrice', 'outputPrice'].includes(entry.field) ||
+      (showCacheRead && entry.field === 'cacheReadPrice')
   )
   return {
     state: 'priced',

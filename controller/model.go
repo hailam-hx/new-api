@@ -20,6 +20,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
@@ -249,6 +250,7 @@ func ListModels(c *gin.Context, modelType int) {
 		}
 	}
 	models := service.GetGroupsEnabledModels(ownerGroups)
+	pluginGeneration := jsplugin.DefaultRegistry.Generation()
 	for _, modelName := range models {
 		if modelLimitEnable {
 			matchingName := ratio_setting.RoutingMatchModelName(modelName)
@@ -257,7 +259,22 @@ func ListModels(c *gin.Context, modelType int) {
 			}
 		}
 		if !acceptUnsetRatioModel && !helper.HasModelBillingConfig(modelName) {
-			continue
+			// Provider overrides can price a task model without model-level pricing.
+			configured := false
+			for _, plugin := range pluginGeneration.PluginsByModel(modelName) {
+				expression, ok := billing_setting.GetPluginBillingExpr(plugin.Meta.Key, modelName)
+				if !ok {
+					continue
+				}
+				schema, _ := plugin.Meta.UsageForModel(modelName)
+				if billing_setting.TaskExprCompatible(expression, schema) {
+					configured = true
+					break
+				}
+			}
+			if !configured {
+				continue
+			}
 		}
 		userModelNames = append(userModelNames, modelName)
 	}

@@ -502,8 +502,10 @@ it('shows a pricing-focused table without Provider or Context and uses number be
             {
               ...model,
               enable_groups: ['default'],
+              supported_endpoint_types: ['openai'],
               billing_mode: 'tiered_expr',
-              billing_expr: 'tier("base", p * 1.5 + c * 6)',
+              billing_expr:
+                'tier("base", p * 1.5 + c * 6 + cr * 0.15 + cc * 2)',
             },
           ],
         }}
@@ -521,6 +523,8 @@ it('shows a pricing-focused table without Provider or Context and uses number be
   ).toEqual(['Model', 'Type', 'Price'])
   expect(screen.getByText('3 Points / 1M token')).toBeVisible()
   expect(screen.getByText('12 Points / 1M token')).toBeVisible()
+  expect(screen.getByText('0.3 Points / 1M token')).toBeVisible()
+  expect(screen.getByText('Cached')).toBeVisible()
   expect(screen.queryByText('From')).not.toBeInTheDocument()
   expect(screen.getByText('Input')).toBeVisible()
   expect(screen.getByText('Output')).toBeVisible()
@@ -528,6 +532,44 @@ it('shows a pricing-focused table without Provider or Context and uses number be
     screen.queryByText(/tier\(|ModelRatio|CompletionRatio|GroupRatio/)
   ).not.toBeInTheDocument()
 })
+
+it.each(['openai', 'image-generation', 'openai-video', 'audio'])(
+  'only displays cached input for Chat pricing, preserving %s pricing',
+  async (endpoint) => {
+    const root = createRootRoute({
+      component: () => (
+        <ModelCatalog
+          pricing
+          data={{
+            ...data,
+            models: [
+              {
+                ...model,
+                supported_endpoint_types: [endpoint],
+                billing_mode: 'tiered_expr',
+                billing_expr: 'tier("base", p * 1.5 + c * 6 + cr * 0)',
+              },
+            ],
+          }}
+        />
+      ),
+    })
+    const router = createRouter({
+      routeTree: root,
+      history: createMemoryHistory(),
+    })
+    await router.load()
+    render(<RouterProvider router={router} />)
+    expect(screen.getByText('Input')).toBeVisible()
+    expect(screen.getByText('Output')).toBeVisible()
+    if (endpoint === 'openai') {
+      expect(screen.getByText('Cached')).toBeVisible()
+      expect(screen.getByText(/0 USD \/ 1M token/)).toBeVisible()
+    } else {
+      expect(screen.queryByText('Cached')).not.toBeInTheDocument()
+    }
+  }
+)
 
 it('classifies gateway Chat and Image from explicit usage while keeping ambiguous tasks unknown', () => {
   const gateway = [

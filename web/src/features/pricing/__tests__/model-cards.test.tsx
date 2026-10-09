@@ -90,6 +90,34 @@ afterEach(() => {
 
 describe('model cards', () => {
   it.each([
+    [{ model_name: 'claude-fable-5-1' }, 'Anthropic'],
+    [{ model_name: 'gpt-6-luna' }, 'OpenAI'],
+    [{ model_name: 'gpt-6-luna', vendor_name: '   ' }, 'OpenAI'],
+    [
+      { model_name: 'claude-fable-5-1', vendor_name: 'Configured provider' },
+      'Configured provider',
+    ],
+    [{ model_name: 'private-model' }, undefined],
+  ])(
+    'uses configured provider names before model-family fallback: %j',
+    (model, expected) => {
+      render(<ModelCard model={pricingModel(model)} onClick={vi.fn()} />)
+      if (expected) {
+        expect(
+          screen.getByText(expected, { exact: true, selector: 'p' })
+        ).toBeVisible()
+      } else {
+        expect(
+          screen.queryByText('Anthropic', { exact: true })
+        ).not.toBeInTheDocument()
+        expect(
+          screen.queryByText('OpenAI', { exact: true })
+        ).not.toBeInTheDocument()
+      }
+    }
+  )
+
+  it.each([
     [{ model_name: 'claude-fable-5-1' }, 'Claude.Color'],
     [{ model_name: 'gemini-custom' }, 'Gemini.Color'],
     [{ model_name: 'claude-fable-5-1', icon: 'OpenAI' }, 'OpenAI'],
@@ -98,6 +126,16 @@ describe('model cards', () => {
       { model_name: 'claude-fable-5-1', icon: 'Claude', vendor_icon: 'OpenAI' },
       'Claude',
     ],
+    [{ model_name: 'happyhorse-1.0-i2v' }, 'HappyHorse'],
+    [{ model_name: 'happyhorse-1.0-r2v' }, 'HappyHorse'],
+    [{ model_name: 'happyhorse-1.0-t2v' }, 'HappyHorse'],
+    [{ model_name: 'happyhorse-1.0-video-edit' }, 'HappyHorse'],
+    [{ model_name: 'happyhorse-1.1-i2v' }, 'HappyHorse'],
+    [{ model_name: 'happyhorse-1.1-r2v' }, 'HappyHorse'],
+    [{ model_name: 'happyhorse-1.1-t2v' }, 'HappyHorse'],
+    [{ model_name: 'happyhorse-1.0-r2v', icon: 'OpenAI' }, 'OpenAI'],
+    [{ model_name: 'happyhorse-1.0-r2v', vendor_icon: 'Qwen' }, 'Qwen'],
+    [{ model_name: 'dh-avatar' }, undefined],
     [{ model_name: 'private-model' }, undefined],
   ])(
     'resolves the model square icon from metadata before family fallback: %j',

@@ -11,8 +11,10 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/jsplugin"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/config"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -528,4 +530,77 @@ func TestSetupLoginDoesNotTouchPasswordWhenPasswordFieldOmitted(t *testing.T) {
 	var stored model.User
 	require.NoError(t, db.First(&stored, user.Id).Error)
 	assert.Equal(t, hashedPassword, stored.Password)
+}
+
+func TestListModelsIncludesCompatiblePluginPricing(t *testing.T) {
+	withSelfUseModeDisabled(t)
+	withTieredBillingConfig(t, map[string]string{}, map[string]string{})
+	db := setupModelListControllerTestDB(t)
+	const pluginKey = "model-list-pricing"
+	names := []string{"zz-plugin-priced", "zz-plugin-empty", "zz-plugin-invalid", "zz-plugin-incompatible", "zz-plugin-unpriced", "zz-plugin-disabled", "zz-plugin-other-group"}
+	modelsJSON, err := common.Marshal(names)
+	require.NoError(t, err)
+	source := fmt.Sprintf(`
+ export const meta = {
+ apiVersion: 1, key: %q, name: "Model List Pricing", version: "1.0.0", author: {name: "Test"},
+ models: %s, fetchMode: "per_task",
+ usageSchema: {seconds: {type: "number", unit: "second", description: {en: "Video generation unit price", zh: "视频生成单价"}}}
+ };
+ export function buildSubmitRequest() { return {}; }
+ export function parseSubmitResponse() { return {}; }
+ export function buildQueryRequest() { return {}; }
+ export function parseTaskResult() { return {}; }
+ `, pluginKey, modelsJSON)
+	_, err = jsplugin.DefaultRegistry.Register(source, jsplugin.Options{})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, jsplugin.DefaultRegistry.Unregister(pluginKey)) })
+	expressions := map[string]string{
+		pluginKey + "::zz-plugin-priced":       `tier("base", u("seconds") * 2)`,
+		pluginKey + "::zz-plugin-empty":        "   ",
+		pluginKey + "::zz-plugin-invalid":      `tier(`,
+		pluginKey + "::zz-plugin-incompatible": `tier("base", u("images") * 2)`,
+		pluginKey + "::zz-plugin-disabled":     `tier("base", u("seconds") * 2)`,
+		pluginKey + "::zz-plugin-other-group":  `tier("base", u("seconds") * 2)`,
+		"missing-plugin::zz-plugin-stale":      `tier("base", u("seconds") * 2)`,
+	}
+	expressionsJSON, err := common.Marshal(expressions)
+	require.NoError(t, err)
+	require.NoError(t, config.GlobalConfig.LoadFromDB(map[string]string{billing_setting.PluginBillingExprOption: string(expressionsJSON)}))
+	abilities := make([]model.Ability, 0, len(names)+1)
+	for _, name := range names {
+		group := "default"
+		if name == "zz-plugin-other-group" {
+			group = "vip"
+		}
+		abilities = append(abilities, model.Ability{Group: group, Model: name, ChannelId: 1, Enabled: name != "zz-plugin-disabled"})
+	}
+	abilities = append(abilities, model.Ability{Group: "default", Model: "zz-plugin-stale", ChannelId: 1, Enabled: true})
+	require.NoError(t, db.Create(&abilities).Error)
+	for _, tc := range []struct {
+		name  string
+		limit map[string]bool
+		want  bool
+	}{
+		{name: "unrestricted", want: true},
+		{name: "token allows configured model", limit: map[string]bool{"zz-plugin-priced": true}, want: true},
+		{name: "token excludes configured model", limit: map[string]bool{"zz-plugin-unpriced": true}, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			ctx, _ := gin.CreateTestContext(recorder)
+			ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+			common.SetContextKey(ctx, constant.ContextKeyUserGroup, "default")
+			if tc.limit != nil {
+				common.SetContextKey(ctx, constant.ContextKeyTokenModelLimitEnabled, true)
+				common.SetContextKey(ctx, constant.ContextKeyTokenModelLimit, tc.limit)
+			}
+			ListModels(ctx, constant.ChannelTypeOpenAI)
+			ids := decodeListModelsResponse(t, recorder)
+			if tc.want {
+				assert.Equal(t, map[string]struct{}{"zz-plugin-priced": {}}, ids)
+			} else {
+				assert.Empty(t, ids)
+			}
+		})
+	}
 }
