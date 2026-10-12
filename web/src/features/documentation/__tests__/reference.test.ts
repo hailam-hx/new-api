@@ -57,7 +57,7 @@ describe('documentation source contracts', () => {
   it('keeps article slugs unique and navigation in the six user groups while preserving legacy guide URLs', () => {
     expect(new Set(articles.map((a) => a.slug)).size).toBe(articles.length)
     expect(groups).toHaveLength(6)
-    expect(beginnerArticles).toHaveLength(18)
+    expect(beginnerArticles).toHaveLength(19)
     expect(getArticle('admin-providers')).toBeDefined()
     expect(beginnerArticles.every((a) => groups.includes(a.group))).toBe(true)
     expect(articles.every((a) => a.sources.length > 0)).toBe(true)

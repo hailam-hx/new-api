@@ -64,7 +64,7 @@ describe('documentation navigation', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     )
   })
-  it('finds the short Chat guide without exposing endpoint inventories', async () => {
+  it('finds the Chat guide and public endpoint without exposing management APIs', async () => {
     const user = userEvent.setup()
     const router = await renderNavigation(<DocsSearch models={[]} />)
     await user.click(
@@ -75,8 +75,8 @@ describe('documentation navigation', () => {
       '/v1/chat/completions'
     )
     expect(
-      screen.queryByRole('link', { name: /POST \/v1\/chat\/completions/ })
-    ).not.toBeInTheDocument()
+      screen.getByRole('link', { name: /POST \/v1\/chat\/completions/ })
+    ).toBeVisible()
     await user.click(screen.getByRole('link', { name: /^Chat/ }))
     await waitFor(() =>
       expect(router.state.location.pathname).toBe('/docs/text-chat')
@@ -96,9 +96,9 @@ describe('documentation navigation', () => {
   })
 })
 
-it('keeps the primary sidebar to eighteen user guides and hides administration even on a legacy provider URL', async () => {
+it('keeps nineteen primary guides including customer reference and hides administration on legacy provider URLs', async () => {
   await renderNavigation(<DocsNavigation slug='provider-14' />)
-  expect(screen.getAllByRole('link')).toHaveLength(18)
+  expect(screen.getAllByRole('link')).toHaveLength(19)
   expect(screen.getByRole('link', { name: 'API Key' })).toBeVisible()
   expect(
     screen.queryByRole('link', { name: 'Providers / Channels' })
@@ -113,14 +113,13 @@ it.each([false, true])(
     await i18next.changeLanguage('vi')
     try {
       await renderNavigation(<DocsNavigation slug='image' mobile={mobile} />)
-      if (mobile)
-        {await userEvent
-          .setup()
-          .click(
-            screen.getByRole('button', {
-              name: vi.translation['Documentation menu'],
-            })
-          )}
+      if (mobile) {
+        await userEvent.setup().click(
+          screen.getByRole('button', {
+            name: vi.translation['Documentation menu'],
+          })
+        )
+      }
       expect(
         screen.getByRole('link', { name: 'Hình ảnh (Image)' })
       ).toHaveAttribute('href', '/docs/image')

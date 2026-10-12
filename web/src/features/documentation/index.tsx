@@ -412,6 +412,7 @@ export function Documentation(props: { slug?: string; modelId?: string }) {
                 'image',
                 'video',
                 'audio',
+                'reference',
               ].includes(article.kind) &&
                 article.sections
                   .filter(() => article.kind !== 'pricing')

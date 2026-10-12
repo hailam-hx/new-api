@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { CopyButton } from '@/components/copy-button'
@@ -24,15 +24,8 @@ import { StaticDataTable } from '@/components/data-table'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Markdown } from '@/components/ui/markdown'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 
+import { apiReferenceGroups, publicApiEndpoints } from './api-reference-data'
 import { DocsCode } from './code-examples'
 import { DOC_ERROR_GUIDANCE, DEFAULT_ERROR_GUIDANCE } from './content'
 import reference from './generated/reference.json'
@@ -40,130 +33,268 @@ import { endpointAnchor } from './lib'
 
 export function ApiReference() {
   const { t } = useTranslation()
-  const [query, setQuery] = useState('')
-  const [scope, setScope] = useState('relay')
-  const endpoints = useMemo(
-    () =>
-      reference.endpoints.filter((endpoint) => {
-        const isManagement = endpoint.path.startsWith('/api/')
-        if (scope === 'relay' && isManagement) return false
-        if (scope === 'management' && !isManagement) return false
-        return `${endpoint.method} ${endpoint.path} ${endpoint.summary} ${endpoint.handler}`
-          .toLowerCase()
-          .includes(query.toLowerCase())
-      }),
-    [query, scope]
-  )
-  // An anchor found by global search must reveal its operation even if the default scope hides it.
-  const anchor =
-    typeof window !== 'undefined' ? window.location.hash.slice(1) : ''
-  const target = reference.endpoints.find(
-    (endpoint) => endpointAnchor(endpoint.method, endpoint.path) === anchor
-  )
-  const shown =
-    target && !endpoints.includes(target) ? [target, ...endpoints] : endpoints
   return (
-    <section className='mt-8 min-w-0' id='operations'>
-      <h2 className='mb-4 text-xl font-semibold'>{t('Endpoints')}</h2>
-      <div className='mb-6 flex flex-wrap gap-3'>
-        <Input
-          aria-label={t('Filter endpoints')}
-          placeholder={t('Filter endpoints')}
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          className='min-w-40 flex-1'
+    <div className='mt-8 min-w-0 space-y-9'>
+      <section id='authentication' className='scroll-mt-40 space-y-3'>
+        <h2 className='text-xl font-semibold'>{t('Authentication')}</h2>
+        <p>{t('Base URL')}</p>
+        <DocsCode language='bash' code='https://hotx-api.com/v1' />
+        <DocsCode language='bash' code='Authorization: Bearer YOUR_API_KEY' />
+        <p className='text-muted-foreground text-sm'>
+          {t('Every request needs a valid API key.')}
+        </p>
+        <a href='/docs/api-key' className='text-primary text-sm underline'>
+          {t('API Key')} →
+        </a>
+      </section>
+      <section id='operations' className='scroll-mt-40 space-y-3'>
+        <h2 className='text-xl font-semibold'>{t('Endpoints')}</h2>
+        <StaticDataTable
+          data={publicApiEndpoints}
+          getRowKey={(endpoint) => endpoint.method + endpoint.path}
+          tableClassName='table-fixed w-full [&_td]:whitespace-normal [&_td]:break-words [&_th]:whitespace-normal [&_th]:break-words'
+          columns={[
+            {
+              id: 'method',
+              header: t('Method'),
+              className: 'w-28',
+              cell: (endpoint) => (
+                <Badge variant='outline'>{endpoint.method}</Badge>
+              ),
+            },
+            {
+              id: 'path',
+              header: t('Endpoint'),
+              cell: (endpoint) => (
+                <a
+                  href={`#${endpointAnchor(endpoint.method, endpoint.path)}`}
+                  className='font-mono text-xs break-all underline'
+                >
+                  {endpoint.path}
+                </a>
+              ),
+            },
+          ]}
         />
-        <Select
-          value={scope}
-          onValueChange={(value) => setScope(String(value))}
-        >
-          <SelectTrigger aria-label={t('API scope')} className='w-44'>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value='relay'>{t('Relay API')}</SelectItem>
-              <SelectItem value='management'>{t('Management API')}</SelectItem>
-              <SelectItem value='all'>{t('All')}</SelectItem>
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-      </div>
-      {shown.length === 0 && <p role='status'>{t('No results found')}</p>}
-      <div className='divide-border divide-y'>
-        {shown.map((endpoint) => (
-          <section
-            key={endpoint.method + endpoint.path}
-            id={endpointAnchor(endpoint.method, endpoint.path)}
-            className='scroll-mt-40 py-5'
-          >
-            <div className='flex min-w-0 items-start gap-2'>
-              <Badge variant='outline'>{endpoint.method}</Badge>
-              <h3 className='min-w-0 flex-1 font-mono text-sm break-all'>
-                {endpoint.path}
-              </h3>
-              <CopyButton value={endpoint.path} size='sm' />
-            </div>
-            <p className='text-muted-foreground mt-2 text-xs'>
-              {endpoint.handler}
-            </p>
-            {endpoint.middleware.length > 0 && (
-              <details className='mt-3 text-sm'>
-                <summary className='cursor-pointer'>
-                  {t('Authentication and middleware')}
-                </summary>
-                <ul className='mt-2 space-y-1'>
-                  {endpoint.middleware.map((value) => (
-                    <li key={value} className='font-mono text-xs break-all'>
-                      {value}
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            )}
-            {endpoint.schemaSource ? (
-              <details className='mt-3 text-sm'>
-                <summary className='cursor-pointer'>
-                  {t('Parameters, request and response schemas')}
-                </summary>
-                <p className='text-muted-foreground mt-3 text-xs'>
-                  {t(
-                    'Checked-in OpenAPI contract; verify provider-specific behavior.'
-                  )}
+      </section>
+      {apiReferenceGroups.map(([group, title]) => (
+        <section id={group} key={group} className='scroll-mt-40 space-y-8'>
+          <h2 className='text-xl font-semibold'>{t(title)}</h2>
+          {publicApiEndpoints
+            .filter((endpoint) => endpoint.group === group)
+            .map((endpoint) => (
+              <section
+                id={endpointAnchor(endpoint.method, endpoint.path)}
+                key={endpoint.method + endpoint.path}
+                className='min-w-0 scroll-mt-40 space-y-4 border-t pt-5'
+              >
+                <div className='flex min-w-0 items-start gap-2'>
+                  <Badge variant='outline'>{endpoint.method}</Badge>
+                  <h3 className='min-w-0 flex-1 font-mono text-sm break-all'>
+                    {endpoint.path}
+                  </h3>
+                  <CopyButton value={endpoint.path} size='sm' />
+                </div>
+                <p>{t(endpoint.description)}</p>
+                <p className='text-muted-foreground text-sm'>
+                  {t('Authentication')}:{' '}
+                  <a className='underline' href='#authentication'>
+                    Bearer API Key
+                  </a>
                 </p>
-                <DocsCode
-                  language='json'
-                  code={JSON.stringify(
-                    {
-                      parameters: endpoint.parameters,
-                      requestBody: endpoint.requestBody,
-                      responses: endpoint.responses,
-                    },
-                    null,
-                    2
-                  )}
-                />
-              </details>
-            ) : (
-              <p className='text-muted-foreground mt-3 text-xs'>
-                {t(
-                  'No matching OpenAPI schema is available for this registered operation.'
+                {endpoint.note && (
+                  <p className='text-muted-foreground text-sm'>
+                    {t(endpoint.note)}
+                  </p>
                 )}
-              </p>
-            )}
-            <p className='text-muted-foreground mt-3 text-xs'>
-              {t('Source')}: <code>{endpoint.source}</code>
-              {endpoint.schemaSource && (
-                <>
-                  {' '}
-                  · <code>{endpoint.schemaSource}</code>
-                </>
-              )}
-            </p>
-          </section>
-        ))}
-      </div>
-    </section>
+                <h4 className='font-semibold'>{t('Request parameters')}</h4>
+                {endpoint.contentType && (
+                  <p className='font-mono text-xs break-all'>
+                    {t('Request body')}: {endpoint.contentType}
+                  </p>
+                )}
+                {endpoint.fields.length ? (
+                  <>
+                    <p className='text-muted-foreground text-sm'>
+                      {t(
+                        'Main parameters only. Optional fields depend on model and channel support.'
+                      )}
+                    </p>
+                    <StaticDataTable
+                      data={endpoint.fields}
+                      getRowKey={(field) => field.name}
+                      tableClassName='w-full table-fixed [&_td]:whitespace-normal [&_td]:break-words [&_th]:whitespace-normal [&_th]:break-words'
+                      columns={[
+                        {
+                          id: 'field',
+                          header: t('Field'),
+                          cell: (field) => (
+                            <code className='text-xs break-all'>
+                              {field.name}
+                            </code>
+                          ),
+                        },
+                        {
+                          id: 'type',
+                          header: t('Type'),
+                          cell: (field) => (
+                            <code className='text-xs break-all'>
+                              {field.type}
+                            </code>
+                          ),
+                        },
+                        {
+                          id: 'required',
+                          header: t('Required'),
+                          className: 'w-20',
+                          cell: (field) => {
+                            if (field.conditional) {
+                              return t('Model-dependent parameter')
+                            }
+                            return t(field.required ? 'Yes' : 'No')
+                          },
+                        },
+                        {
+                          id: 'description',
+                          header: t('Description'),
+                          cell: (field) => {
+                            if (field.name === 'model') return t('Model ID')
+                            if (field.name === 'messages') {
+                              return t(
+                                'An array of messages with role and content.'
+                              )
+                            }
+                            if (field.name === 'prompt') return t('Prompt')
+                            if (field.name === 'input') {
+                              return t('Text or structured input.')
+                            }
+                            if (field.name === 'stream') return t('Streaming')
+                            if (
+                              [
+                                'max_tokens',
+                                'max_completion_tokens',
+                                'max_output_tokens',
+                              ].includes(field.name)
+                            ) {
+                              return t('Maximum number of output tokens.')
+                            }
+                            if (field.name.endsWith('_id')) {
+                              return t('Task or response identifier')
+                            }
+                            if (
+                              ['file', 'image', 'mask'].includes(field.name)
+                            ) {
+                              return t('File')
+                            }
+                            return t('Model-dependent parameter')
+                          },
+                        },
+                      ]}
+                    />
+                  </>
+                ) : (
+                  <p className='text-muted-foreground text-sm'>
+                    {t('No request body.')}
+                  </p>
+                )}
+                <h4 className='font-semibold'>{t('Example request')}</h4>
+                <DocsCode language='bash' code={endpoint.example} />
+                <h4 className='font-semibold'>{t('Response')}</h4>
+                {typeof endpoint.response === 'string' ? (
+                  <p className='text-sm'>
+                    {t('Binary response')}: <code>{endpoint.response}</code>
+                  </p>
+                ) : (
+                  <>
+                    <p className='text-muted-foreground text-sm'>
+                      {t(
+                        'Illustrative response shape. Optional fields and usage depend on the model.'
+                      )}
+                    </p>
+                    <DocsCode
+                      language='json'
+                      code={JSON.stringify(endpoint.response, null, 2)}
+                    />
+                  </>
+                )}
+                <p className='text-sm'>
+                  {t('Errors')}:{' '}
+                  <a
+                    className='text-primary underline'
+                    href='#reference-errors'
+                  >
+                    {t('Common errors')}
+                  </a>
+                </p>
+                <details className='text-muted-foreground text-xs'>
+                  <summary className='cursor-pointer'>{t('Source')}</summary>
+                  <p className='mt-2 break-words'>
+                    {endpoint.routeSource} · {endpoint.source}
+                  </p>
+                  {endpoint.schemaSource && (
+                    <p className='mt-1 break-words'>{endpoint.schemaSource}</p>
+                  )}
+                </details>
+              </section>
+            ))}
+          {['chat', 'images', 'video', 'audio'].includes(group) && (
+            <a
+              className='text-primary text-sm underline'
+              href={`/docs/${({ chat: 'text-chat', images: 'image', video: 'video', audio: 'audio' } as Record<string, string>)[group]}`}
+            >
+              {t('Read the beginner guide')} →
+            </a>
+          )}
+        </section>
+      ))}
+      <section id='reference-errors' className='scroll-mt-40 space-y-4'>
+        <h2 className='text-xl font-semibold'>{t('Common errors')}</h2>
+        <p className='text-muted-foreground text-sm'>
+          {t(
+            'Inspect HTTP status and error.message. error.type and error.code vary; code may be empty.'
+          )}
+        </p>
+        <StaticDataTable
+          tableClassName='w-full table-fixed [&_td]:whitespace-normal [&_td]:break-words [&_th]:whitespace-normal [&_th]:break-words'
+          data={[
+            { status: 400, label: 'Invalid request' },
+            { status: 401, label: 'Invalid, expired or disabled API key' },
+            { status: 403, label: 'Access denied' },
+            { status: 404, label: 'Task or response not found' },
+            { status: 429, label: 'Too many requests' },
+            { status: 500, label: 'Server error' },
+          ]}
+          getRowKey={(row) => String(row.status)}
+          columns={[
+            {
+              id: 'status',
+              header: t('HTTP Status'),
+              className: 'w-28',
+              cell: (row) => row.status,
+            },
+            {
+              id: 'meaning',
+              header: t('Description'),
+              cell: (row) => t(row.label),
+            },
+          ]}
+        />
+        <DocsCode
+          language='json'
+          code={JSON.stringify(
+            {
+              error: {
+                message: 'ERROR_MESSAGE',
+                type: 'new_api_error',
+                code: '',
+              },
+            },
+            null,
+            2
+          )}
+        />
+      </section>
+    </div>
   )
 }
 

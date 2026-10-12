@@ -344,7 +344,7 @@
         "middleware.BodyStorageCleanup()",
         "middleware.GlobalAPIRateLimit()"
       ],
-      "source": "router/api-router.go:33",
+      "source": "router/api-router.go:36",
       "handler": "controller.GetAbout",
       "summary": "获取关于信息",
       "schemaSource": "docs/openapi/api.json",
@@ -370,7 +370,7 @@
         "middleware.AdminAuth()",
         "middleware.RequirePermission(authz.AuditRead)"
       ],
-      "source": "router/api-router.go:319",
+      "source": "router/api-router.go:322",
       "handler": "controller.GetAuditLogs",
       "summary": "",
       "schemaSource": "",
@@ -390,7 +390,7 @@
         "middleware.DisableCache()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:320",
+      "source": "router/api-router.go:323",
       "handler": "controller.GetAuditLogs",
       "summary": "",
       "schemaSource": "",
@@ -827,6 +827,126 @@
           "headers": {}
         }
       }
+    },
+    {
+      "method": "GET",
+      "path": "/api/channel/{id}/runtime-verification",
+      "middleware": [
+        "middleware.RouteTag(\"api\")",
+        "gzip.Gzip(gzip.DefaultCompression)",
+        "middleware.AccessTokenAudit()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.GlobalAPIRateLimit()",
+        "middleware.AdminAuth()",
+        "middleware.RequirePermission(authz.ChannelRead)"
+      ],
+      "source": "router/channel-router.go:32",
+      "handler": "controller.GetChannelRuntimeVerification",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/api/channel/{id}/runtime-verification",
+      "middleware": [
+        "middleware.RouteTag(\"api\")",
+        "gzip.Gzip(gzip.DefaultCompression)",
+        "middleware.AccessTokenAudit()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.GlobalAPIRateLimit()",
+        "middleware.AdminAuth()",
+        "middleware.RequirePermission(authz.ChannelOperate)"
+      ],
+      "source": "router/channel-router.go:32",
+      "handler": "controller.PrepareChannelRuntimeVerification",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "GET",
+      "path": "/api/channel/{id}/runtime-verification/{run_id}",
+      "middleware": [
+        "middleware.RouteTag(\"api\")",
+        "gzip.Gzip(gzip.DefaultCompression)",
+        "middleware.AccessTokenAudit()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.GlobalAPIRateLimit()",
+        "middleware.AdminAuth()",
+        "middleware.RequirePermission(authz.ChannelRead)"
+      ],
+      "source": "router/channel-router.go:32",
+      "handler": "controller.GetChannelRuntimeVerification",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/api/channel/{id}/runtime-verification/execute",
+      "middleware": [
+        "middleware.RouteTag(\"api\")",
+        "gzip.Gzip(gzip.DefaultCompression)",
+        "middleware.AccessTokenAudit()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.GlobalAPIRateLimit()",
+        "middleware.AdminAuth()",
+        "middleware.RequirePermission(authz.ChannelOperate)"
+      ],
+      "source": "router/channel-router.go:32",
+      "handler": "controller.ExecuteChannelRuntimeVerification",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/api/channel/{id}/runtime-verification/plan",
+      "middleware": [
+        "middleware.RouteTag(\"api\")",
+        "gzip.Gzip(gzip.DefaultCompression)",
+        "middleware.AccessTokenAudit()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.GlobalAPIRateLimit()",
+        "middleware.AdminAuth()",
+        "middleware.RequirePermission(authz.ChannelOperate)"
+      ],
+      "source": "router/channel-router.go:32",
+      "handler": "controller.PlanChannelRuntimeVerification",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/api/channel/{id}/runtime-verification/resume",
+      "middleware": [
+        "middleware.RouteTag(\"api\")",
+        "gzip.Gzip(gzip.DefaultCompression)",
+        "middleware.AccessTokenAudit()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.GlobalAPIRateLimit()",
+        "middleware.AdminAuth()",
+        "middleware.RequirePermission(authz.ChannelOperate)"
+      ],
+      "source": "router/channel-router.go:32",
+      "handler": "controller.ResumeChannelRuntimeVerification",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
     },
     {
       "method": "GET",
@@ -1858,7 +1978,7 @@
         "middleware.BodyStorageCleanup()",
         "middleware.GlobalAPIRateLimit()"
       ],
-      "source": "router/api-router.go:63",
+      "source": "router/api-router.go:66",
       "handler": "controller.CreemWebhook",
       "summary": "Creem Webhook",
       "schemaSource": "docs/openapi/api.json",
@@ -1882,7 +2002,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:239",
+      "source": "router/api-router.go:242",
       "handler": "controller.GetCustomOAuthProviders",
       "summary": "",
       "schemaSource": "",
@@ -1901,7 +2021,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:241",
+      "source": "router/api-router.go:244",
       "handler": "controller.CreateCustomOAuthProvider",
       "summary": "",
       "schemaSource": "",
@@ -1920,7 +2040,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:243",
+      "source": "router/api-router.go:246",
       "handler": "controller.DeleteCustomOAuthProvider",
       "summary": "",
       "schemaSource": "",
@@ -1939,7 +2059,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:240",
+      "source": "router/api-router.go:243",
       "handler": "controller.GetCustomOAuthProvider",
       "summary": "",
       "schemaSource": "",
@@ -1958,7 +2078,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:242",
+      "source": "router/api-router.go:245",
       "handler": "controller.UpdateCustomOAuthProvider",
       "summary": "",
       "schemaSource": "",
@@ -1977,7 +2097,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:238",
+      "source": "router/api-router.go:241",
       "handler": "controller.FetchCustomOAuthDiscovery",
       "summary": "",
       "schemaSource": "",
@@ -1996,7 +2116,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:348",
+      "source": "router/api-router.go:351",
       "handler": "controller.GetAllQuotaDates",
       "summary": "获取所有额度数据",
       "schemaSource": "docs/openapi/api.json",
@@ -2020,7 +2140,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:351",
+      "source": "router/api-router.go:354",
       "handler": "controller.GetAllFlowQuotaDates",
       "summary": "",
       "schemaSource": "",
@@ -2039,7 +2159,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:352",
+      "source": "router/api-router.go:355",
       "handler": "controller.GetUserFlowQuotaDates",
       "summary": "",
       "schemaSource": "",
@@ -2058,7 +2178,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:350",
+      "source": "router/api-router.go:353",
       "handler": "controller.GetUserQuotaDates",
       "summary": "获取个人额度数据",
       "schemaSource": "docs/openapi/api.json",
@@ -2082,7 +2202,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:349",
+      "source": "router/api-router.go:352",
       "handler": "controller.GetQuotaDatesByUser",
       "summary": "",
       "schemaSource": "",
@@ -2101,7 +2221,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:418",
+      "source": "router/api-router.go:421",
       "handler": "controller.GetAllDeployments",
       "summary": "",
       "schemaSource": "",
@@ -2120,7 +2240,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:426",
+      "source": "router/api-router.go:429",
       "handler": "controller.CreateDeployment",
       "summary": "",
       "schemaSource": "",
@@ -2139,7 +2259,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:435",
+      "source": "router/api-router.go:438",
       "handler": "controller.DeleteDeployment",
       "summary": "",
       "schemaSource": "",
@@ -2158,7 +2278,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:428",
+      "source": "router/api-router.go:431",
       "handler": "controller.GetDeployment",
       "summary": "",
       "schemaSource": "",
@@ -2177,7 +2297,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:432",
+      "source": "router/api-router.go:435",
       "handler": "controller.UpdateDeployment",
       "summary": "",
       "schemaSource": "",
@@ -2196,7 +2316,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:430",
+      "source": "router/api-router.go:433",
       "handler": "controller.ListDeploymentContainers",
       "summary": "",
       "schemaSource": "",
@@ -2215,7 +2335,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:431",
+      "source": "router/api-router.go:434",
       "handler": "controller.GetContainerDetails",
       "summary": "",
       "schemaSource": "",
@@ -2234,7 +2354,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:434",
+      "source": "router/api-router.go:437",
       "handler": "controller.ExtendDeployment",
       "summary": "",
       "schemaSource": "",
@@ -2253,7 +2373,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:429",
+      "source": "router/api-router.go:432",
       "handler": "controller.GetDeploymentLogs",
       "summary": "",
       "schemaSource": "",
@@ -2272,7 +2392,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:433",
+      "source": "router/api-router.go:436",
       "handler": "controller.UpdateDeploymentName",
       "summary": "",
       "schemaSource": "",
@@ -2291,7 +2411,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:423",
+      "source": "router/api-router.go:426",
       "handler": "controller.GetAvailableReplicas",
       "summary": "",
       "schemaSource": "",
@@ -2310,7 +2430,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:425",
+      "source": "router/api-router.go:428",
       "handler": "controller.CheckClusterNameAvailability",
       "summary": "",
       "schemaSource": "",
@@ -2329,7 +2449,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:421",
+      "source": "router/api-router.go:424",
       "handler": "controller.GetHardwareTypes",
       "summary": "",
       "schemaSource": "",
@@ -2348,7 +2468,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:422",
+      "source": "router/api-router.go:425",
       "handler": "controller.GetLocations",
       "summary": "",
       "schemaSource": "",
@@ -2367,7 +2487,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:424",
+      "source": "router/api-router.go:427",
       "handler": "controller.GetPriceEstimation",
       "summary": "",
       "schemaSource": "",
@@ -2386,7 +2506,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:419",
+      "source": "router/api-router.go:422",
       "handler": "controller.SearchDeployments",
       "summary": "",
       "schemaSource": "",
@@ -2405,7 +2525,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:416",
+      "source": "router/api-router.go:419",
       "handler": "controller.GetModelDeploymentSettings",
       "summary": "",
       "schemaSource": "",
@@ -2424,7 +2544,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:417",
+      "source": "router/api-router.go:420",
       "handler": "controller.TestIoNetConnection",
       "summary": "",
       "schemaSource": "",
@@ -2443,7 +2563,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:420",
+      "source": "router/api-router.go:423",
       "handler": "controller.TestIoNetConnection",
       "summary": "",
       "schemaSource": "",
@@ -2462,7 +2582,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:361",
+      "source": "router/api-router.go:364",
       "handler": "controller.GetGroups",
       "summary": "获取所有分组",
       "schemaSource": "docs/openapi/api.json",
@@ -2485,7 +2605,7 @@
         "middleware.BodyStorageCleanup()",
         "middleware.GlobalAPIRateLimit()"
       ],
-      "source": "router/api-router.go:35",
+      "source": "router/api-router.go:38",
       "handler": "controller.GetHomePageContent",
       "summary": "获取首页内容",
       "schemaSource": "docs/openapi/api.json",
@@ -2509,7 +2629,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:322",
+      "source": "router/api-router.go:325",
       "handler": "controller.GetAllLogs",
       "summary": "获取所有日志",
       "schemaSource": "docs/openapi/api.json",
@@ -2552,7 +2672,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:325",
+      "source": "router/api-router.go:328",
       "handler": "controller.GetChannelAffinityUsageCacheStats",
       "summary": "",
       "schemaSource": "",
@@ -2571,7 +2691,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:326",
+      "source": "router/api-router.go:329",
       "handler": "controller.SearchAllLogs",
       "summary": "搜索日志",
       "schemaSource": "docs/openapi/api.json",
@@ -2605,7 +2725,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:327",
+      "source": "router/api-router.go:330",
       "handler": "controller.GetUserLogs",
       "summary": "获取个人日志",
       "schemaSource": "docs/openapi/api.json",
@@ -2630,7 +2750,7 @@
         "middleware.UserAuth()",
         "middleware.SearchRateLimit()"
       ],
-      "source": "router/api-router.go:328",
+      "source": "router/api-router.go:331",
       "handler": "controller.SearchUserLogs",
       "summary": "搜索个人日志",
       "schemaSource": "docs/openapi/api.json",
@@ -2664,7 +2784,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:324",
+      "source": "router/api-router.go:327",
       "handler": "controller.GetLogsSelfStat",
       "summary": "获取个人日志统计",
       "schemaSource": "docs/openapi/api.json",
@@ -2688,7 +2808,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:323",
+      "source": "router/api-router.go:326",
       "handler": "controller.GetLogsStat",
       "summary": "获取日志统计",
       "schemaSource": "docs/openapi/api.json",
@@ -2714,7 +2834,7 @@
         "middleware.CriticalRateLimit()",
         "middleware.TokenAuthReadOnly()"
       ],
-      "source": "router/api-router.go:356",
+      "source": "router/api-router.go:359",
       "handler": "controller.GetLogByKey",
       "summary": "通过令牌获取日志",
       "schemaSource": "docs/openapi/api.json",
@@ -2748,7 +2868,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:375",
+      "source": "router/api-router.go:378",
       "handler": "controller.GetAllMidjourney",
       "summary": "获取所有Midjourney任务",
       "schemaSource": "docs/openapi/api.json",
@@ -2772,7 +2892,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:374",
+      "source": "router/api-router.go:377",
       "handler": "controller.GetUserMidjourney",
       "summary": "获取个人Midjourney任务",
       "schemaSource": "docs/openapi/api.json",
@@ -2796,7 +2916,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:28",
+      "source": "router/api-router.go:31",
       "handler": "controller.DashboardListModels",
       "summary": "获取所有模型元数据",
       "schemaSource": "docs/openapi/api.json",
@@ -2820,7 +2940,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:404",
+      "source": "router/api-router.go:407",
       "handler": "controller.GetAllModelsMeta",
       "summary": "获取所有模型元数据",
       "schemaSource": "docs/openapi/api.json",
@@ -2844,7 +2964,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:407",
+      "source": "router/api-router.go:410",
       "handler": "controller.CreateModelMeta",
       "summary": "创建模型元数据",
       "schemaSource": "docs/openapi/api.json",
@@ -2868,7 +2988,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:408",
+      "source": "router/api-router.go:411",
       "handler": "controller.UpdateModelMeta",
       "summary": "更新模型元数据",
       "schemaSource": "docs/openapi/api.json",
@@ -2892,7 +3012,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:409",
+      "source": "router/api-router.go:412",
       "handler": "controller.DeleteModelMeta",
       "summary": "删除模型",
       "schemaSource": "docs/openapi/api.json",
@@ -2926,7 +3046,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:406",
+      "source": "router/api-router.go:409",
       "handler": "controller.GetModelMeta",
       "summary": "获取指定模型",
       "schemaSource": "docs/openapi/api.json",
@@ -2960,7 +3080,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:402",
+      "source": "router/api-router.go:405",
       "handler": "controller.BatchDeleteModelMeta",
       "summary": "",
       "schemaSource": "",
@@ -2979,7 +3099,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:403",
+      "source": "router/api-router.go:406",
       "handler": "controller.GetMissingModels",
       "summary": "获取缺失模型",
       "schemaSource": "docs/openapi/api.json",
@@ -3003,7 +3123,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:405",
+      "source": "router/api-router.go:408",
       "handler": "controller.SearchModelsMeta",
       "summary": "搜索模型",
       "schemaSource": "docs/openapi/api.json",
@@ -3037,7 +3157,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:401",
+      "source": "router/api-router.go:404",
       "handler": "controller.SyncUpstreamModels",
       "summary": "同步上游模型",
       "schemaSource": "docs/openapi/api.json",
@@ -3061,7 +3181,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:400",
+      "source": "router/api-router.go:403",
       "handler": "controller.SyncUpstreamPreview",
       "summary": "预览上游模型同步",
       "schemaSource": "docs/openapi/api.json",
@@ -3084,7 +3204,7 @@
         "middleware.BodyStorageCleanup()",
         "middleware.GlobalAPIRateLimit()"
       ],
-      "source": "router/api-router.go:30",
+      "source": "router/api-router.go:33",
       "handler": "controller.GetNotice",
       "summary": "获取公告",
       "schemaSource": "docs/openapi/api.json",
@@ -3110,7 +3230,7 @@
         "middleware.DisableCache()",
         "middleware.TryUserAuth()"
       ],
-      "source": "router/api-router.go:59",
+      "source": "router/api-router.go:62",
       "handler": "controller.HandleOAuth",
       "summary": "",
       "schemaSource": "",
@@ -3132,7 +3252,7 @@
         "middleware.UserCriticalRateLimit(\"account-security\")",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:51",
+      "source": "router/api-router.go:54",
       "handler": "controller.EmailBind",
       "summary": "绑定邮箱",
       "schemaSource": "docs/openapi/api.json",
@@ -3182,7 +3302,7 @@
         "middleware.EmailVerificationRateLimit()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:50",
+      "source": "router/api-router.go:53",
       "handler": "controller.EmailBindResend",
       "summary": "",
       "schemaSource": "",
@@ -3205,7 +3325,7 @@
         "middleware.EmailVerificationRateLimit()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:49",
+      "source": "router/api-router.go:52",
       "handler": "controller.EmailBindStart",
       "summary": "",
       "schemaSource": "",
@@ -3226,7 +3346,7 @@
         "middleware.DisableCache()",
         "middleware.TryUserAuth()"
       ],
-      "source": "router/api-router.go:48",
+      "source": "router/api-router.go:51",
       "handler": "controller.GenerateOAuthCode",
       "summary": "生成OAuth State",
       "schemaSource": "docs/openapi/api.json",
@@ -3280,7 +3400,7 @@
         "middleware.CriticalRateLimit()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:57",
+      "source": "router/api-router.go:60",
       "handler": "controller.TelegramLegacyAuth",
       "summary": "完成 Telegram 绑定",
       "schemaSource": "docs/openapi/api.json",
@@ -3315,7 +3435,7 @@
         "middleware.CriticalRateLimit()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:56",
+      "source": "router/api-router.go:59",
       "handler": "controller.TelegramLegacyAuth",
       "summary": "创建 Telegram 绑定流程",
       "schemaSource": "docs/openapi/api.json",
@@ -3340,7 +3460,7 @@
         "middleware.CriticalRateLimit()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:55",
+      "source": "router/api-router.go:58",
       "handler": "controller.TelegramLegacyAuth",
       "summary": "Telegram登录",
       "schemaSource": "docs/openapi/api.json",
@@ -3431,7 +3551,7 @@
         "middleware.CriticalRateLimit()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:53",
+      "source": "router/api-router.go:56",
       "handler": "controller.WeChatAuth",
       "summary": "微信OAuth登录",
       "schemaSource": "docs/openapi/api.json",
@@ -3522,7 +3642,7 @@
         "middleware.UserAuth()",
         "middleware.CriticalRateLimit()"
       ],
-      "source": "router/api-router.go:54",
+      "source": "router/api-router.go:57",
       "handler": "controller.WeChatBind",
       "summary": "绑定微信",
       "schemaSource": "docs/openapi/api.json",
@@ -3563,7 +3683,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:206",
+      "source": "router/api-router.go:209",
       "handler": "controller.GetOptions",
       "summary": "获取系统选项",
       "schemaSource": "docs/openapi/api.json",
@@ -3587,7 +3707,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:209",
+      "source": "router/api-router.go:212",
       "handler": "controller.UpdateOption",
       "summary": "更新系统选项",
       "schemaSource": "docs/openapi/api.json",
@@ -3611,7 +3731,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:225",
+      "source": "router/api-router.go:228",
       "handler": "controller.ClearChannelAffinityCache",
       "summary": "",
       "schemaSource": "",
@@ -3630,7 +3750,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:224",
+      "source": "router/api-router.go:227",
       "handler": "controller.GetChannelAffinityCacheStats",
       "summary": "",
       "schemaSource": "",
@@ -3649,7 +3769,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:211",
+      "source": "router/api-router.go:214",
       "handler": "controller.GetModelPricingConfig",
       "summary": "",
       "schemaSource": "",
@@ -3668,7 +3788,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:212",
+      "source": "router/api-router.go:215",
       "handler": "controller.UpdateModelPricingConfig",
       "summary": "",
       "schemaSource": "",
@@ -3687,7 +3807,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:213",
+      "source": "router/api-router.go:216",
       "handler": "controller.PreviewModelPricingConversion",
       "summary": "",
       "schemaSource": "",
@@ -3706,7 +3826,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:219",
+      "source": "router/api-router.go:222",
       "handler": "controller.ApplyDFLOPPricingSync",
       "summary": "",
       "schemaSource": "",
@@ -3725,7 +3845,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:215",
+      "source": "router/api-router.go:218",
       "handler": "controller.GetDFLOPPricingSyncConfig",
       "summary": "",
       "schemaSource": "",
@@ -3744,7 +3864,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:217",
+      "source": "router/api-router.go:220",
       "handler": "controller.SaveDFLOPPricingSyncConfig",
       "summary": "",
       "schemaSource": "",
@@ -3763,7 +3883,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:218",
+      "source": "router/api-router.go:221",
       "handler": "controller.PreviewDFLOPPricingSync",
       "summary": "",
       "schemaSource": "",
@@ -3782,7 +3902,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:220",
+      "source": "router/api-router.go:223",
       "handler": "controller.ListDFLOPPricingSyncRuns",
       "summary": "",
       "schemaSource": "",
@@ -3801,7 +3921,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:221",
+      "source": "router/api-router.go:224",
       "handler": "controller.GetDFLOPPricingSyncRun",
       "summary": "",
       "schemaSource": "",
@@ -3820,7 +3940,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:222",
+      "source": "router/api-router.go:225",
       "handler": "controller.RollbackDFLOPPricingSync",
       "summary": "",
       "schemaSource": "",
@@ -3839,7 +3959,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:216",
+      "source": "router/api-router.go:219",
       "handler": "controller.ListDFLOPPricingSourceChannels",
       "summary": "",
       "schemaSource": "",
@@ -3858,7 +3978,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:214",
+      "source": "router/api-router.go:217",
       "handler": "controller.PreviewModelPricing",
       "summary": "",
       "schemaSource": "",
@@ -3877,7 +3997,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:210",
+      "source": "router/api-router.go:213",
       "handler": "controller.UpdatePasskeyDomains",
       "summary": "",
       "schemaSource": "",
@@ -3896,7 +4016,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:223",
+      "source": "router/api-router.go:226",
       "handler": "controller.ConfirmPaymentCompliance",
       "summary": "",
       "schemaSource": "",
@@ -3915,7 +4035,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:207",
+      "source": "router/api-router.go:210",
       "handler": "controller.GetRequestPolicy",
       "summary": "",
       "schemaSource": "",
@@ -3934,7 +4054,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:208",
+      "source": "router/api-router.go:211",
       "handler": "controller.UpdateRequestPolicy",
       "summary": "",
       "schemaSource": "",
@@ -3953,7 +4073,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:226",
+      "source": "router/api-router.go:229",
       "handler": "controller.ResetModelRatio",
       "summary": "重置模型倍率",
       "schemaSource": "docs/openapi/api.json",
@@ -3977,7 +4097,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:227",
+      "source": "router/api-router.go:230",
       "handler": "controller.ListWaffoPancakeCatalog",
       "summary": "",
       "schemaSource": "",
@@ -3996,7 +4116,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:228",
+      "source": "router/api-router.go:231",
       "handler": "controller.CreateWaffoPancakePair",
       "summary": "",
       "schemaSource": "",
@@ -4015,7 +4135,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:229",
+      "source": "router/api-router.go:232",
       "handler": "controller.SaveWaffoPancake",
       "summary": "",
       "schemaSource": "",
@@ -4034,7 +4154,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:230",
+      "source": "router/api-router.go:233",
       "handler": "controller.CreateWaffoPancakeSubscriptionProduct",
       "summary": "",
       "schemaSource": "",
@@ -4053,7 +4173,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:231",
+      "source": "router/api-router.go:234",
       "handler": "controller.ListWaffoPancakeSubscriptionProductOptions",
       "summary": "",
       "schemaSource": "",
@@ -4072,7 +4192,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.HeaderNavModulePublicOrUserAuth(\"pricing\")"
       ],
-      "source": "router/api-router.go:41",
+      "source": "router/api-router.go:44",
       "handler": "controller.GetPerfMetrics",
       "summary": "",
       "schemaSource": "",
@@ -4091,7 +4211,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.HeaderNavModulePublicOrUserAuth(\"pricing\")"
       ],
-      "source": "router/api-router.go:40",
+      "source": "router/api-router.go:43",
       "handler": "controller.GetPerfMetricsSummary",
       "summary": "",
       "schemaSource": "",
@@ -4110,7 +4230,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:249",
+      "source": "router/api-router.go:252",
       "handler": "controller.ClearDiskCache",
       "summary": "",
       "schemaSource": "",
@@ -4129,7 +4249,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:251",
+      "source": "router/api-router.go:254",
       "handler": "controller.ForceGC",
       "summary": "",
       "schemaSource": "",
@@ -4148,7 +4268,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:253",
+      "source": "router/api-router.go:256",
       "handler": "controller.CleanupLogFiles",
       "summary": "",
       "schemaSource": "",
@@ -4167,7 +4287,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:252",
+      "source": "router/api-router.go:255",
       "handler": "controller.GetLogFiles",
       "summary": "",
       "schemaSource": "",
@@ -4186,7 +4306,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:250",
+      "source": "router/api-router.go:253",
       "handler": "controller.ResetPerformanceStats",
       "summary": "",
       "schemaSource": "",
@@ -4205,7 +4325,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:248",
+      "source": "router/api-router.go:251",
       "handler": "controller.GetPerformanceStats",
       "summary": "",
       "schemaSource": "",
@@ -4224,7 +4344,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:264",
+      "source": "router/api-router.go:267",
       "handler": "controller.ListTaskPlugins",
       "summary": "",
       "schemaSource": "",
@@ -4243,7 +4363,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:265",
+      "source": "router/api-router.go:268",
       "handler": "controller.UploadTaskPlugin",
       "summary": "",
       "schemaSource": "",
@@ -4262,7 +4382,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:266",
+      "source": "router/api-router.go:269",
       "handler": "controller.UploadTaskPlugin",
       "summary": "",
       "schemaSource": "",
@@ -4281,7 +4401,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:270",
+      "source": "router/api-router.go:273",
       "handler": "controller.GetTaskPlugin",
       "summary": "",
       "schemaSource": "",
@@ -4300,7 +4420,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:273",
+      "source": "router/api-router.go:276",
       "handler": "controller.ActivateTaskPlugin",
       "summary": "",
       "schemaSource": "",
@@ -4319,7 +4439,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:275",
+      "source": "router/api-router.go:278",
       "handler": "controller.DryRunTaskPlugin",
       "summary": "",
       "schemaSource": "",
@@ -4338,7 +4458,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:271",
+      "source": "router/api-router.go:274",
       "handler": "controller.GetTaskPluginIcon",
       "summary": "",
       "schemaSource": "",
@@ -4357,7 +4477,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:274",
+      "source": "router/api-router.go:277",
       "handler": "controller.SetTaskPluginStatus",
       "summary": "",
       "schemaSource": "",
@@ -4376,7 +4496,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:272",
+      "source": "router/api-router.go:275",
       "handler": "controller.GetTaskPluginVersions",
       "summary": "",
       "schemaSource": "",
@@ -4395,7 +4515,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:276",
+      "source": "router/api-router.go:279",
       "handler": "controller.DeleteTaskPluginVersion",
       "summary": "",
       "schemaSource": "",
@@ -4414,7 +4534,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:268",
+      "source": "router/api-router.go:271",
       "handler": "controller.GetTaskPluginMarketplaceSources",
       "summary": "",
       "schemaSource": "",
@@ -4433,7 +4553,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:269",
+      "source": "router/api-router.go:272",
       "handler": "controller.UpdateTaskPluginMarketplaceSources",
       "summary": "",
       "schemaSource": "",
@@ -4452,7 +4572,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:267",
+      "source": "router/api-router.go:270",
       "handler": "controller.GetTaskPluginRuntime",
       "summary": "",
       "schemaSource": "",
@@ -4471,7 +4591,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:367",
+      "source": "router/api-router.go:370",
       "handler": "controller.GetPrefillGroups",
       "summary": "获取预填分组",
       "schemaSource": "docs/openapi/api.json",
@@ -4495,7 +4615,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:368",
+      "source": "router/api-router.go:371",
       "handler": "controller.CreatePrefillGroup",
       "summary": "创建预填分组",
       "schemaSource": "docs/openapi/api.json",
@@ -4519,7 +4639,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:369",
+      "source": "router/api-router.go:372",
       "handler": "controller.UpdatePrefillGroup",
       "summary": "更新预填分组",
       "schemaSource": "docs/openapi/api.json",
@@ -4543,7 +4663,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:370",
+      "source": "router/api-router.go:373",
       "handler": "controller.DeletePrefillGroup",
       "summary": "删除预填分组",
       "schemaSource": "docs/openapi/api.json",
@@ -4577,7 +4697,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.HeaderNavModuleAuth(\"pricing\")"
       ],
-      "source": "router/api-router.go:36",
+      "source": "router/api-router.go:39",
       "handler": "controller.GetPricing",
       "summary": "获取定价信息",
       "schemaSource": "docs/openapi/api.json",
@@ -4600,7 +4720,7 @@
         "middleware.BodyStorageCleanup()",
         "middleware.GlobalAPIRateLimit()"
       ],
-      "source": "router/api-router.go:32",
+      "source": "router/api-router.go:35",
       "handler": "controller.GetPrivacyPolicy",
       "summary": "获取隐私政策",
       "schemaSource": "docs/openapi/api.json",
@@ -4624,7 +4744,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.HeaderNavModuleAuth(\"rankings\")"
       ],
-      "source": "router/api-router.go:43",
+      "source": "router/api-router.go:46",
       "handler": "controller.GetRankings",
       "summary": "",
       "schemaSource": "",
@@ -4643,7 +4763,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.CriticalRateLimit()"
       ],
-      "source": "router/api-router.go:60",
+      "source": "router/api-router.go:63",
       "handler": "controller.GetRatioConfig",
       "summary": "获取倍率配置",
       "schemaSource": "docs/openapi/api.json",
@@ -4667,7 +4787,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:258",
+      "source": "router/api-router.go:261",
       "handler": "controller.GetSyncableChannels",
       "summary": "获取可同步渠道",
       "schemaSource": "docs/openapi/api.json",
@@ -4691,7 +4811,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:259",
+      "source": "router/api-router.go:262",
       "handler": "controller.FetchUpstreamRatios",
       "summary": "获取上游倍率",
       "schemaSource": "docs/openapi/api.json",
@@ -4715,7 +4835,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:310",
+      "source": "router/api-router.go:313",
       "handler": "controller.GetAllRedemptions",
       "summary": "获取所有兑换码",
       "schemaSource": "docs/openapi/api.json",
@@ -4758,7 +4878,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:313",
+      "source": "router/api-router.go:316",
       "handler": "controller.AddRedemption",
       "summary": "创建兑换码",
       "schemaSource": "docs/openapi/api.json",
@@ -4813,7 +4933,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:315",
+      "source": "router/api-router.go:318",
       "handler": "controller.UpdateRedemption",
       "summary": "更新兑换码",
       "schemaSource": "docs/openapi/api.json",
@@ -4868,7 +4988,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:317",
+      "source": "router/api-router.go:320",
       "handler": "controller.DeleteRedemption",
       "summary": "删除兑换码",
       "schemaSource": "docs/openapi/api.json",
@@ -4902,7 +5022,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:312",
+      "source": "router/api-router.go:315",
       "handler": "controller.GetRedemption",
       "summary": "获取指定兑换码",
       "schemaSource": "docs/openapi/api.json",
@@ -4936,7 +5056,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:314",
+      "source": "router/api-router.go:317",
       "handler": "controller.DeleteRedemptionBatch",
       "summary": "",
       "schemaSource": "",
@@ -4955,7 +5075,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:316",
+      "source": "router/api-router.go:319",
       "handler": "controller.DeleteInvalidRedemption",
       "summary": "删除无效兑换码",
       "schemaSource": "docs/openapi/api.json",
@@ -4979,7 +5099,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:311",
+      "source": "router/api-router.go:314",
       "handler": "controller.SearchRedemptions",
       "summary": "搜索兑换码",
       "schemaSource": "docs/openapi/api.json",
@@ -5014,7 +5134,7 @@
         "middleware.CriticalRateLimit()",
         "middleware.TurnstileCheck()"
       ],
-      "source": "router/api-router.go:45",
+      "source": "router/api-router.go:48",
       "handler": "controller.SendPasswordResetEmail",
       "summary": "发送密码重置邮件",
       "schemaSource": "docs/openapi/api.json",
@@ -5047,7 +5167,7 @@
         "middleware.BodyStorageCleanup()",
         "middleware.GlobalAPIRateLimit()"
       ],
-      "source": "router/api-router.go:24",
+      "source": "router/api-router.go:27",
       "handler": "controller.GetSetup",
       "summary": "获取初始化状态",
       "schemaSource": "docs/openapi/api.json",
@@ -5070,7 +5190,7 @@
         "middleware.BodyStorageCleanup()",
         "middleware.GlobalAPIRateLimit()"
       ],
-      "source": "router/api-router.go:25",
+      "source": "router/api-router.go:28",
       "handler": "controller.PostSetup",
       "summary": "初始化系统",
       "schemaSource": "docs/openapi/api.json",
@@ -5109,7 +5229,7 @@
         "middleware.BodyStorageCleanup()",
         "middleware.GlobalAPIRateLimit()"
       ],
-      "source": "router/api-router.go:26",
+      "source": "router/api-router.go:29",
       "handler": "controller.GetStatus",
       "summary": "获取系统状态",
       "schemaSource": "docs/openapi/api.json",
@@ -5133,7 +5253,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:29",
+      "source": "router/api-router.go:32",
       "handler": "controller.TestStatus",
       "summary": "测试系统状态",
       "schemaSource": "docs/openapi/api.json",
@@ -5156,7 +5276,7 @@
         "middleware.BodyStorageCleanup()",
         "middleware.GlobalAPIRateLimit()"
       ],
-      "source": "router/api-router.go:62",
+      "source": "router/api-router.go:65",
       "handler": "controller.StripeWebhook",
       "summary": "Stripe Webhook",
       "schemaSource": "docs/openapi/api.json",
@@ -5180,7 +5300,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:187",
+      "source": "router/api-router.go:190",
       "handler": "controller.AdminBindSubscription",
       "summary": "",
       "schemaSource": "",
@@ -5199,7 +5319,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:183",
+      "source": "router/api-router.go:186",
       "handler": "controller.AdminListSubscriptionPlans",
       "summary": "",
       "schemaSource": "",
@@ -5218,7 +5338,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:184",
+      "source": "router/api-router.go:187",
       "handler": "controller.AdminCreateSubscriptionPlan",
       "summary": "",
       "schemaSource": "",
@@ -5237,7 +5357,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:186",
+      "source": "router/api-router.go:189",
       "handler": "controller.AdminUpdateSubscriptionPlanStatus",
       "summary": "",
       "schemaSource": "",
@@ -5256,7 +5376,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:185",
+      "source": "router/api-router.go:188",
       "handler": "controller.AdminUpdateSubscriptionPlan",
       "summary": "",
       "schemaSource": "",
@@ -5275,7 +5395,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:188",
+      "source": "router/api-router.go:191",
       "handler": "controller.AdminResetPlanSubscriptions",
       "summary": "",
       "schemaSource": "",
@@ -5294,7 +5414,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:195",
+      "source": "router/api-router.go:198",
       "handler": "controller.AdminDeleteUserSubscription",
       "summary": "",
       "schemaSource": "",
@@ -5313,7 +5433,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:194",
+      "source": "router/api-router.go:197",
       "handler": "controller.AdminInvalidateUserSubscription",
       "summary": "",
       "schemaSource": "",
@@ -5332,7 +5452,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:191",
+      "source": "router/api-router.go:194",
       "handler": "controller.AdminListUserSubscriptions",
       "summary": "",
       "schemaSource": "",
@@ -5351,7 +5471,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:192",
+      "source": "router/api-router.go:195",
       "handler": "controller.AdminCreateUserSubscription",
       "summary": "",
       "schemaSource": "",
@@ -5370,7 +5490,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:193",
+      "source": "router/api-router.go:196",
       "handler": "controller.AdminResetUserSubscriptionsByPlan",
       "summary": "",
       "schemaSource": "",
@@ -5390,7 +5510,7 @@
         "middleware.UserAuth()",
         "middleware.CriticalRateLimit()"
       ],
-      "source": "router/api-router.go:174",
+      "source": "router/api-router.go:177",
       "handler": "controller.SubscriptionRequestBalancePay",
       "summary": "",
       "schemaSource": "",
@@ -5410,7 +5530,7 @@
         "middleware.UserAuth()",
         "middleware.CriticalRateLimit()"
       ],
-      "source": "router/api-router.go:177",
+      "source": "router/api-router.go:180",
       "handler": "controller.SubscriptionRequestCreemPay",
       "summary": "",
       "schemaSource": "",
@@ -5428,7 +5548,7 @@
         "middleware.BodyStorageCleanup()",
         "middleware.GlobalAPIRateLimit()"
       ],
-      "source": "router/api-router.go:200",
+      "source": "router/api-router.go:203",
       "handler": "controller.SubscriptionEpayNotify",
       "summary": "",
       "schemaSource": "",
@@ -5446,7 +5566,7 @@
         "middleware.BodyStorageCleanup()",
         "middleware.GlobalAPIRateLimit()"
       ],
-      "source": "router/api-router.go:199",
+      "source": "router/api-router.go:202",
       "handler": "controller.SubscriptionEpayNotify",
       "summary": "",
       "schemaSource": "",
@@ -5466,7 +5586,7 @@
         "middleware.UserAuth()",
         "middleware.CriticalRateLimit()"
       ],
-      "source": "router/api-router.go:175",
+      "source": "router/api-router.go:178",
       "handler": "controller.SubscriptionRequestEpay",
       "summary": "",
       "schemaSource": "",
@@ -5484,7 +5604,7 @@
         "middleware.BodyStorageCleanup()",
         "middleware.GlobalAPIRateLimit()"
       ],
-      "source": "router/api-router.go:201",
+      "source": "router/api-router.go:204",
       "handler": "controller.SubscriptionEpayReturn",
       "summary": "",
       "schemaSource": "",
@@ -5502,7 +5622,7 @@
         "middleware.BodyStorageCleanup()",
         "middleware.GlobalAPIRateLimit()"
       ],
-      "source": "router/api-router.go:202",
+      "source": "router/api-router.go:205",
       "handler": "controller.SubscriptionEpayReturn",
       "summary": "",
       "schemaSource": "",
@@ -5521,7 +5641,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:171",
+      "source": "router/api-router.go:174",
       "handler": "controller.GetSubscriptionPlans",
       "summary": "",
       "schemaSource": "",
@@ -5540,7 +5660,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:172",
+      "source": "router/api-router.go:175",
       "handler": "controller.GetSubscriptionSelf",
       "summary": "",
       "schemaSource": "",
@@ -5559,7 +5679,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:173",
+      "source": "router/api-router.go:176",
       "handler": "controller.UpdateSubscriptionPreference",
       "summary": "",
       "schemaSource": "",
@@ -5579,7 +5699,7 @@
         "middleware.UserAuth()",
         "middleware.CriticalRateLimit()"
       ],
-      "source": "router/api-router.go:176",
+      "source": "router/api-router.go:179",
       "handler": "controller.SubscriptionRequestStripePay",
       "summary": "",
       "schemaSource": "",
@@ -5599,7 +5719,7 @@
         "middleware.UserAuth()",
         "middleware.CriticalRateLimit()"
       ],
-      "source": "router/api-router.go:178",
+      "source": "router/api-router.go:181",
       "handler": "controller.SubscriptionRequestWaffoPancakePay",
       "summary": "",
       "schemaSource": "",
@@ -5618,7 +5738,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:342",
+      "source": "router/api-router.go:345",
       "handler": "controller.ListSystemInstances",
       "summary": "",
       "schemaSource": "",
@@ -5637,7 +5757,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:344",
+      "source": "router/api-router.go:347",
       "handler": "controller.DeleteStaleSystemInstance",
       "summary": "",
       "schemaSource": "",
@@ -5656,7 +5776,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:343",
+      "source": "router/api-router.go:346",
       "handler": "controller.DeleteStaleSystemInstances",
       "summary": "",
       "schemaSource": "",
@@ -5675,7 +5795,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:337",
+      "source": "router/api-router.go:340",
       "handler": "controller.GetSystemTask",
       "summary": "",
       "schemaSource": "",
@@ -5694,7 +5814,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:336",
+      "source": "router/api-router.go:339",
       "handler": "controller.GetCurrentSystemTask",
       "summary": "",
       "schemaSource": "",
@@ -5713,7 +5833,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:335",
+      "source": "router/api-router.go:338",
       "handler": "controller.DeleteSystemTaskHistory",
       "summary": "",
       "schemaSource": "",
@@ -5732,7 +5852,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:334",
+      "source": "router/api-router.go:337",
       "handler": "controller.ListSystemTasks",
       "summary": "",
       "schemaSource": "",
@@ -5751,7 +5871,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.RootAuth()"
       ],
-      "source": "router/api-router.go:333",
+      "source": "router/api-router.go:336",
       "handler": "controller.CreateLogCleanupSystemTask",
       "summary": "创建日志清理任务",
       "schemaSource": "docs/openapi/api.json",
@@ -5785,7 +5905,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:380",
+      "source": "router/api-router.go:383",
       "handler": "controller.GetAllTask",
       "summary": "获取所有任务",
       "schemaSource": "docs/openapi/api.json",
@@ -5810,7 +5930,7 @@
         "middleware.AdminAuth()",
         "middleware.RequirePermission(authz.TaskPluginBind)"
       ],
-      "source": "router/api-router.go:278",
+      "source": "router/api-router.go:281",
       "handler": "controller.GetTaskPluginOptions",
       "summary": "",
       "schemaSource": "",
@@ -5829,7 +5949,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:381",
+      "source": "router/api-router.go:384",
       "handler": "controller.GetDashboardTaskArtifacts",
       "summary": "",
       "schemaSource": "",
@@ -5848,7 +5968,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:379",
+      "source": "router/api-router.go:382",
       "handler": "controller.GetUserTask",
       "summary": "获取个人任务",
       "schemaSource": "docs/openapi/api.json",
@@ -5873,7 +5993,7 @@
         "middleware.UserAuth()",
         "middleware.TokenOperationAudit()"
       ],
-      "source": "router/api-router.go:285",
+      "source": "router/api-router.go:288",
       "handler": "controller.GetAllTokens",
       "summary": "获取所有令牌",
       "schemaSource": "docs/openapi/api.json",
@@ -5917,7 +6037,7 @@
         "middleware.UserAuth()",
         "middleware.TokenOperationAudit()"
       ],
-      "source": "router/api-router.go:290",
+      "source": "router/api-router.go:293",
       "handler": "controller.AddToken",
       "summary": "创建令牌",
       "schemaSource": "docs/openapi/api.json",
@@ -5976,7 +6096,7 @@
         "middleware.UserAuth()",
         "middleware.TokenOperationAudit()"
       ],
-      "source": "router/api-router.go:291",
+      "source": "router/api-router.go:294",
       "handler": "controller.UpdateToken",
       "summary": "更新令牌",
       "schemaSource": "docs/openapi/api.json",
@@ -6035,7 +6155,7 @@
         "middleware.UserAuth()",
         "middleware.TokenOperationAudit()"
       ],
-      "source": "router/api-router.go:292",
+      "source": "router/api-router.go:295",
       "handler": "controller.DeleteToken",
       "summary": "删除令牌",
       "schemaSource": "docs/openapi/api.json",
@@ -6070,7 +6190,7 @@
         "middleware.UserAuth()",
         "middleware.TokenOperationAudit()"
       ],
-      "source": "router/api-router.go:288",
+      "source": "router/api-router.go:291",
       "handler": "controller.GetToken",
       "summary": "获取指定令牌",
       "schemaSource": "docs/openapi/api.json",
@@ -6107,7 +6227,7 @@
         "middleware.CriticalRateLimit()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:289",
+      "source": "router/api-router.go:292",
       "handler": "controller.GetTokenKey",
       "summary": "",
       "schemaSource": "",
@@ -6127,7 +6247,7 @@
         "middleware.UserAuth()",
         "middleware.TokenOperationAudit()"
       ],
-      "source": "router/api-router.go:287",
+      "source": "router/api-router.go:290",
       "handler": "controller.GetTokenAutoGroups",
       "summary": "",
       "schemaSource": "",
@@ -6147,7 +6267,7 @@
         "middleware.UserAuth()",
         "middleware.TokenOperationAudit()"
       ],
-      "source": "router/api-router.go:293",
+      "source": "router/api-router.go:296",
       "handler": "controller.DeleteTokenBatch",
       "summary": "批量删除令牌",
       "schemaSource": "docs/openapi/api.json",
@@ -6190,7 +6310,7 @@
         "middleware.CriticalRateLimit()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:294",
+      "source": "router/api-router.go:297",
       "handler": "controller.GetTokenKeysBatch",
       "summary": "",
       "schemaSource": "",
@@ -6211,7 +6331,7 @@
         "middleware.TokenOperationAudit()",
         "middleware.SearchRateLimit()"
       ],
-      "source": "router/api-router.go:286",
+      "source": "router/api-router.go:289",
       "handler": "controller.SearchTokens",
       "summary": "搜索令牌",
       "schemaSource": "docs/openapi/api.json",
@@ -6244,7 +6364,7 @@
         "middleware.BodyStorageCleanup()",
         "middleware.GlobalAPIRateLimit()"
       ],
-      "source": "router/api-router.go:27",
+      "source": "router/api-router.go:30",
       "handler": "controller.GetUptimeKumaStatus",
       "summary": "获取Uptime Kuma状态",
       "schemaSource": "docs/openapi/api.json",
@@ -6270,7 +6390,7 @@
         "middleware.CriticalRateLimit()",
         "middleware.TokenAuthReadOnly()"
       ],
-      "source": "router/api-router.go:303",
+      "source": "router/api-router.go:306",
       "handler": "controller.GetTokenUsage",
       "summary": "获取令牌使用情况",
       "schemaSource": "docs/openapi/api.json",
@@ -6303,7 +6423,7 @@
         "middleware.BodyStorageCleanup()",
         "middleware.GlobalAPIRateLimit()"
       ],
-      "source": "router/api-router.go:31",
+      "source": "router/api-router.go:34",
       "handler": "controller.GetUserAgreement",
       "summary": "获取用户协议",
       "schemaSource": "docs/openapi/api.json",
@@ -6327,7 +6447,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:147",
+      "source": "router/api-router.go:150",
       "handler": "controller.GetAllUsers",
       "summary": "获取所有用户",
       "schemaSource": "docs/openapi/api.json",
@@ -6370,7 +6490,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:155",
+      "source": "router/api-router.go:158",
       "handler": "controller.CreateUser",
       "summary": "创建用户",
       "schemaSource": "docs/openapi/api.json",
@@ -6434,7 +6554,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:157",
+      "source": "router/api-router.go:160",
       "handler": "controller.UpdateUser",
       "summary": "更新用户",
       "schemaSource": "docs/openapi/api.json",
@@ -6498,7 +6618,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:158",
+      "source": "router/api-router.go:161",
       "handler": "controller.DeleteUser",
       "summary": "删除用户",
       "schemaSource": "docs/openapi/api.json",
@@ -6532,7 +6652,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:154",
+      "source": "router/api-router.go:157",
       "handler": "controller.GetUser",
       "summary": "获取指定用户",
       "schemaSource": "docs/openapi/api.json",
@@ -6566,7 +6686,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:163",
+      "source": "router/api-router.go:166",
       "handler": "controller.AdminDisable2FA",
       "summary": "管理员禁用用户2FA",
       "schemaSource": "docs/openapi/api.json",
@@ -6600,7 +6720,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:153",
+      "source": "router/api-router.go:156",
       "handler": "controller.AdminClearUserBinding",
       "summary": "",
       "schemaSource": "",
@@ -6619,7 +6739,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:151",
+      "source": "router/api-router.go:154",
       "handler": "controller.GetUserOAuthBindingsByAdmin",
       "summary": "",
       "schemaSource": "",
@@ -6638,7 +6758,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:152",
+      "source": "router/api-router.go:155",
       "handler": "controller.UnbindCustomOAuthByAdmin",
       "summary": "",
       "schemaSource": "",
@@ -6657,7 +6777,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:159",
+      "source": "router/api-router.go:162",
       "handler": "controller.AdminResetPasskey",
       "summary": "管理员重置用户Passkey",
       "schemaSource": "docs/openapi/api.json",
@@ -6693,7 +6813,7 @@
         "middleware.UserAuth()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:133",
+      "source": "router/api-router.go:136",
       "handler": "controller.RegenerateBackupCodes",
       "summary": "重新生成备用码",
       "schemaSource": "docs/openapi/api.json",
@@ -6719,7 +6839,7 @@
         "middleware.UserAuth()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:132",
+      "source": "router/api-router.go:135",
       "handler": "controller.Disable2FA",
       "summary": "禁用2FA",
       "schemaSource": "docs/openapi/api.json",
@@ -6759,7 +6879,7 @@
         "middleware.UserCriticalRateLimit(\"security-verification\")",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:131",
+      "source": "router/api-router.go:134",
       "handler": "controller.Enable2FA",
       "summary": "启用2FA",
       "schemaSource": "docs/openapi/api.json",
@@ -6799,7 +6919,7 @@
         "middleware.UserCriticalRateLimit(\"security-verification\")",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:130",
+      "source": "router/api-router.go:133",
       "handler": "controller.Setup2FA",
       "summary": "设置2FA",
       "schemaSource": "docs/openapi/api.json",
@@ -6823,7 +6943,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:162",
+      "source": "router/api-router.go:165",
       "handler": "controller.Admin2FAStats",
       "summary": "获取2FA统计",
       "schemaSource": "docs/openapi/api.json",
@@ -6848,7 +6968,7 @@
         "middleware.DisableCache()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:129",
+      "source": "router/api-router.go:132",
       "handler": "controller.Get2FAStatus",
       "summary": "获取2FA状态",
       "schemaSource": "docs/openapi/api.json",
@@ -6873,7 +6993,7 @@
         "middleware.DisableCache()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:112",
+      "source": "router/api-router.go:115",
       "handler": "controller.GetAffCode",
       "summary": "获取邀请码",
       "schemaSource": "docs/openapi/api.json",
@@ -6899,7 +7019,7 @@
         "middleware.UserAuth()",
         "middleware.UserCriticalRateLimit(\"aff-transfer\")"
       ],
-      "source": "router/api-router.go:125",
+      "source": "router/api-router.go:128",
       "handler": "controller.TransferAffQuota",
       "summary": "转换邀请额度",
       "schemaSource": "docs/openapi/api.json",
@@ -6937,7 +7057,7 @@
         "middleware.DisableCache()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:117",
+      "source": "router/api-router.go:120",
       "handler": "controller.RequestAmount",
       "summary": "获取支付金额",
       "schemaSource": "docs/openapi/api.json",
@@ -6963,7 +7083,7 @@
         "middleware.CriticalRateLimit()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:76",
+      "source": "router/api-router.go:79",
       "handler": "controller.AuthLogout",
       "summary": "撤销当前登录会话",
       "schemaSource": "docs/openapi/api.json",
@@ -6999,7 +7119,7 @@
         "middleware.CriticalRateLimit()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:75",
+      "source": "router/api-router.go:78",
       "handler": "controller.RefreshAuth",
       "summary": "刷新面板登录",
       "schemaSource": "docs/openapi/api.json",
@@ -7038,7 +7158,7 @@
         "middleware.DisableCache()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:136",
+      "source": "router/api-router.go:139",
       "handler": "controller.GetCheckinStatus",
       "summary": "",
       "schemaSource": "",
@@ -7059,7 +7179,7 @@
         "middleware.UserAuth()",
         "middleware.TurnstileCheck()"
       ],
-      "source": "router/api-router.go:137",
+      "source": "router/api-router.go:140",
       "handler": "controller.DoCheckin",
       "summary": "",
       "schemaSource": "",
@@ -7080,7 +7200,7 @@
         "middleware.UserAuth()",
         "middleware.CriticalRateLimit()"
       ],
-      "source": "router/api-router.go:120",
+      "source": "router/api-router.go:123",
       "handler": "controller.RequestCreemPay",
       "summary": "发起Creem支付",
       "schemaSource": "docs/openapi/api.json",
@@ -7103,7 +7223,7 @@
         "middleware.BodyStorageCleanup()",
         "middleware.GlobalAPIRateLimit()"
       ],
-      "source": "router/api-router.go:88",
+      "source": "router/api-router.go:91",
       "handler": "controller.EpayNotify",
       "summary": "易支付回调",
       "schemaSource": "docs/openapi/api.json",
@@ -7126,7 +7246,7 @@
         "middleware.BodyStorageCleanup()",
         "middleware.GlobalAPIRateLimit()"
       ],
-      "source": "router/api-router.go:87",
+      "source": "router/api-router.go:90",
       "handler": "controller.EpayNotify",
       "summary": "",
       "schemaSource": "",
@@ -7144,7 +7264,7 @@
         "middleware.BodyStorageCleanup()",
         "middleware.GlobalAPIRateLimit()"
       ],
-      "source": "router/api-router.go:89",
+      "source": "router/api-router.go:92",
       "handler": "controller.GetUserGroups",
       "summary": "获取用户分组列表",
       "schemaSource": "docs/openapi/api.json",
@@ -7170,7 +7290,7 @@
         "middleware.DisableCache()",
         "middleware.TurnstileCheck()"
       ],
-      "source": "router/api-router.go:79",
+      "source": "router/api-router.go:82",
       "handler": "controller.Login",
       "summary": "用户登录",
       "schemaSource": "docs/openapi/api.json",
@@ -7277,7 +7397,7 @@
         "middleware.CriticalRateLimit()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:80",
+      "source": "router/api-router.go:83",
       "handler": "controller.Verify2FALogin",
       "summary": "两步验证登录",
       "schemaSource": "docs/openapi/api.json",
@@ -7384,7 +7504,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:78",
+      "source": "router/api-router.go:81",
       "handler": "controller.GetPasswordEncryptionKey",
       "summary": "",
       "schemaSource": "",
@@ -7404,7 +7524,7 @@
         "middleware.CriticalRateLimit()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:82",
+      "source": "router/api-router.go:85",
       "handler": "controller.LoginPasskeyBegin",
       "summary": "",
       "schemaSource": "",
@@ -7424,7 +7544,7 @@
         "middleware.CriticalRateLimit()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:83",
+      "source": "router/api-router.go:86",
       "handler": "controller.LoginPasskeyFinish",
       "summary": "",
       "schemaSource": "",
@@ -7444,7 +7564,7 @@
         "middleware.CriticalRateLimit()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:81",
+      "source": "router/api-router.go:84",
       "handler": "controller.VerifyLogin",
       "summary": "",
       "schemaSource": "",
@@ -7463,7 +7583,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:156",
+      "source": "router/api-router.go:159",
       "handler": "controller.ManageUser",
       "summary": "管理用户状态",
       "schemaSource": "docs/openapi/api.json",
@@ -7511,7 +7631,7 @@
         "middleware.DisableCache()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:99",
+      "source": "router/api-router.go:102",
       "handler": "controller.GetUserModels",
       "summary": "获取用户可用模型",
       "schemaSource": "docs/openapi/api.json",
@@ -7536,7 +7656,7 @@
         "middleware.DisableCache()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:140",
+      "source": "router/api-router.go:143",
       "handler": "controller.GetUserOAuthBindings",
       "summary": "",
       "schemaSource": "",
@@ -7556,7 +7676,7 @@
         "middleware.DisableCache()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:141",
+      "source": "router/api-router.go:144",
       "handler": "controller.UnbindCustomOAuth",
       "summary": "",
       "schemaSource": "",
@@ -7577,7 +7697,7 @@
         "middleware.UserAuth()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:111",
+      "source": "router/api-router.go:114",
       "handler": "controller.PasskeyDelete",
       "summary": "删除Passkey",
       "schemaSource": "docs/openapi/api.json",
@@ -7602,7 +7722,7 @@
         "middleware.DisableCache()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:106",
+      "source": "router/api-router.go:109",
       "handler": "controller.PasskeyStatus",
       "summary": "获取Passkey状态",
       "schemaSource": "docs/openapi/api.json",
@@ -7627,7 +7747,7 @@
         "middleware.CriticalRateLimit()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:84",
+      "source": "router/api-router.go:87",
       "handler": "controller.PasskeyLoginBegin",
       "summary": "开始Passkey登录",
       "schemaSource": "docs/openapi/api.json",
@@ -7652,7 +7772,7 @@
         "middleware.CriticalRateLimit()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:85",
+      "source": "router/api-router.go:88",
       "handler": "controller.PasskeyLoginFinish",
       "summary": "完成Passkey登录",
       "schemaSource": "docs/openapi/api.json",
@@ -7745,7 +7865,7 @@
         "middleware.UserCriticalRateLimit(\"security-verification\")",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:107",
+      "source": "router/api-router.go:110",
       "handler": "controller.PasskeyRegisterBegin",
       "summary": "开始注册Passkey",
       "schemaSource": "docs/openapi/api.json",
@@ -7772,7 +7892,7 @@
         "middleware.UserCriticalRateLimit(\"security-verification\")",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:108",
+      "source": "router/api-router.go:111",
       "handler": "controller.PasskeyRegisterFinish",
       "summary": "完成注册Passkey",
       "schemaSource": "docs/openapi/api.json",
@@ -7799,7 +7919,7 @@
         "middleware.UserCriticalRateLimit(\"security-verification\")",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:109",
+      "source": "router/api-router.go:112",
       "handler": "controller.PasskeyVerifyBegin",
       "summary": "开始验证Passkey",
       "schemaSource": "docs/openapi/api.json",
@@ -7826,7 +7946,7 @@
         "middleware.UserCriticalRateLimit(\"security-verification\")",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:110",
+      "source": "router/api-router.go:113",
       "handler": "controller.PasskeyVerifyFinish",
       "summary": "完成验证Passkey",
       "schemaSource": "docs/openapi/api.json",
@@ -7852,7 +7972,7 @@
         "middleware.UserAuth()",
         "middleware.CriticalRateLimit()"
       ],
-      "source": "router/api-router.go:116",
+      "source": "router/api-router.go:119",
       "handler": "controller.RequestEpay",
       "summary": "发起易支付",
       "schemaSource": "docs/openapi/api.json",
@@ -7877,7 +7997,7 @@
         "middleware.CriticalRateLimit()",
         "middleware.TurnstileCheck()"
       ],
-      "source": "router/api-router.go:77",
+      "source": "router/api-router.go:80",
       "handler": "controller.Register",
       "summary": "用户注册",
       "schemaSource": "docs/openapi/api.json",
@@ -7926,7 +8046,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.CriticalRateLimit()"
       ],
-      "source": "router/api-router.go:46",
+      "source": "router/api-router.go:49",
       "handler": "controller.ResetPassword",
       "summary": "重置密码",
       "schemaSource": "docs/openapi/api.json",
@@ -7969,7 +8089,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:150",
+      "source": "router/api-router.go:153",
       "handler": "controller.SearchUsers",
       "summary": "搜索用户",
       "schemaSource": "docs/openapi/api.json",
@@ -8014,7 +8134,7 @@
         "middleware.UserAuth()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:101",
+      "source": "router/api-router.go:104",
       "handler": "controller.DeleteSelf",
       "summary": "注销当前用户",
       "schemaSource": "docs/openapi/api.json",
@@ -8039,7 +8159,7 @@
         "middleware.DisableCache()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:98",
+      "source": "router/api-router.go:101",
       "handler": "controller.GetSelf",
       "summary": "获取当前用户信息",
       "schemaSource": "docs/openapi/api.json",
@@ -8066,7 +8186,7 @@
         "middleware.CriticalRateLimit()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:100",
+      "source": "router/api-router.go:103",
       "handler": "controller.UpdateSelf",
       "summary": "更新当前用户信息",
       "schemaSource": "docs/openapi/api.json",
@@ -8113,7 +8233,7 @@
         "middleware.DisableCache()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:97",
+      "source": "router/api-router.go:100",
       "handler": "controller.GetUserGroups",
       "summary": "获取当前用户分组",
       "schemaSource": "docs/openapi/api.json",
@@ -8139,7 +8259,7 @@
         "middleware.UserAuth()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:94",
+      "source": "router/api-router.go:97",
       "handler": "controller.GetLoginSessions",
       "summary": "查看登录会话",
       "schemaSource": "docs/openapi/api.json",
@@ -8165,7 +8285,7 @@
         "middleware.UserAuth()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:95",
+      "source": "router/api-router.go:98",
       "handler": "controller.DeleteLoginSession",
       "summary": "撤销指定登录会话",
       "schemaSource": "docs/openapi/api.json",
@@ -8201,7 +8321,7 @@
         "middleware.UserAuth()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:96",
+      "source": "router/api-router.go:99",
       "handler": "controller.RevokeOtherLoginSessions",
       "summary": "撤销其他登录会话",
       "schemaSource": "docs/openapi/api.json",
@@ -8226,7 +8346,7 @@
         "middleware.DisableCache()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:126",
+      "source": "router/api-router.go:129",
       "handler": "controller.UpdateUserSetting",
       "summary": "更新用户设置",
       "schemaSource": "docs/openapi/api.json",
@@ -8273,7 +8393,7 @@
         "middleware.DisableCache()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:119",
+      "source": "router/api-router.go:122",
       "handler": "controller.RequestStripeAmount",
       "summary": "获取Stripe支付金额",
       "schemaSource": "docs/openapi/api.json",
@@ -8299,7 +8419,7 @@
         "middleware.UserAuth()",
         "middleware.CriticalRateLimit()"
       ],
-      "source": "router/api-router.go:118",
+      "source": "router/api-router.go:121",
       "handler": "controller.RequestStripePay",
       "summary": "发起Stripe支付",
       "schemaSource": "docs/openapi/api.json",
@@ -8327,7 +8447,7 @@
         "middleware.UserCriticalRateLimit(\"access-token\")",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:105",
+      "source": "router/api-router.go:108",
       "handler": "controller.RevokeAccessToken",
       "summary": "",
       "schemaSource": "",
@@ -8350,7 +8470,7 @@
         "middleware.UserCriticalRateLimit(\"access-token\")",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:102",
+      "source": "router/api-router.go:105",
       "handler": "controller.GenerateAccessToken",
       "summary": "生成访问令牌",
       "schemaSource": "docs/openapi/api.json",
@@ -8378,7 +8498,7 @@
         "middleware.UserCriticalRateLimit(\"access-token\")",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:104",
+      "source": "router/api-router.go:107",
       "handler": "controller.GenerateAccessToken",
       "summary": "",
       "schemaSource": "",
@@ -8399,7 +8519,7 @@
         "middleware.UserAuth()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:103",
+      "source": "router/api-router.go:106",
       "handler": "controller.GetAccessTokenStatus",
       "summary": "",
       "schemaSource": "",
@@ -8418,7 +8538,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:148",
+      "source": "router/api-router.go:151",
       "handler": "controller.GetAllTopUps",
       "summary": "获取所有充值记录",
       "schemaSource": "docs/openapi/api.json",
@@ -8444,7 +8564,7 @@
         "middleware.UserAuth()",
         "middleware.CriticalRateLimit()"
       ],
-      "source": "router/api-router.go:115",
+      "source": "router/api-router.go:118",
       "handler": "controller.TopUp",
       "summary": "",
       "schemaSource": "",
@@ -8463,7 +8583,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:149",
+      "source": "router/api-router.go:152",
       "handler": "controller.AdminCompleteTopUp",
       "summary": "管理员完成充值",
       "schemaSource": "docs/openapi/api.json",
@@ -8488,7 +8608,7 @@
         "middleware.DisableCache()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:113",
+      "source": "router/api-router.go:116",
       "handler": "controller.GetTopUpInfo",
       "summary": "获取充值信息",
       "schemaSource": "docs/openapi/api.json",
@@ -8513,7 +8633,7 @@
         "middleware.DisableCache()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:114",
+      "source": "router/api-router.go:117",
       "handler": "controller.GetUserTopUps",
       "summary": "获取用户充值记录",
       "schemaSource": "docs/openapi/api.json",
@@ -8538,7 +8658,7 @@
         "middleware.DisableCache()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:123",
+      "source": "router/api-router.go:126",
       "handler": "controller.RequestWaffoPancakeAmount",
       "summary": "",
       "schemaSource": "",
@@ -8559,7 +8679,7 @@
         "middleware.UserAuth()",
         "middleware.CriticalRateLimit()"
       ],
-      "source": "router/api-router.go:124",
+      "source": "router/api-router.go:127",
       "handler": "controller.RequestWaffoPancakePay",
       "summary": "",
       "schemaSource": "",
@@ -8579,7 +8699,7 @@
         "middleware.DisableCache()",
         "middleware.UserAuth()"
       ],
-      "source": "router/api-router.go:121",
+      "source": "router/api-router.go:124",
       "handler": "controller.RequestWaffoAmount",
       "summary": "",
       "schemaSource": "",
@@ -8600,7 +8720,7 @@
         "middleware.UserAuth()",
         "middleware.CriticalRateLimit()"
       ],
-      "source": "router/api-router.go:122",
+      "source": "router/api-router.go:125",
       "handler": "controller.RequestWaffoPay",
       "summary": "",
       "schemaSource": "",
@@ -8619,7 +8739,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:389",
+      "source": "router/api-router.go:392",
       "handler": "controller.GetAllVendors",
       "summary": "获取所有供应商",
       "schemaSource": "docs/openapi/api.json",
@@ -8643,7 +8763,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:392",
+      "source": "router/api-router.go:395",
       "handler": "controller.CreateVendorMeta",
       "summary": "创建供应商",
       "schemaSource": "docs/openapi/api.json",
@@ -8667,7 +8787,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:393",
+      "source": "router/api-router.go:396",
       "handler": "controller.UpdateVendorMeta",
       "summary": "更新供应商",
       "schemaSource": "docs/openapi/api.json",
@@ -8691,7 +8811,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:394",
+      "source": "router/api-router.go:397",
       "handler": "controller.DeleteVendorMeta",
       "summary": "删除供应商",
       "schemaSource": "docs/openapi/api.json",
@@ -8725,7 +8845,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:391",
+      "source": "router/api-router.go:394",
       "handler": "controller.GetVendorMeta",
       "summary": "获取指定供应商",
       "schemaSource": "docs/openapi/api.json",
@@ -8759,7 +8879,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:388",
+      "source": "router/api-router.go:391",
       "handler": "controller.ApplyVendorOperation",
       "summary": "",
       "schemaSource": "",
@@ -8778,7 +8898,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:387",
+      "source": "router/api-router.go:390",
       "handler": "controller.PreviewVendorOperation",
       "summary": "",
       "schemaSource": "",
@@ -8797,7 +8917,7 @@
         "middleware.GlobalAPIRateLimit()",
         "middleware.AdminAuth()"
       ],
-      "source": "router/api-router.go:390",
+      "source": "router/api-router.go:393",
       "handler": "controller.SearchVendors",
       "summary": "搜索供应商",
       "schemaSource": "docs/openapi/api.json",
@@ -8832,7 +8952,7 @@
         "middleware.EmailVerificationRateLimit()",
         "middleware.TurnstileCheck()"
       ],
-      "source": "router/api-router.go:44",
+      "source": "router/api-router.go:47",
       "handler": "controller.SendEmailVerification",
       "summary": "发送邮箱验证码",
       "schemaSource": "docs/openapi/api.json",
@@ -8869,7 +8989,7 @@
         "middleware.UserCriticalRateLimit(\"security-verification\")",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:71",
+      "source": "router/api-router.go:74",
       "handler": "controller.UniversalVerify",
       "summary": "通用安全验证",
       "schemaSource": "docs/openapi/api.json",
@@ -8894,7 +9014,7 @@
         "middleware.UserAuth()",
         "middleware.DisableCache()"
       ],
-      "source": "router/api-router.go:70",
+      "source": "router/api-router.go:73",
       "handler": "controller.GetVerificationMethods",
       "summary": "",
       "schemaSource": "",
@@ -8912,7 +9032,7 @@
         "middleware.BodyStorageCleanup()",
         "middleware.GlobalAPIRateLimit()"
       ],
-      "source": "router/api-router.go:67",
+      "source": "router/api-router.go:70",
       "handler": "controller.WaffoPancakeWebhook",
       "summary": "",
       "schemaSource": "",
@@ -8930,7 +9050,7 @@
         "middleware.BodyStorageCleanup()",
         "middleware.GlobalAPIRateLimit()"
       ],
-      "source": "router/api-router.go:64",
+      "source": "router/api-router.go:67",
       "handler": "controller.WaffoWebhook",
       "summary": "",
       "schemaSource": "",
@@ -13068,6 +13188,30 @@
       ],
       "source": "router/relay-router.go:59",
       "handler": "controller.ListModels",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "GET",
+      "path": "/verification-fixtures/{version}/{sha}/{filename}",
+      "middleware": [],
+      "source": "router/api-router.go:17",
+      "handler": "gin.WrapF(service.VerificationFixtureHandler)",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "HEAD",
+      "path": "/verification-fixtures/{version}/{sha}/{filename}",
+      "middleware": [],
+      "source": "router/api-router.go:18",
+      "handler": "gin.WrapF(service.VerificationFixtureHandler)",
       "summary": "",
       "schemaSource": "",
       "parameters": [],

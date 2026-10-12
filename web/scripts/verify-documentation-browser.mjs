@@ -1364,6 +1364,157 @@ await page
 await page.screenshot({ path: '/tmp/new-api-chat-vi-desktop.png' })
 await page.setViewportSize({ width: 390, height: 844 })
 await page.screenshot({ path: '/tmp/new-api-chat-vi-mobile.png' })
+
+// Customer reference uses the existing shell, code blocks and global search.
+await page.evaluate(() => {
+  localStorage.setItem('i18nextLng', 'en')
+  localStorage.setItem('newapi:theme:v1:mode', 'light')
+})
+await page.goto(`${baseUrl}/docs/api-reference`)
+let referenceLabels = JSON.parse(
+  await fs.readFile('src/i18n/locales/en.json', 'utf8')
+).translation
+for (const [locale, languageLabel] of [
+  ['en', 'English'],
+  ['vi', 'Tiếng Việt'],
+  ['zh', '简体中文'],
+  ['zh-TW', '繁體中文'],
+  ['fr', 'Français'],
+  ['ja', '日本語'],
+  ['ru', 'Русский'],
+]) {
+  const labels = JSON.parse(
+    await fs.readFile(`src/i18n/locales/${locale}.json`, 'utf8')
+  ).translation
+  await page
+    .getByRole('button', {
+      name: referenceLabels['Change language'],
+      exact: true,
+    })
+    .click()
+  await page.getByRole('menuitem', { name: languageLabel, exact: true }).click()
+  referenceLabels = labels
+  await page
+    .getByRole('heading', {
+      name: labels['API Reference'],
+      exact: true,
+      level: 1,
+    })
+    .waitFor()
+  await page
+    .getByRole('heading', {
+      name: labels['API Reference'],
+      exact: true,
+      level: 1,
+    })
+    .waitFor()
+  assert.equal(await page.locator('main #operations tbody tr').count(), 12)
+  assert.equal(await page.locator('main a[href^="/api/"]').count(), 0)
+  assert.equal(await page.locator('main').getByRole('combobox').count(), 0)
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  assert.equal(
+    await page
+      .getByRole('navigation', {
+        name: labels['Documentation navigation'],
+        exact: true,
+      })
+      .getByRole('link', { name: labels['API Reference'], exact: true })
+      .count(),
+    1
+  )
+  if (locale === 'en') {
+    await page
+      .locator('#post--v1-chat-completions')
+      .getByRole('button', { name: labels['Copy to clipboard'], exact: true })
+      .nth(1)
+      .click()
+    const source = await page.evaluate(() => navigator.clipboard.readText())
+    assert(source.includes('https://hotx-api.com/v1/chat/completions'))
+    assert(source.includes('\\\n'))
+    await page
+      .getByRole('button', {
+        name: labels['Search documentation'],
+        exact: true,
+      })
+      .click()
+    await page
+      .getByRole('textbox', {
+        name: labels['Search documentation'],
+        exact: true,
+      })
+      .fill('/v1/videos')
+    await page
+      .getByRole('link', { name: /GET \/v1\/videos\/\{task_id\}\/content/ })
+      .click()
+    await page.locator('#get--v1-videos--task-id--content').waitFor()
+  }
+  for (const mode of locale === 'vi' ? ['light', 'dark'] : ['light']) {
+    if (locale === 'vi') {
+      await page.evaluate(
+        (mode) => localStorage.setItem('newapi:theme:v1:mode', mode),
+        mode
+      )
+      await page.reload()
+      await page
+        .getByRole('heading', {
+          name: labels['API Reference'],
+          exact: true,
+          level: 1,
+        })
+        .waitFor()
+    }
+    await page.waitForFunction(
+      (mode) =>
+        document.documentElement.classList.contains('dark') ===
+        (mode === 'dark'),
+      mode
+    )
+    for (const width of [1440, 390, 360]) {
+      await page.setViewportSize({ width, height: 1000 })
+      assert(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth
+        ),
+        `reference overflow: ${locale}/${mode}/${width}`
+      )
+      assert(
+        await page
+          .locator('main th')
+          .evaluateAll((cells) =>
+            cells.every((cell) => cell.scrollWidth <= cell.clientWidth)
+          ),
+        `reference header overflow: ${locale}/${width}`
+      )
+      assert(
+        await page
+          .locator('main table')
+          .evaluateAll((tables) =>
+            tables.every(
+              (table) => table.getBoundingClientRect().right <= innerWidth
+            )
+          )
+      )
+    }
+  }
+  if (locale === 'vi') {
+    await page.evaluate(() =>
+      localStorage.setItem('newapi:theme:v1:mode', 'light')
+    )
+    await page.reload()
+    await page
+      .getByRole('heading', {
+        name: labels['API Reference'],
+        exact: true,
+        level: 1,
+      })
+      .waitFor()
+  }
+}
+
+assert.deepEqual(errors, [])
+console.log(
+  'PASS: customer API reference, 12 registered operations, one sidebar entry, public endpoint search, cURL copy, seven locales, table headers and page bounds at 1440/390/360px, light/dark.'
+)
 console.log(
   'PASS: API Key three sections, contextual CTAs, header/cURL copy, seven languages, responsive light/dark; Quickstart four steps, SDK copy/tabs, four anchors, direct CTAs, seven locales and responsive light/dark; Overview three linked cards, breadcrumb, single Base URL copy, ordered sections, six guides, seven locales, four viewport widths and Vietnamese light/dark; Audio isolated task tabs, JSON/multipart code/copy, dynamic six-entry TOC, seven locales and four viewport widths; Video create/copy, eight anchors, status/download, responsive flow, seven locales and light/dark; Image minimal examples/copy, six anchors, conditional options, Chat-to-Image defaults in seven languages, four viewport widths; desktop navigation, SDK tabs/streaming, endpoint anchors, live catalog/model detail, mobile drawer/overflow, dark mode, catalog access gate, Vietnamese header layout and article prose/title switching in all seven languages; no page errors.'
 )

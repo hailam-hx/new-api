@@ -399,6 +399,66 @@
       "navigationTitle": "Audio API"
     },
     {
+      "slug": "api-reference",
+      "group": "API",
+      "title": "API Reference",
+      "description": "Endpoint, request and response information for HOTX API.",
+      "kind": "reference",
+      "sources": [
+        "docs/openapi/relay.json",
+        "router/relay-router.go",
+        "router/task-plugin-protocol-router.go",
+        "pkg/jsplugin/routing.go",
+        "relaykit/dto/openai_request.go",
+        "relaykit/dto/openai_image.go",
+        "relaykit/dto/audio.go",
+        "middleware/auth.go",
+        "middleware/utils.go"
+      ],
+      "sections": [
+        {
+          "id": "authentication",
+          "title": "Authentication",
+          "body": "API Reference"
+        },
+        {
+          "id": "models",
+          "title": "Models",
+          "body": "API Reference"
+        },
+        {
+          "id": "chat",
+          "title": "Chat",
+          "body": "API Reference"
+        },
+        {
+          "id": "responses",
+          "title": "Responses",
+          "body": "API Reference"
+        },
+        {
+          "id": "images",
+          "title": "Image",
+          "body": "API Reference"
+        },
+        {
+          "id": "video",
+          "title": "Video",
+          "body": "API Reference"
+        },
+        {
+          "id": "audio",
+          "title": "Audio",
+          "body": "API Reference"
+        },
+        {
+          "id": "reference-errors",
+          "title": "Common errors",
+          "body": "API Reference"
+        }
+      ]
+    },
+    {
       "slug": "integration-claude-code",
       "group": "Integrations",
       "title": "Claude Code",

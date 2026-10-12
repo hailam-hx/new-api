@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { PricingModel } from '@/features/pricing/types'
 
+import { publicApiEndpoints } from './api-reference-data'
 import { translateDocSection, type DocArticle } from './content'
 import type reference from './generated/reference.json'
 
@@ -108,7 +109,18 @@ export function searchDocumentation(
       })
     }
   }
-  for (const endpoint of includeReference ? data.endpoints : []) {
+  const customerReference = pages.some((page) => page.slug === 'api-reference')
+  const searchEndpoints = data.endpoints.filter(
+    (endpoint) =>
+      includeReference ||
+      (customerReference &&
+        publicApiEndpoints.some(
+          (publicEndpoint) =>
+            publicEndpoint.method === endpoint.method &&
+            publicEndpoint.path === endpoint.path
+        ))
+  )
+  for (const endpoint of searchEndpoints) {
     if (
       matches(
         `${endpoint.method} ${endpoint.path} ${endpoint.summary} ${endpoint.handler}`
