@@ -710,7 +710,7 @@ assert.deepEqual(
     .getByRole('navigation', { name: 'Previous and next page' })
     .getByRole('link')
     .evaluateAll((links) => links.map((link) => link.getAttribute('href'))),
-  ['/docs/video', '/docs/integration-claude-code']
+  ['/docs/video', '/docs/api-reference']
 )
 for (const [task, label, endpoint, basicRows] of [
   ['speech', 'Text → Speech', '/v1/audio/speech', 4],
@@ -1365,7 +1365,7 @@ await page.screenshot({ path: '/tmp/new-api-chat-vi-desktop.png' })
 await page.setViewportSize({ width: 390, height: 844 })
 await page.screenshot({ path: '/tmp/new-api-chat-vi-mobile.png' })
 
-// Customer reference uses the existing shell, code blocks and global search.
+// Developer reference uses the existing shell and a separate local navigation.
 await page.evaluate(() => {
   localStorage.setItem('i18nextLng', 'en')
   localStorage.setItem('newapi:theme:v1:mode', 'light')
@@ -1374,6 +1374,106 @@ await page.goto(`${baseUrl}/docs/api-reference`)
 let referenceLabels = JSON.parse(
   await fs.readFile('src/i18n/locales/en.json', 'utf8')
 ).translation
+await page
+  .getByRole('heading', {
+    name: referenceLabels['API Reference'],
+    level: 1,
+    exact: true,
+  })
+  .waitFor()
+assert.equal(await page.locator('main #operations li').count(), 14)
+assert.equal(
+  await page
+    .locator('main')
+    .getByText('Request parameters', { exact: true })
+    .count(),
+  0
+)
+assert.equal(await page.locator('main a[href^="/api/"]').count(), 0)
+const developerPaths = await page
+  .getByRole('navigation', {
+    name: referenceLabels['Developer reference navigation'],
+    exact: true,
+  })
+  .locator('a')
+  .evaluateAll((links) => links.map((link) => link.getAttribute('href')))
+assert.equal(developerPaths.length, 21)
+for (const path of developerPaths.slice(1)) {
+  await page.goto(`${baseUrl}${path}`)
+  await page.locator('main h1').waitFor()
+  assert.equal(
+    await page
+      .locator('main')
+      .getByText('Management API', { exact: true })
+      .count(),
+    0
+  )
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 1000 })
+    assert(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth
+      ),
+      `page overflow ${path}/${width}`
+    )
+  }
+}
+await page.setViewportSize({ width: 390, height: 1000 })
+await page
+  .getByRole('combobox', {
+    name: referenceLabels['Reference page'],
+    exact: true,
+  })
+  .click()
+await page
+  .getByRole('option', { name: referenceLabels['Models API'], exact: true })
+  .click()
+await page.waitForURL('**/docs/api-reference-models')
+await page
+  .getByRole('heading', {
+    name: referenceLabels['Models API'],
+    exact: true,
+    level: 1,
+  })
+  .waitFor()
+await page.goto(`${baseUrl}/docs/api-reference-chat`)
+const chatSection = page.locator('#post--v1-chat-completions')
+await chatSection.waitFor()
+await chatSection
+  .getByRole('button', {
+    name: referenceLabels['Copy to clipboard'],
+    exact: true,
+  })
+  .nth(1)
+  .click()
+const copiedRequest = await page.evaluate(() => navigator.clipboard.readText())
+assert(copiedRequest.includes('https://hotx-api.com/v1/chat/completions'))
+assert(copiedRequest.includes('\\\n'))
+await page
+  .getByRole('button', {
+    name: referenceLabels['Search documentation'],
+    exact: true,
+  })
+  .click()
+await page
+  .getByRole('textbox', {
+    name: referenceLabels['Search documentation'],
+    exact: true,
+  })
+  .fill('/v1/videos')
+await page
+  .getByRole('link', { name: /GET \/v1\/videos\/\{task_id\}\/content/ })
+  .click()
+await page
+  .locator('#get--v1-videos--task-id--content')
+  .waitFor({ state: 'visible' })
+assert(new URL(page.url()).pathname === '/docs/api-reference-video')
+assert(
+  await page
+    .locator('#get--v1-videos--task-id--content')
+    .evaluate((element) => element.closest('details').open)
+)
+await page.goto(`${baseUrl}/docs/api-reference-images`)
 for (const [locale, languageLabel] of [
   ['en', 'English'],
   ['vi', 'Tiếng Việt'],
@@ -1383,6 +1483,7 @@ for (const [locale, languageLabel] of [
   ['ja', '日本語'],
   ['ru', 'Русский'],
 ]) {
+  await page.setViewportSize({ width: 1440, height: 1000 })
   const labels = JSON.parse(
     await fs.readFile(`src/i18n/locales/${locale}.json`, 'utf8')
   ).translation
@@ -1394,24 +1495,10 @@ for (const [locale, languageLabel] of [
     .click()
   await page.getByRole('menuitem', { name: languageLabel, exact: true }).click()
   referenceLabels = labels
+  await page.reload()
   await page
-    .getByRole('heading', {
-      name: labels['API Reference'],
-      exact: true,
-      level: 1,
-    })
+    .getByRole('heading', { name: labels['Image API'], level: 1, exact: true })
     .waitFor()
-  await page
-    .getByRole('heading', {
-      name: labels['API Reference'],
-      exact: true,
-      level: 1,
-    })
-    .waitFor()
-  assert.equal(await page.locator('main #operations tbody tr').count(), 12)
-  assert.equal(await page.locator('main a[href^="/api/"]').count(), 0)
-  assert.equal(await page.locator('main').getByRole('combobox').count(), 0)
-  await page.setViewportSize({ width: 1440, height: 1000 })
   assert.equal(
     await page
       .getByRole('navigation', {
@@ -1422,32 +1509,7 @@ for (const [locale, languageLabel] of [
       .count(),
     1
   )
-  if (locale === 'en') {
-    await page
-      .locator('#post--v1-chat-completions')
-      .getByRole('button', { name: labels['Copy to clipboard'], exact: true })
-      .nth(1)
-      .click()
-    const source = await page.evaluate(() => navigator.clipboard.readText())
-    assert(source.includes('https://hotx-api.com/v1/chat/completions'))
-    assert(source.includes('\\\n'))
-    await page
-      .getByRole('button', {
-        name: labels['Search documentation'],
-        exact: true,
-      })
-      .click()
-    await page
-      .getByRole('textbox', {
-        name: labels['Search documentation'],
-        exact: true,
-      })
-      .fill('/v1/videos')
-    await page
-      .getByRole('link', { name: /GET \/v1\/videos\/\{task_id\}\/content/ })
-      .click()
-    await page.locator('#get--v1-videos--task-id--content').waitFor()
-  }
+  assert.equal(await page.locator('#post--v1-chat-completions').count(), 0)
   for (const mode of locale === 'vi' ? ['light', 'dark'] : ['light']) {
     if (locale === 'vi') {
       await page.evaluate(
@@ -1457,34 +1519,33 @@ for (const [locale, languageLabel] of [
       await page.reload()
       await page
         .getByRole('heading', {
-          name: labels['API Reference'],
-          exact: true,
+          name: labels['Image API'],
           level: 1,
+          exact: true,
         })
         .waitFor()
     }
-    await page.waitForFunction(
-      (mode) =>
-        document.documentElement.classList.contains('dark') ===
-        (mode === 'dark'),
-      mode
-    )
-    for (const width of [1440, 390, 360]) {
+    for (const width of [1440, 768, 430, 390, 375, 320]) {
       await page.setViewportSize({ width, height: 1000 })
       assert(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= innerWidth
         ),
-        `reference overflow: ${locale}/${mode}/${width}`
+        `reference overflow ${locale}/${mode}/${width}`
       )
-      assert(
-        await page
-          .locator('main th')
-          .evaluateAll((cells) =>
-            cells.every((cell) => cell.scrollWidth <= cell.clientWidth)
-          ),
-        `reference header overflow: ${locale}/${width}`
-      )
+      if (width < 640) {
+        assert(
+          (
+            await page
+              .getByRole('combobox', {
+                name: labels['Reference page'],
+                exact: true,
+              })
+              .textContent()
+          ).includes(labels['Image API']),
+          'Mobile reference must show the translated title, not a slug'
+        )
+      }
       assert(
         await page
           .locator('main table')
@@ -1492,8 +1553,23 @@ for (const [locale, languageLabel] of [
             tables.every(
               (table) => table.getBoundingClientRect().right <= innerWidth
             )
-          )
+          ),
+        `table overflow ${locale}/${width}`
       )
+      assert(
+        await page
+          .locator('main th')
+          .evaluateAll((cells) =>
+            cells.every((cell) => cell.scrollWidth <= cell.clientWidth)
+          ),
+        `header overflow ${locale}/${width}`
+      )
+      if (locale === 'vi' && width === 390) {
+        await page.screenshot({
+          path: `/tmp/hotx-reference-${mode}-390.png`,
+          fullPage: false,
+        })
+      }
     }
   }
   if (locale === 'vi') {
@@ -1503,19 +1579,15 @@ for (const [locale, languageLabel] of [
     await page.reload()
     await page
       .getByRole('heading', {
-        name: labels['API Reference'],
-        exact: true,
+        name: labels['Image API'],
         level: 1,
+        exact: true,
       })
       .waitFor()
   }
 }
-
 assert.deepEqual(errors, [])
 console.log(
-  'PASS: customer API reference, 12 registered operations, one sidebar entry, public endpoint search, cURL copy, seven locales, table headers and page bounds at 1440/390/360px, light/dark.'
-)
-console.log(
-  'PASS: API Key three sections, contextual CTAs, header/cURL copy, seven languages, responsive light/dark; Quickstart four steps, SDK copy/tabs, four anchors, direct CTAs, seven locales and responsive light/dark; Overview three linked cards, breadcrumb, single Base URL copy, ordered sections, six guides, seven locales, four viewport widths and Vietnamese light/dark; Audio isolated task tabs, JSON/multipart code/copy, dynamic six-entry TOC, seven locales and four viewport widths; Video create/copy, eight anchors, status/download, responsive flow, seven locales and light/dark; Image minimal examples/copy, six anchors, conditional options, Chat-to-Image defaults in seven languages, four viewport widths; desktop navigation, SDK tabs/streaming, endpoint anchors, live catalog/model detail, mobile drawer/overflow, dark mode, catalog access gate, Vietnamese header layout and article prose/title switching in all seven languages; no page errors.'
+  'PASS: 21 developer pages; 14 domains; one global sidebar entry; operation search expands target; cURL clipboard; seven locales; 320/375/390/430/768/1440px; light/dark; no page errors.'
 )
 await browser.close()

@@ -47,6 +47,7 @@ import { CodeExamples, DocsCode } from './code-examples'
 import {
   articles,
   beginnerArticles,
+  developerArticles,
   getArticle,
   translateDocSection,
 } from './content'
@@ -55,6 +56,7 @@ import { DocumentationMetadata } from './metadata'
 import { DocsNavigation, DocsSearch } from './navigation'
 import { PricingGuide, PricingUsageLink } from './pricing-guide'
 import { ApiReference, ErrorReference, CommonErrors } from './reference'
+import { ReferenceNavigation } from './reference-navigation'
 
 export function Documentation(props: { slug?: string; modelId?: string }) {
   const { t } = useTranslation()
@@ -86,7 +88,13 @@ export function Documentation(props: { slug?: string; modelId?: string }) {
     .replace(/\/v1$/, '')
   const canonical =
     origin + (article.slug === 'overview' && !props.modelId ? '/docs' : path)
-  const navigationArticles = beginnerArticles
+  const isDeveloper =
+    article.slug === 'api-reference' || developerArticles.includes(article)
+  const referenceOverview = getArticle('api-reference')
+  const navigationArticles =
+    isDeveloper && referenceOverview
+      ? [referenceOverview, ...developerArticles]
+      : beginnerArticles
   const index = navigationArticles.indexOf(article)
   const previous = navigationArticles[index - 1]
   const next = index >= 0 ? navigationArticles[index + 1] : undefined
@@ -138,7 +146,10 @@ export function Documentation(props: { slug?: string; modelId?: string }) {
         showNavigation: false,
         leftContent: (
           <div className='lg:hidden'>
-            <DocsNavigation slug={article.slug} mobile />
+            <DocsNavigation
+              slug={isDeveloper ? 'api-reference' : article.slug}
+              mobile
+            />
           </div>
         ),
         rightContent: (
@@ -175,7 +186,7 @@ export function Documentation(props: { slug?: string; modelId?: string }) {
         className={`mx-auto grid max-w-[1500px] grid-cols-1 gap-8 px-4 pt-24 lg:grid-cols-[230px_minmax(0,1fr)] lg:px-6 ${article.kind === 'models' ? '' : 'xl:grid-cols-[230px_minmax(0,1fr)_180px]'}`}
       >
         <aside className='sticky top-24 hidden max-h-[calc(100svh-6rem)] self-start overflow-y-auto overscroll-contain lg:block'>
-          <DocsNavigation slug={article.slug} />
+          <DocsNavigation slug={isDeveloper ? 'api-reference' : article.slug} />
         </aside>
         <main id='docs-content' className='min-w-0 pb-16' tabIndex={-1}>
           <Breadcrumb className='mb-7' aria-label={t('Breadcrumb')}>
@@ -210,6 +221,7 @@ export function Documentation(props: { slug?: string; modelId?: string }) {
               >
                 {t(article.description)}
               </p>
+              {isDeveloper && <ReferenceNavigation slug={article.slug} />}
               {article.slug === 'api-key' && (
                 <p className='mt-3 text-sm leading-7'>
                   {t('An API Key authenticates requests sent to HOTX API.')}
@@ -413,6 +425,7 @@ export function Documentation(props: { slug?: string; modelId?: string }) {
                 'video',
                 'audio',
                 'reference',
+                'reference-domain',
               ].includes(article.kind) &&
                 article.sections
                   .filter(() => article.kind !== 'pricing')
@@ -635,6 +648,13 @@ export function Documentation(props: { slug?: string; modelId?: string }) {
           )}
           {article.kind === 'pricing' && <PricingUsageLink />}
           {article.kind === 'reference' && <ApiReference />}
+          {article.kind === 'reference-domain' && (
+            <ApiReference
+              group={article.slug.replace('api-reference-', '')}
+              models={data.models}
+              hash={href.split('#')[1]}
+            />
+          )}
           {article.kind === 'errors' && <ErrorReference />}
           {article.kind !== 'models' && !beginnerArticles.includes(article) && (
             <details className='text-muted-foreground mt-6 text-xs'>

@@ -23,7 +23,8 @@ import path from 'node:path'
 
 import { afterAll, beforeAll, expect, it } from 'vitest'
 
-import { articles } from '../content'
+import { articles, developerArticles } from '../content'
+import { endpointAnchor } from '../lib'
 
 const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'new-api-docs-seo-'))
 beforeAll(() => {
@@ -200,4 +201,123 @@ it('preserves New API identity in public overview content and page metadata', ()
   expect(html).toContain('What is New API?')
   expect(html).toContain('<title data-docs-head>New API Documentation</title>')
   expect(html).toContain('<a href="/">New API</a>')
+})
+
+it('prerenders a short public index and domain pages without console/admin operations', () => {
+  const index = fs.readFileSync(
+    path.join(directory, 'docs/api-reference/index.html'),
+    'utf8'
+  )
+  expect(index).toContain('/docs/api-reference-models')
+  expect(index).not.toContain('/api/channel')
+  expect(index).not.toContain('Request parameters')
+  const models = fs.readFileSync(
+    path.join(directory, 'docs/api-reference-models/index.html'),
+    'utf8'
+  )
+  expect(models).toContain('/v1/models')
+  expect(models).toContain('Response schema')
+  expect(models).not.toContain('/v1/chat/completions')
+  expect(models).toContain('Developer reference navigation')
+})
+
+it('preserves public image and scoped artifact access contracts in static endpoint pages', () => {
+  const midjourney = new DOMParser().parseFromString(
+    fs.readFileSync(
+      path.join(directory, 'docs/api-reference-midjourney/index.html'),
+      'utf8'
+    ),
+    'text/html'
+  )
+  const image = midjourney.querySelector(
+    `#${endpointAnchor('GET', '/mj/image/{id}')}`
+  )
+  expect(image?.textContent).toContain(
+    'Public image proxy registered before API-key authentication.'
+  )
+  expect(image?.textContent).not.toContain('Authentication: Bearer')
+  const tasks = new DOMParser().parseFromString(
+    fs.readFileSync(
+      path.join(directory, 'docs/api-reference-tasks/index.html'),
+      'utf8'
+    ),
+    'text/html'
+  )
+  const artifact = tasks.querySelector(
+    `#${endpointAnchor('GET', '/v1/tasks/{key}/artifacts/{artifact_key}/content')}`
+  )
+  expect(artifact?.textContent).toContain(
+    'Authenticate with your API key or the scoped access token'
+  )
+  expect(artifact?.textContent).toContain(
+    'Binary response: application/octet-stream'
+  )
+})
+
+it('publishes protocol headers, query parameters and schema availability before JavaScript runs', () => {
+  const anthropic = fs.readFileSync(
+    path.join(directory, 'docs/api-reference-anthropic/index.html'),
+    'utf8'
+  )
+  expect(anthropic).toContain('anthropic-version')
+  expect(anthropic).toContain('2023-06-01')
+  expect(anthropic).toContain(
+    'Provider-specific fields may differ; these examples are not live responses.'
+  )
+  const realtime = fs.readFileSync(
+    path.join(directory, 'docs/api-reference-realtime/index.html'),
+    'utf8'
+  )
+  expect(realtime).toContain('<h3>Query</h3>')
+  expect(realtime).toContain('YOUR_MODEL_ID')
+  expect(realtime).toContain(
+    'Availability depends on enabled channels, plugins and API key access.'
+  )
+  const audio = new DOMParser().parseFromString(
+    fs.readFileSync(
+      path.join(directory, 'docs/api-reference-audio/index.html'),
+      'utf8'
+    ),
+    'text/html'
+  )
+  const speech = audio.querySelector(
+    `#${endpointAnchor('POST', '/v1/audio/speech')}`
+  )
+  expect(speech?.textContent).toContain('Binary response: audio/mpeg')
+  expect(speech?.textContent).toContain(
+    'Asynchronous voice-tts-pro task response'
+  )
+  expect(speech?.textContent).toContain('Idempotency-Key')
+  expect(speech?.textContent).toContain('task_TASK_ID')
+})
+
+it('resolves every developer page navigation and operation anchor in prerendered HTML', () => {
+  for (const article of developerArticles) {
+    const html = fs.readFileSync(
+      path.join(directory, `docs/${article.slug}/index.html`),
+      'utf8'
+    )
+    const document = new DOMParser().parseFromString(html, 'text/html')
+    for (const link of document.querySelectorAll('a[href]')) {
+      const url = new URL(
+        link.getAttribute('href') ?? '',
+        `https://gateway.example/docs/${article.slug}`
+      )
+      if (!url.pathname.startsWith('/docs')) continue
+      const file = path.join(directory, url.pathname, 'index.html')
+      expect(fs.existsSync(file), `${article.slug}: ${url.pathname}`).toBe(true)
+      if (url.hash) {
+        const target = new DOMParser().parseFromString(
+          fs.readFileSync(file, 'utf8'),
+          'text/html'
+        )
+        expect(
+          [...target.querySelectorAll('[id]')].some(
+            (element) => element.id === decodeURIComponent(url.hash.slice(1))
+          ),
+          link.getAttribute('href') ?? ''
+        ).toBe(true)
+      }
+    }
+  }
 })

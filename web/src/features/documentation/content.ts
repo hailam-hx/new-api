@@ -23,8 +23,10 @@ import {
   CHANNEL_TYPE_WARNINGS,
 } from '@/features/channels/constants'
 
+import { apiReferenceGroups, publicApiEndpoints } from './api-reference-data'
 import beginnerData from './beginner-data.json'
 import data from './content-data.json'
+import { developerSemantics } from './developer-semantics-data'
 import reference from './generated/reference.json'
 
 export type DocSection = {
@@ -74,8 +76,7 @@ const providers: DocArticle[] = CHANNEL_TYPE_OPTIONS.map((provider) => ({
       values: {
         type: provider.value,
         provider: provider.label,
-        detail:
-          CHANNEL_PROVIDER_PRESENTATION[provider.value]?.detailKey ?? '',
+        detail: CHANNEL_PROVIDER_PRESENTATION[provider.value]?.detailKey ?? '',
       },
     },
     {
@@ -132,8 +133,32 @@ const taskPluginProviders: DocArticle[] = reference.taskPlugins.map(
     ],
   })
 )
+export const developerArticles: DocArticle[] = [
+  ...apiReferenceGroups.map(([group, title]) => ({
+    slug: `api-reference-${group}`,
+    group: 'API Reference',
+    title,
+    description:
+      'Request parameters, response schemas and compatibility for this API group.',
+    kind: 'reference-domain',
+    sources: [
+      ...new Set(
+        publicApiEndpoints
+          .filter((endpoint) => endpoint.group === group)
+          .flatMap((endpoint) => endpoint.source.split('; '))
+      ),
+    ],
+    sections: [{ id: 'operations', title: 'Endpoints', body: 'API Reference' }],
+  })),
+  ...developerSemantics.map((article) => ({
+    ...article,
+    group: 'API Reference',
+    kind: 'developer',
+  })),
+]
 export const articles: DocArticle[] = [
   ...beginnerArticles,
+  ...developerArticles,
   ...data.articles.filter(
     (article) => !beginnerArticles.some((page) => page.slug === article.slug)
   ),

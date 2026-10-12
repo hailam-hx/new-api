@@ -28,6 +28,10 @@ import userEvent from '@testing-library/user-event'
 import i18next from 'i18next'
 import { describe, expect, it } from 'vitest'
 
+import {
+  convertDetectedLanguage,
+  INTERFACE_LANGUAGE_OPTIONS,
+} from '@/i18n/languages'
 import vi from '@/i18n/locales/vi.json'
 
 import { DocsNavigation, DocsSearch } from '../navigation'
@@ -129,5 +133,12 @@ it.each([false, true])(
     } finally {
       await i18next.changeLanguage('en')
     }
+  }
+)
+
+it.each(INTERFACE_LANGUAGE_OPTIONS)(
+  'preserves stored $code on documentation reload',
+  ({ code }) => {
+    expect(convertDetectedLanguage(code)).toBe(code)
   }
 )

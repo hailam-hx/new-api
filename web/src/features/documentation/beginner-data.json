@@ -402,7 +402,7 @@
       "slug": "api-reference",
       "group": "API",
       "title": "API Reference",
-      "description": "Endpoint, request and response information for HOTX API.",
+      "description": "Endpoints, schemas and protocols supported by HOTX API.",
       "kind": "reference",
       "sources": [
         "docs/openapi/relay.json",
@@ -422,38 +422,13 @@
           "body": "API Reference"
         },
         {
-          "id": "models",
-          "title": "Models",
+          "id": "operations",
+          "title": "API Groups",
           "body": "API Reference"
         },
         {
-          "id": "chat",
-          "title": "Chat",
-          "body": "API Reference"
-        },
-        {
-          "id": "responses",
-          "title": "Responses",
-          "body": "API Reference"
-        },
-        {
-          "id": "images",
-          "title": "Image",
-          "body": "API Reference"
-        },
-        {
-          "id": "video",
-          "title": "Video",
-          "body": "API Reference"
-        },
-        {
-          "id": "audio",
-          "title": "Audio",
-          "body": "API Reference"
-        },
-        {
-          "id": "reference-errors",
-          "title": "Common errors",
+          "id": "reference-policy",
+          "title": "Errors and Limits",
           "body": "API Reference"
         }
       ]

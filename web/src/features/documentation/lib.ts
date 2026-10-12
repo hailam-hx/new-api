@@ -110,26 +110,22 @@ export function searchDocumentation(
     }
   }
   const customerReference = pages.some((page) => page.slug === 'api-reference')
-  const searchEndpoints = data.endpoints.filter(
-    (endpoint) =>
-      includeReference ||
-      (customerReference &&
-        publicApiEndpoints.some(
-          (publicEndpoint) =>
-            publicEndpoint.method === endpoint.method &&
-            publicEndpoint.path === endpoint.path
-        ))
-  )
+  const searchEndpoints = includeReference
+    ? data.endpoints
+    : publicApiEndpoints.filter(() => customerReference)
   for (const endpoint of searchEndpoints) {
-    if (
-      matches(
-        `${endpoint.method} ${endpoint.path} ${endpoint.summary} ${endpoint.handler}`
+    const summary =
+      'description' in endpoint ? endpoint.description : endpoint.summary
+    if (matches(`${endpoint.method} ${endpoint.path} ${summary}`)) {
+      const contract = publicApiEndpoints.find(
+        (candidate) =>
+          candidate.method === endpoint.method &&
+          candidate.path === endpoint.path
       )
-    ) {
       results.push({
         title: `${endpoint.method} ${endpoint.path}`,
         detail: translate('API Reference'),
-        href: `/docs/api-reference#${endpointAnchor(endpoint.method, endpoint.path)}`,
+        href: `/docs/${contract ? `api-reference-${contract.group}` : 'api-reference'}#${endpointAnchor(endpoint.method, endpoint.path)}`,
       })
     }
   }
