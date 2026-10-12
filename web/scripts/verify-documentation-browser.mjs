@@ -1426,16 +1426,66 @@ await page
   })
   .click()
 await page
-  .getByRole('option', { name: referenceLabels['Models API'], exact: true })
+  .getByRole('option', {
+    name: referenceLabels['Models & Catalog'],
+    exact: true,
+  })
   .click()
 await page.waitForURL('**/docs/api-reference-models')
 await page
   .getByRole('heading', {
-    name: referenceLabels['Models API'],
+    name: referenceLabels['Models & Catalog'],
     exact: true,
     level: 1,
   })
   .waitFor()
+await page.goto(`${baseUrl}/docs/api-reference-models#get--v1-catalog`)
+const catalogSection = page.locator('#get--v1-catalog')
+await catalogSection.waitFor()
+assert.equal(
+  await catalogSection
+    .getByText(referenceLabels['Read the API-key scoped catalog'], {
+      exact: true,
+    })
+    .count(),
+  1
+)
+await catalogSection
+  .getByRole('button', {
+    name: referenceLabels['Copy to clipboard'],
+    exact: true,
+  })
+  .nth(1)
+  .click()
+assert(
+  (await page.evaluate(() => navigator.clipboard.readText())).includes(
+    'https://hotx-api.com/v1/catalog'
+  )
+)
+await page.goto(`${baseUrl}/docs/api-reference-billing#get--v1-key-balance`)
+const balanceSection = page.locator('#get--v1-key-balance')
+await balanceSection.waitFor()
+assert.equal(
+  await balanceSection
+    .getByText(referenceLabels['Read the current API key balance'], {
+      exact: true,
+    })
+    .count(),
+  1
+)
+assert.equal(await page.locator('#get--api-usage-token-').count(), 0)
+await balanceSection
+  .getByRole('button', {
+    name: referenceLabels['Copy to clipboard'],
+    exact: true,
+  })
+  .nth(1)
+  .click()
+assert(
+  (await page.evaluate(() => navigator.clipboard.readText())).includes(
+    'https://hotx-api.com/v1/key/balance'
+  )
+)
 await page.goto(`${baseUrl}/docs/api-reference-chat`)
 const chatSection = page.locator('#post--v1-chat-completions')
 await chatSection.waitFor()

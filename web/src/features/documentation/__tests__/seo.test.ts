@@ -217,7 +217,15 @@ it('prerenders a short public index and domain pages without console/admin opera
   )
   expect(models).toContain('/v1/models')
   expect(models).toContain('Response schema')
-  expect(models).not.toContain('/v1/chat/completions')
+  const modelPage = new DOMParser().parseFromString(models, 'text/html')
+  expect(
+    modelPage.querySelector(`#${endpointAnchor('GET', '/v1/catalog')}`)
+  ).not.toBeNull()
+  expect(
+    modelPage.querySelector(
+      `#${endpointAnchor('POST', '/v1/chat/completions')}`
+    )
+  ).toBeNull()
   expect(models).toContain('Developer reference navigation')
 })
 

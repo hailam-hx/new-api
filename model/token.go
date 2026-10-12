@@ -9,6 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/bytedance/gopkg/util/gopool"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type Token struct {
@@ -277,7 +278,17 @@ func GetTokenById(id int) (*Token, error) {
 	return &token, err
 }
 
-func GetTokenByKey(key string, fromDB bool) (token *Token, err error) {
+func GetTokenByKey(key string, fromDB bool) (*Token, error) {
+	return getTokenByKey(key, fromDB, DB)
+}
+
+// GetTokenByKeyForPublicRead preserves quota-cache semantics while preventing
+// SQL debug tracing from recording the bearer credential in the lookup query.
+func GetTokenByKeyForPublicRead(key string) (*Token, error) {
+	return getTokenByKey(key, false, DB.Session(&gorm.Session{Logger: logger.Discard}))
+}
+
+func getTokenByKey(key string, fromDB bool, db *gorm.DB) (token *Token, err error) {
 	if !fromDB && common.RedisEnabled {
 		// Try Redis first
 		token, err := cacheGetTokenByKey(key)
@@ -287,7 +298,7 @@ func GetTokenByKey(key string, fromDB bool) (token *Token, err error) {
 		// Don't return error - fall through to DB
 	}
 	token = &Token{}
-	if err = DB.Where(commonKeyCol+" = ?", key).First(token).Error; err != nil {
+	if err = db.Where(commonKeyCol+" = ?", key).First(token).Error; err != nil {
 		return nil, err
 	}
 	if common.RedisEnabled {

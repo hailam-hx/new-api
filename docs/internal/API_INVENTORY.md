@@ -1,19 +1,19 @@
 # API inventory
 
-Audit of checked-out source at `34fdbcfe6` (2026-10-12), including local documentation tooling. Method/path pairs are counted separately; aliases, GET/HEAD, and the two Midjourney prefixes are separate operations. This records a registered surface, not a published stability promise. No repository-wide version/deprecation policy was found that guarantees every `/v1` route is stable. Provider compatibility, channel configuration, enabled plugin bindings, model access, request modes, ownership, retention, and upstream support still determine availability.
+Audit baseline `c78d5f465` (2026-10-12), updated with the two Phase 2 public reads. Method/path pairs are counted separately; aliases, GET/HEAD, and the two Midjourney prefixes are separate operations. This records a registered surface, not a published stability promise. No repository-wide version/deprecation policy was found that guarantees every `/v1` route is stable. Provider compatibility, channel configuration, enabled plugin bindings, model access, request modes, ownership, retention, and upstream support still determine availability.
 
-Classification follows the consuming contract, not the URL prefix or anonymous access. `PUBLIC` means the API-key relay/integration surface. `CONSOLE` means dashboard/account/site workflows, including console payment callbacks. `ADMIN_INTERNAL` means operator/bootstrap/verification workflows and privileged administration. A dashboard PAT or access token accepted by a management route does not turn it into a public inference API. `/api/pricing`, ordinary `/api/log`, `/api/task`, `/api/user`, and console model endpoints stay out of the developer reference. The exception is the explicitly API-key authenticated read-only `/api/usage/token/` integration route. Per the requested developer-documentation scope, `/api/log/token` remains `CONSOLE` even though it uses read-only API-key authentication; the entire `/api/log/*` family is excluded from the public reference. The four legacy dashboard billing compatibility URLs are public.
+Classification follows the consuming contract, not the URL prefix or anonymous access. `PUBLIC` means the API-key relay/integration surface. `CONSOLE` means dashboard/account/site workflows, including console payment callbacks. `ADMIN_INTERNAL` means operator/bootstrap/verification workflows and privileged administration. A dashboard PAT or access token accepted by a management route does not turn it into a public inference API. `/api/pricing`, ordinary `/api/log`, `/api/task`, `/api/user`, and console model endpoints stay out of the developer reference. Legacy `/api/usage/token/` remains registered for compatibility but is classified CONSOLE and excluded from the recommended public v1 reference. Per the requested developer-documentation scope, `/api/log/token` remains `CONSOLE` even though it uses read-only API-key authentication; the entire `/api/log/*` family is excluded from the public reference. The four legacy dashboard billing compatibility URLs are public.
 
 ## Counts
 
 | Class | Implemented static | Registered not implemented | Static total |
 | --- | ---: | ---: | ---: |
-| PUBLIC | 76 | 12 | 88 |
-| CONSOLE | 121 | 0 | 121 |
+| PUBLIC | 77 | 12 | 89 |
+| CONSOLE | 122 | 0 | 122 |
 | ADMIN_INTERNAL | 204 | 0 | 204 |
-| **Total** | **401** | **12** | **413** |
+| **Total** | **403** | **12** | **415** |
 
-The shipped manifests additionally declare **29 conditional PUBLIC native operations** across seven plugins. They are implemented code contracts but are admitted through the live plugin routing generation, not unconditionally registered static Gin routes. Thus 401 is not the complete deployed route count. With all seven native manifests admitted, there are 430 implemented operations (105 public) and 12 public placeholders, or 442 declared method/path pairs. Uploaded, disabled, overridden, conflicting or rejected plugins can change the deployed count; this audit does not claim a running instance has all 29.
+The shipped manifests additionally declare **29 conditional PUBLIC native operations** across seven plugins. They are implemented code contracts but are admitted through the live plugin routing generation, not unconditionally registered static Gin routes. Thus 403 is not the complete deployed route count. With all seven native manifests admitted, there are 432 implemented operations (106 public) and 12 public placeholders, or 444 declared method/path pairs. Uploaded, disabled, overridden, conflicting or rejected plugins can change the deployed count; this audit does not claim a running instance has all 29.
 
 ## Reading the audit
 
@@ -33,7 +33,8 @@ Source links point to route declarations/handler mapping, not schemas. The extra
 
 | Method | Path | Purpose | Auth | Class | Status | Developer docs | Source | Middleware |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| GET | `/api/usage/token/` | Read authenticated API key quota/status summary | Read-only API key | PUBLIC | IMPLEMENTED | Documented | [router/api-router.go:306](../../router/api-router.go#L306) | M17 |
+| GET | `/v1/catalog` | Key-scoped customer catalog | Public API key read | PUBLIC | IMPLEMENTED | Documented | [router/relay-router.go:22](../../router/relay-router.go#L22) | M51 |
+| GET | `/v1/key/balance` | Current key allowance | Public API key read | PUBLIC | IMPLEMENTED | Documented | [router/relay-router.go:23](../../router/relay-router.go#L23) | M51 |
 | GET | `/dashboard/billing/subscription` | Get Subscription | API key | PUBLIC | IMPLEMENTED | Documented | [router/dashboard.go:18](../../router/dashboard.go#L18) | M50 |
 | GET | `/dashboard/billing/usage` | Get Usage | API key | PUBLIC | IMPLEMENTED | Documented | [router/dashboard.go:20](../../router/dashboard.go#L20) | M50 |
 | GET | `/mj/image/{id}` | Relay Midjourney Image | No route auth middleware; handler conditions apply | PUBLIC | IMPLEMENTED | Documented | [router/relay-router.go:209](../../router/relay-router.go#L209) | M3 |
@@ -165,6 +166,7 @@ Source links point to route declarations/handler mapping, not schemas. The extra
 
 | Method | Path | Purpose | Auth | Class | Status | Developer docs | Source | Middleware |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| GET | `/api/usage/token/` | Read authenticated API key quota/status summary | Read-only API key | CONSOLE | IMPLEMENTED | Excluded (legacy compatibility) | [router/api-router.go:306](../../router/api-router.go#L306) | M17 |
 | GET | `/api/about` | Get About | No route auth middleware; handler conditions apply | CONSOLE | IMPLEMENTED | Excluded (console) | [router/api-router.go:36](../../router/api-router.go#L36) | M9 |
 | GET | `/api/audit/self` | Get Audit Logs | Dashboard user | CONSOLE | IMPLEMENTED | Excluded (console) | [router/api-router.go:323](../../router/api-router.go#L323) | M25 |
 | POST | `/api/creem/webhook` | Creem Webhook | No route auth middleware; handler conditions apply | CONSOLE | IMPLEMENTED | Excluded (console) | [router/api-router.go:66](../../router/api-router.go#L66) | M9 |
@@ -516,6 +518,7 @@ The order below is the extracted group/per-route order. Function arguments prese
 - **M14**: `middleware.RouteTag("api") → gzip.Gzip(gzip.DefaultCompression) → middleware.AccessTokenAudit() → middleware.BodyStorageCleanup() → middleware.GlobalAPIRateLimit() → middleware.AdminAuth() → middleware.RequirePermission(authz.ChannelWrite)`
 - **M15**: `middleware.RouteTag("api") → gzip.Gzip(gzip.DefaultCompression) → middleware.AccessTokenAudit() → middleware.BodyStorageCleanup() → middleware.GlobalAPIRateLimit() → middleware.AdminAuth() → middleware.RequirePermission(authz.TaskPluginBind)`
 - **M16**: `middleware.RouteTag("api") → gzip.Gzip(gzip.DefaultCompression) → middleware.AccessTokenAudit() → middleware.BodyStorageCleanup() → middleware.GlobalAPIRateLimit() → middleware.AdminAuth() → middleware.RootAuth() → middleware.CriticalRateLimit() → middleware.DisableCache() → middleware.SecureVerificationRequired()`
+- **M51**: Engine CORS/decompression/body cleanup/stats plus `RouteTag("relay") → DisableCache() → GlobalAPIRateLimit() → PublicAPIKeyReadAuth()`. Only exact GET catalog/balance bypass exhausted quota; expiry, revocation, account, IP and group checks remain. No inference distribution or billing middleware.
 - **M17**: `middleware.RouteTag("api") → gzip.Gzip(gzip.DefaultCompression) → middleware.AccessTokenAudit() → middleware.BodyStorageCleanup() → middleware.GlobalAPIRateLimit() → middleware.CORS() → middleware.CriticalRateLimit() → middleware.TokenAuthReadOnly()`
 - **M18**: `middleware.RouteTag("api") → gzip.Gzip(gzip.DefaultCompression) → middleware.AccessTokenAudit() → middleware.BodyStorageCleanup() → middleware.GlobalAPIRateLimit() → middleware.CriticalRateLimit()`
 - **M19**: `middleware.RouteTag("api") → gzip.Gzip(gzip.DefaultCompression) → middleware.AccessTokenAudit() → middleware.BodyStorageCleanup() → middleware.GlobalAPIRateLimit() → middleware.CriticalRateLimit() → middleware.DisableCache()`
@@ -562,3 +565,5 @@ The order below is the extracted group/per-route order. Function arguments prese
 ## Verification and limits
 
 The existing syntax extractor emitted 401 implemented static operations. A temporary copy with only the `RelayNotImplemented` exclusion removed emitted 413; method/path deduplication preserved all 413, adding exactly the 12 placeholders above. Literal `meta.routes` declarations were separately counted from the seven shipped plugin source files (29). Registration order, generic tasks, host protocols, plugin runtime admission, web fallbacks, read-only auth branches and compatibility billing controllers were inspected directly. This audit does not execute requests, initialize a database, or alter API/auth/billing/schema behavior. Runtime capability testing and a formal compatibility/versioning commitment remain separate work.
+
+Phase 2 adds two static operations and excludes legacy quota inspection from recommended public metadata. The generated registry now contains 403 implemented static operations; the two new routes have direct fixture-backed HTTP coverage. No existing route is removed.

@@ -11,7 +11,7 @@
         "middleware.RouteTag(\"relay\")",
         "middleware.SystemPerformanceCheck()"
       ],
-      "source": "router/relay-router.go:209",
+      "source": "router/relay-router.go:213",
       "handler": "relay.RelayMidjourneyImage",
       "summary": "",
       "schemaSource": "",
@@ -32,7 +32,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:226",
+      "source": "router/relay-router.go:230",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -53,7 +53,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:212",
+      "source": "router/relay-router.go:216",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -74,7 +74,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:219",
+      "source": "router/relay-router.go:223",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -95,7 +95,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:216",
+      "source": "router/relay-router.go:220",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -116,7 +116,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:218",
+      "source": "router/relay-router.go:222",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -137,7 +137,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:220",
+      "source": "router/relay-router.go:224",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -158,7 +158,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:215",
+      "source": "router/relay-router.go:219",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -179,7 +179,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:214",
+      "source": "router/relay-router.go:218",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -200,7 +200,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:213",
+      "source": "router/relay-router.go:217",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -221,7 +221,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:217",
+      "source": "router/relay-router.go:221",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -242,7 +242,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:227",
+      "source": "router/relay-router.go:231",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -263,7 +263,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:221",
+      "source": "router/relay-router.go:225",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -284,7 +284,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:223",
+      "source": "router/relay-router.go:227",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -305,7 +305,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:224",
+      "source": "router/relay-router.go:228",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -326,7 +326,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:225",
+      "source": "router/relay-router.go:229",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -9105,7 +9105,7 @@
         "middleware.RouteTag(\"relay\")",
         "middleware.SystemPerformanceCheck()"
       ],
-      "source": "router/relay-router.go:209",
+      "source": "router/relay-router.go:213",
       "handler": "relay.RelayMidjourneyImage",
       "summary": "",
       "schemaSource": "",
@@ -9126,7 +9126,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:226",
+      "source": "router/relay-router.go:230",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -9147,7 +9147,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:212",
+      "source": "router/relay-router.go:216",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -9168,7 +9168,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:219",
+      "source": "router/relay-router.go:223",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -9189,7 +9189,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:216",
+      "source": "router/relay-router.go:220",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -9210,7 +9210,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:218",
+      "source": "router/relay-router.go:222",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -9231,7 +9231,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:220",
+      "source": "router/relay-router.go:224",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -9252,7 +9252,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:215",
+      "source": "router/relay-router.go:219",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -9273,7 +9273,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:214",
+      "source": "router/relay-router.go:218",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -9294,7 +9294,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:213",
+      "source": "router/relay-router.go:217",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -9315,7 +9315,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:217",
+      "source": "router/relay-router.go:221",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -9336,7 +9336,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:227",
+      "source": "router/relay-router.go:231",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -9357,7 +9357,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:221",
+      "source": "router/relay-router.go:225",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -9378,7 +9378,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:223",
+      "source": "router/relay-router.go:227",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -9399,7 +9399,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:224",
+      "source": "router/relay-router.go:228",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -9420,7 +9420,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:225",
+      "source": "router/relay-router.go:229",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -9441,7 +9441,7 @@
         "middleware.UserAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:69",
+      "source": "router/relay-router.go:73",
       "handler": "controller.Playground",
       "summary": "",
       "schemaSource": "",
@@ -9463,7 +9463,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:115",
+      "source": "router/relay-router.go:119",
       "handler": "controller.Relay",
       "summary": "",
       "schemaSource": "",
@@ -9585,7 +9585,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:132",
+      "source": "router/relay-router.go:136",
       "handler": "controller.Relay",
       "summary": "音频转录",
       "schemaSource": "docs/openapi/relay.json",
@@ -9677,7 +9677,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:135",
+      "source": "router/relay-router.go:139",
       "handler": "controller.Relay",
       "summary": "音频翻译",
       "schemaSource": "docs/openapi/relay.json",
@@ -9734,6 +9734,347 @@
       }
     },
     {
+      "method": "GET",
+      "path": "/v1/catalog",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.DisableCache()",
+        "middleware.GlobalAPIRateLimit()",
+        "middleware.PublicAPIKeyReadAuth()"
+      ],
+      "source": "router/relay-router.go:22",
+      "handler": "controller.GetDeveloperCatalog",
+      "summary": "Read the API-key scoped catalog",
+      "schemaSource": "docs/openapi/relay.json",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "description": "Read the API-key scoped catalog",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "object",
+                  "schema_version",
+                  "currency",
+                  "models"
+                ],
+                "properties": {
+                  "object": {
+                    "type": "string",
+                    "enum": [
+                      "catalog"
+                    ]
+                  },
+                  "schema_version": {
+                    "type": "string",
+                    "enum": [
+                      "1.0"
+                    ],
+                    "description": "Additive fields may appear. Existing field semantics remain stable within this major version; breaking changes require a new major schema."
+                  },
+                  "currency": {
+                    "type": "string",
+                    "enum": [
+                      "points",
+                      "USD",
+                      "CNY",
+                      "custom"
+                    ],
+                    "description": "Uses the configured customer display unit. CUSTOM points uses the configured conversion. Raw-quota TOKENS display is not supported by these public monetary contracts."
+                  },
+                  "currency_symbol": {
+                    "type": "string",
+                    "description": "Present for an arbitrary custom display currency."
+                  },
+                  "models": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "endpoints",
+                        "pricing",
+                        "billing"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "provider": {
+                          "type": "string",
+                          "description": "Configured provider metadata; omitted when unknown."
+                        },
+                        "category": {
+                          "type": "string",
+                          "description": "Known endpoint-derived category; omitted when ambiguous."
+                        },
+                        "endpoints": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "path",
+                              "method"
+                            ],
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "method": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "pricing": {
+                          "type": "object",
+                          "required": [
+                            "variable"
+                          ],
+                          "properties": {
+                            "variable": {
+                              "type": "boolean",
+                              "description": "True when request options, routing or effective group prices cannot be represented by one lossless unit-price set."
+                            },
+                            "input_per_1m_tokens": {
+                              "type": "string",
+                              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+                              "description": "Exact decimal string in the response currency. Missing is not a zero price."
+                            },
+                            "output_per_1m_tokens": {
+                              "type": "string",
+                              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+                              "description": "Exact decimal string in the response currency. Missing is not a zero price."
+                            },
+                            "cached_input_per_1m_tokens": {
+                              "type": "string",
+                              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+                              "description": "Exact decimal string in the response currency. Missing is not a zero price."
+                            },
+                            "per_request": {
+                              "type": "string",
+                              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+                              "description": "Exact decimal string in the response currency. Missing is not a zero price."
+                            },
+                            "per_image": {
+                              "type": "string",
+                              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+                              "description": "Exact decimal string in the response currency. Missing is not a zero price."
+                            },
+                            "per_second": {
+                              "type": "string",
+                              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+                              "description": "Exact decimal string in the response currency. Missing is not a zero price."
+                            },
+                            "per_character": {
+                              "type": "string",
+                              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+                              "description": "Exact decimal string in the response currency. Missing is not a zero price."
+                            },
+                            "components": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "required": [
+                                  "subject",
+                                  "unit",
+                                  "price"
+                                ],
+                                "properties": {
+                                  "subject": {
+                                    "type": "string",
+                                    "description": "Independently billed usage subject."
+                                  },
+                                  "unit": {
+                                    "type": "string",
+                                    "description": "Explicit price basis, including token_per_1m, count or credit."
+                                  },
+                                  "price": {
+                                    "type": "string",
+                                    "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+                                    "description": "Exact decimal string in the response currency. Missing is not a zero price."
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "billing": {
+                          "type": "object",
+                          "required": [
+                            "mode"
+                          ],
+                          "properties": {
+                            "mode": {
+                              "type": "string",
+                              "enum": [
+                                "token",
+                                "request",
+                                "usage",
+                                "variable"
+                              ]
+                            },
+                            "features": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              },
+                              "description": "Known billed usage categories only; not inferred model capabilities."
+                            }
+                          }
+                        }
+                      },
+                      "description": "Only key-authorized enabled local routes are returned. Unknown capabilities and availability guarantees are not fabricated."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "headers": {
+            "Cache-Control": {
+              "schema": {
+                "type": "string"
+              },
+              "description": "Private no-store response."
+            },
+            "X-Oneapi-Request-Id": {
+              "schema": {
+                "type": "string"
+              },
+              "description": "Server-generated request correlation identifier."
+            }
+          }
+        },
+        "401": {
+          "description": "Missing, invalid, disabled or expired API key. Browser sessions and dashboard credentials are not accepted.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "error"
+                ],
+                "properties": {
+                  "error": {
+                    "type": "object",
+                    "required": [
+                      "message",
+                      "type"
+                    ],
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "param": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "403": {
+          "description": "Disabled account, token IP restriction or group access denied.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "error"
+                ],
+                "properties": {
+                  "error": {
+                    "type": "object",
+                    "required": [
+                      "message",
+                      "type"
+                    ],
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "param": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "429": {
+          "description": "Existing configured global API IP limiter: empty response body.",
+          "headers": {
+            "Retry-After": {
+              "schema": {
+                "type": "integer"
+              },
+              "description": "Existing limiter wait in seconds, when supplied."
+            }
+          }
+        },
+        "500": {
+          "description": "Unexpected local state or unsupported monetary display configuration; a limiter infrastructure failure can return an empty body.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "error"
+                ],
+                "properties": {
+                  "error": {
+                    "type": "object",
+                    "required": [
+                      "message",
+                      "type"
+                    ],
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "param": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "method": "POST",
       "path": "/v1/chat/completions",
       "middleware": [
@@ -9747,7 +10088,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:105",
+      "source": "router/relay-router.go:109",
       "handler": "controller.Relay",
       "summary": "创建聊天对话",
       "schemaSource": "docs/openapi/relay.json",
@@ -10420,7 +10761,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:102",
+      "source": "router/relay-router.go:106",
       "handler": "controller.Relay",
       "summary": "创建文本补全",
       "schemaSource": "docs/openapi/relay.json",
@@ -10634,7 +10975,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:122",
+      "source": "router/relay-router.go:126",
       "handler": "controller.Relay",
       "summary": "",
       "schemaSource": "",
@@ -10656,7 +10997,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:127",
+      "source": "router/relay-router.go:131",
       "handler": "controller.Relay",
       "summary": "创建文本嵌入",
       "schemaSource": "docs/openapi/relay.json",
@@ -10772,7 +11113,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:147",
+      "source": "router/relay-router.go:151",
       "handler": "controller.Relay",
       "summary": "Gemini 嵌入(Embeddings)",
       "schemaSource": "docs/openapi/relay.json",
@@ -11126,6 +11467,228 @@
       }
     },
     {
+      "method": "GET",
+      "path": "/v1/key/balance",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.DisableCache()",
+        "middleware.GlobalAPIRateLimit()",
+        "middleware.PublicAPIKeyReadAuth()"
+      ],
+      "source": "router/relay-router.go:23",
+      "handler": "controller.GetDeveloperKeyBalance",
+      "summary": "Read the current API key allowance",
+      "schemaSource": "docs/openapi/relay.json",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "description": "Read the current API key allowance",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "object",
+                  "unit",
+                  "total",
+                  "used",
+                  "remaining",
+                  "unlimited",
+                  "expires_at"
+                ],
+                "properties": {
+                  "object": {
+                    "type": "string",
+                    "enum": [
+                      "key.balance"
+                    ]
+                  },
+                  "unit": {
+                    "type": "string",
+                    "enum": [
+                      "points",
+                      "USD",
+                      "CNY",
+                      "custom"
+                    ],
+                    "description": "Uses the configured customer display unit. CUSTOM points uses the configured conversion. Raw-quota TOKENS display is not supported by these public monetary contracts."
+                  },
+                  "unit_symbol": {
+                    "type": "string",
+                    "description": "Present for an arbitrary custom display currency."
+                  },
+                  "total": {
+                    "type": "string",
+                    "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+                    "description": "Used plus remaining key allowance. Null when unlimited; not account wallet or lifetime purchases.",
+                    "nullable": true
+                  },
+                  "used": {
+                    "type": "string",
+                    "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+                    "description": "Decimal amount in the response unit; signed values reflect recorded allowance adjustments."
+                  },
+                  "remaining": {
+                    "type": "string",
+                    "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+                    "description": "Key allowance remaining; null when unlimited. Account funding can independently restrict inference.",
+                    "nullable": true
+                  },
+                  "unlimited": {
+                    "type": "boolean"
+                  },
+                  "expires_at": {
+                    "type": "integer",
+                    "format": "int64",
+                    "nullable": true,
+                    "description": "Unix seconds, or null for no expiration. Expired credentials are rejected before this response."
+                  }
+                }
+              }
+            }
+          },
+          "headers": {
+            "Cache-Control": {
+              "schema": {
+                "type": "string"
+              },
+              "description": "Private no-store response."
+            },
+            "X-Oneapi-Request-Id": {
+              "schema": {
+                "type": "string"
+              },
+              "description": "Server-generated request correlation identifier."
+            }
+          }
+        },
+        "401": {
+          "description": "Missing, invalid, disabled or expired API key. Browser sessions and dashboard credentials are not accepted.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "error"
+                ],
+                "properties": {
+                  "error": {
+                    "type": "object",
+                    "required": [
+                      "message",
+                      "type"
+                    ],
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "param": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "403": {
+          "description": "Disabled account, token IP restriction or group access denied.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "error"
+                ],
+                "properties": {
+                  "error": {
+                    "type": "object",
+                    "required": [
+                      "message",
+                      "type"
+                    ],
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "param": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "429": {
+          "description": "Existing configured global API IP limiter: empty response body.",
+          "headers": {
+            "Retry-After": {
+              "schema": {
+                "type": "integer"
+              },
+              "description": "Existing limiter wait in seconds, when supplied."
+            }
+          }
+        },
+        "500": {
+          "description": "Unexpected local state or unsupported monetary display configuration; a limiter infrastructure failure can return an empty body.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "error"
+                ],
+                "properties": {
+                  "error": {
+                    "type": "object",
+                    "required": [
+                      "message",
+                      "type"
+                    ],
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "param": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "method": "POST",
       "path": "/v1/messages",
       "middleware": [
@@ -11139,7 +11702,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:97",
+      "source": "router/relay-router.go:101",
       "handler": "controller.Relay",
       "summary": "Claude 聊天",
       "schemaSource": "docs/openapi/relay.json",
@@ -11495,7 +12058,7 @@
         "middleware.RouteTag(\"relay\")",
         "middleware.TokenAuth()"
       ],
-      "source": "router/relay-router.go:25",
+      "source": "router/relay-router.go:29",
       "handler": "controller.ListModels, controller.ListModels, controller.ListModels",
       "summary": "获取模型列表",
       "schemaSource": "docs/openapi/relay.json",
@@ -11628,7 +12191,7 @@
         "middleware.RouteTag(\"relay\")",
         "middleware.TokenAuth()"
       ],
-      "source": "router/relay-router.go:36",
+      "source": "router/relay-router.go:40",
       "handler": "controller.RetrieveModel, controller.RetrieveModel",
       "summary": "",
       "schemaSource": "",
@@ -11650,7 +12213,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:150",
+      "source": "router/relay-router.go:154",
       "handler": "controller.Relay",
       "summary": "",
       "schemaSource": "",
@@ -11672,7 +12235,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:155",
+      "source": "router/relay-router.go:159",
       "handler": "controller.Relay",
       "summary": "内容审核",
       "schemaSource": "docs/openapi/relay.json",
@@ -11763,7 +12326,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:85",
+      "source": "router/relay-router.go:89",
       "handler": "controller.Relay",
       "summary": "实时 WebSocket 连接",
       "schemaSource": "docs/openapi/relay.json",
@@ -11836,7 +12399,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:142",
+      "source": "router/relay-router.go:146",
       "handler": "controller.Relay",
       "summary": "文档重排序",
       "schemaSource": "docs/openapi/relay.json",
@@ -11940,7 +12503,7 @@
         "middleware.SystemPerformanceCheck()",
         "middleware.TokenAuth()"
       ],
-      "source": "router/relay-router.go:78",
+      "source": "router/relay-router.go:82",
       "handler": "controller.ResponsesWebSocket",
       "summary": "",
       "schemaSource": "",
@@ -12205,7 +12768,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:110",
+      "source": "router/relay-router.go:114",
       "handler": "controller.Relay",
       "summary": "压缩对话 (OpenAI Responses API)",
       "schemaSource": "docs/openapi/relay.json",
@@ -13098,7 +13661,7 @@
         "middleware.RouteTag(\"relay\")",
         "middleware.TokenAuth()"
       ],
-      "source": "router/relay-router.go:50",
+      "source": "router/relay-router.go:54",
       "handler": "controller.ListModels",
       "summary": "Gemini 格式获取",
       "schemaSource": "docs/openapi/relay.json",
@@ -13167,7 +13730,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:202",
+      "source": "router/relay-router.go:206",
       "handler": "controller.Relay",
       "summary": "",
       "schemaSource": "",
@@ -13186,7 +13749,7 @@
         "middleware.RouteTag(\"relay\")",
         "middleware.TokenAuth()"
       ],
-      "source": "router/relay-router.go:59",
+      "source": "router/relay-router.go:63",
       "handler": "controller.ListModels",
       "summary": "",
       "schemaSource": "",

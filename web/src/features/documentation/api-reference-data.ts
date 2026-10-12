@@ -21,7 +21,7 @@ import reference from './generated/reference.json'
 // Public client contracts. Backend DTOs and plugin presenters take precedence
 // over generated OpenAPI schemas; deployment-dependent routes are marked below.
 export const apiReferenceGroups = [
-  ['models', 'Models API'],
+  ['models', 'Models & Catalog'],
   ['chat', 'Text APIs'],
   ['responses', 'Responses API'],
   ['anthropic', 'Anthropic Messages'],
@@ -96,6 +96,94 @@ const responseShape = {
   ],
 }
 const definitions: Definition[] = [
+  {
+    method: 'GET',
+    path: '/v1/catalog',
+    group: 'models',
+    description: 'Read the API-key scoped catalog',
+    source: 'controller/developer_catalog.go; dto/developer_catalog.go',
+    response: {
+      object: 'catalog',
+      schema_version: '1.0',
+      currency: 'points',
+      models: [
+        {
+          id: 'YOUR_MODEL_ID',
+          endpoints: [{ path: '/v1/chat/completions', method: 'POST' }],
+          pricing: {
+            variable: false,
+            input_per_1m_tokens: '2.5',
+            output_per_1m_tokens: '10',
+            cached_input_per_1m_tokens: '0.25',
+          },
+          billing: {
+            mode: 'token',
+            features: ['input_token', 'output_token', 'cached_input'],
+          },
+        },
+      ],
+    },
+    note: 'Catalog discovery is a non-metered local read. It filters enabled routes by your key model allowlist, current group permissions and channel or plugin bindings. It does not call an upstream, reserve quota or update inference usage. Enabled or exhausted keys can read with zero balance; expired, disabled and invalid keys are rejected.',
+    schemaNote:
+      'Catalog prices are customer unit rates for this key, represented as decimal strings in currency. Missing fields are not free prices; an explicit "0" is a configured zero price. Different eligible routes or groups, request options and unsupported complex expressions can produce variable=true instead of an inaccurate flat price. Unknown model capabilities are omitted.',
+    responseFields: [
+      { name: 'object', type: 'string', required: true },
+      { name: 'schema_version', type: 'string', required: true },
+      { name: 'currency', type: 'string', required: true },
+      { name: 'currency_symbol', type: 'string', required: false },
+      { name: 'models', type: 'array', required: true },
+      { name: 'models[].id', type: 'string', required: true },
+      { name: 'models[].provider', type: 'string', required: false },
+      { name: 'models[].category', type: 'string', required: false },
+      { name: 'models[].endpoints', type: 'array', required: true },
+      { name: 'models[].endpoints[].path', type: 'string', required: true },
+      { name: 'models[].endpoints[].method', type: 'string', required: true },
+      { name: 'models[].pricing', type: 'object', required: true },
+      { name: 'models[].pricing.variable', type: 'boolean', required: true },
+      {
+        name: 'models[].pricing.input_per_1m_tokens',
+        type: 'string',
+        required: false,
+      },
+      {
+        name: 'models[].pricing.output_per_1m_tokens',
+        type: 'string',
+        required: false,
+      },
+      {
+        name: 'models[].pricing.cached_input_per_1m_tokens',
+        type: 'string',
+        required: false,
+      },
+      { name: 'models[].pricing.per_request', type: 'string', required: false },
+      { name: 'models[].pricing.per_image', type: 'string', required: false },
+      { name: 'models[].pricing.per_second', type: 'string', required: false },
+      {
+        name: 'models[].pricing.per_character',
+        type: 'string',
+        required: false,
+      },
+      { name: 'models[].pricing.components', type: 'array', required: false },
+      {
+        name: 'models[].pricing.components[].subject',
+        type: 'string',
+        required: true,
+      },
+      {
+        name: 'models[].pricing.components[].unit',
+        type: 'string',
+        required: true,
+      },
+      {
+        name: 'models[].pricing.components[].price',
+        type: 'string',
+        required: true,
+      },
+      { name: 'models[].billing', type: 'object', required: true },
+      { name: 'models[].billing.mode', type: 'string', required: true },
+      { name: 'models[].billing.features', type: 'array', required: false },
+    ],
+  },
   {
     method: 'GET',
     path: '/v1/models',
@@ -1059,26 +1147,52 @@ const additionalDefinitions: Definition[] = [
   },
   {
     method: 'GET',
-    path: '/api/usage/token/',
+    path: '/v1/key/balance',
     group: 'billing',
-    description: 'Read API key usage',
-    source: 'controller/token.go; middleware/auth.go',
+    description: 'Read the current API key balance',
+    source: 'controller/developer_balance.go; dto/developer_balance.go',
     response: {
-      code: true,
-      message: 'ok',
-      data: {
-        object: 'token_usage',
-        name: 'KEY_NAME',
-        total_granted: 0,
-        total_used: 0,
-        total_available: 0,
-        unlimited_quota: false,
-        model_limits: {},
-        model_limits_enabled: false,
-        expires_at: 0,
-      },
+      object: 'key.balance',
+      unit: 'points',
+      total: '100',
+      used: '25',
+      remaining: '75',
+      unlimited: false,
+      expires_at: null,
     },
-    note: 'Use the Bearer header. Values are raw quota units; expires_at is Unix seconds, or 0 without expiry. Read-only authentication allows expired or exhausted keys, but rejects disabled keys and banned accounts.',
+    note: 'Balance is the authenticated key allowance, not the account wallet or lifetime purchased funds. For limited keys, total is used plus remaining. For unlimited keys, total and remaining are null while used remains the recorded amount. expires_at is Unix seconds or null when there is no expiry. Query parameters cannot select another key.',
+    schemaNote:
+      'GET /v1/key/balance reads only the authenticated key snapshot. A zero balance is returned successfully. Unlimited total and remaining are null, used stays exact, and no-expiration is null. Expired keys are rejected. Key allowance and account funding are separate, so a readable key balance does not guarantee inference can proceed.',
+    responseFields: [
+      { name: 'object', type: 'string', required: true },
+      { name: 'unit', type: 'string', required: true },
+      { name: 'unit_symbol', type: 'string', required: false },
+      { name: 'total', type: 'string / null', required: true },
+      { name: 'used', type: 'string', required: true },
+      { name: 'remaining', type: 'string / null', required: true },
+      { name: 'unlimited', type: 'boolean', required: true },
+      { name: 'expires_at', type: 'integer / null', required: true },
+    ],
+    responseAlternatives: [
+      {
+        description: 'Unlimited',
+        response: {
+          object: 'key.balance',
+          unit: 'points',
+          total: null,
+          used: '25',
+          remaining: null,
+          unlimited: true,
+          expires_at: null,
+        },
+        responseFields: [
+          { name: 'total', type: 'null', required: true },
+          { name: 'remaining', type: 'null', required: true },
+          { name: 'used', type: 'string', required: true },
+          { name: 'unlimited', type: 'boolean', required: true },
+        ],
+      },
+    ],
   },
 
   {

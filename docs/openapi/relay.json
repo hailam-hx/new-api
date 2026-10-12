@@ -68,6 +68,10 @@
     },
     {
       "name": "未实现/Files"
+    },
+    {
+      "name": "Public Developer APIs",
+      "description": "Independent API-key authenticated, non-metered public read contracts."
     }
   ],
   "paths": {
@@ -2304,6 +2308,170 @@
             "BearerAuth": []
           }
         ]
+      }
+    },
+    "/v1/catalog": {
+      "get": {
+        "tags": [
+          "Public Developer APIs"
+        ],
+        "summary": "Read the API-key scoped catalog",
+        "description": "Non-metered local discovery. Respects key model allowlists and current user/group/channel bindings. Enabled or exhausted unexpired keys can read with zero allowance. No inference quota is reserved or charged; no upstream is called. Model access is local routing/configuration, not a guarantee of upstream availability. Unknown capabilities are omitted.",
+        "operationId": "getDeveloperCatalog",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read the API-key scoped catalog",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperCatalog"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Private no-store response."
+              },
+              "X-Oneapi-Request-Id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Server-generated request correlation identifier."
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, disabled or expired API key. Browser sessions and dashboard credentials are not accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperAPIError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Disabled account, token IP restriction or group access denied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperAPIError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Existing configured global API IP limiter: empty response body.",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Existing limiter wait in seconds, when supplied."
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected local state or unsupported monetary display configuration; a limiter infrastructure failure can return an empty body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperAPIError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/key/balance": {
+      "get": {
+        "tags": [
+          "Public Developer APIs"
+        ],
+        "summary": "Read the current API key allowance",
+        "description": "Non-metered read of only the authenticated key snapshot. Zero remaining allowance is readable; unlimited total and remaining are null. Used is recorded usage in the configured display unit. No caller key/user ID is accepted. No-expiration becomes null. Expired, disabled and invalid keys return 401. Account wallet and key allowance are distinct.",
+        "operationId": "getDeveloperKeyBalance",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read the current API key allowance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperKeyBalance"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Private no-store response."
+              },
+              "X-Oneapi-Request-Id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Server-generated request correlation identifier."
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, disabled or expired API key. Browser sessions and dashboard credentials are not accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperAPIError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Disabled account, token IP restriction or group access denied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperAPIError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Existing configured global API IP limiter: empty response body.",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Existing limiter wait in seconds, when supplied."
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected local state or unsupported monetary display configuration; a limiter infrastructure failure can return an empty body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperAPIError"
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -4592,6 +4760,289 @@
           },
           "created_at": {
             "type": "integer"
+          }
+        }
+      },
+      "DeveloperCatalogPriceComponent": {
+        "type": "object",
+        "required": [
+          "subject",
+          "unit",
+          "price"
+        ],
+        "properties": {
+          "subject": {
+            "type": "string",
+            "description": "Independently billed usage subject."
+          },
+          "unit": {
+            "type": "string",
+            "description": "Explicit price basis, including token_per_1m, count or credit."
+          },
+          "price": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+            "description": "Exact decimal string in the response currency. Missing is not a zero price."
+          }
+        }
+      },
+      "DeveloperCatalogPricing": {
+        "type": "object",
+        "required": [
+          "variable"
+        ],
+        "properties": {
+          "variable": {
+            "type": "boolean",
+            "description": "True when request options, routing or effective group prices cannot be represented by one lossless unit-price set."
+          },
+          "input_per_1m_tokens": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+            "description": "Exact decimal string in the response currency. Missing is not a zero price."
+          },
+          "output_per_1m_tokens": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+            "description": "Exact decimal string in the response currency. Missing is not a zero price."
+          },
+          "cached_input_per_1m_tokens": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+            "description": "Exact decimal string in the response currency. Missing is not a zero price."
+          },
+          "per_request": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+            "description": "Exact decimal string in the response currency. Missing is not a zero price."
+          },
+          "per_image": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+            "description": "Exact decimal string in the response currency. Missing is not a zero price."
+          },
+          "per_second": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+            "description": "Exact decimal string in the response currency. Missing is not a zero price."
+          },
+          "per_character": {
+            "type": "string",
+            "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+            "description": "Exact decimal string in the response currency. Missing is not a zero price."
+          },
+          "components": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeveloperCatalogPriceComponent"
+            }
+          }
+        }
+      },
+      "DeveloperCatalogBilling": {
+        "type": "object",
+        "required": [
+          "mode"
+        ],
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "token",
+              "request",
+              "usage",
+              "variable"
+            ]
+          },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Known billed usage categories only; not inferred model capabilities."
+          }
+        }
+      },
+      "DeveloperCatalogEndpoint": {
+        "type": "object",
+        "required": [
+          "path",
+          "method"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string"
+          }
+        }
+      },
+      "DeveloperCatalogModel": {
+        "type": "object",
+        "required": [
+          "id",
+          "endpoints",
+          "pricing",
+          "billing"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string",
+            "description": "Configured provider metadata; omitted when unknown."
+          },
+          "category": {
+            "type": "string",
+            "description": "Known endpoint-derived category; omitted when ambiguous."
+          },
+          "endpoints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeveloperCatalogEndpoint"
+            }
+          },
+          "pricing": {
+            "$ref": "#/components/schemas/DeveloperCatalogPricing"
+          },
+          "billing": {
+            "$ref": "#/components/schemas/DeveloperCatalogBilling"
+          }
+        },
+        "description": "Only key-authorized enabled local routes are returned. Unknown capabilities and availability guarantees are not fabricated."
+      },
+      "DeveloperCatalog": {
+        "type": "object",
+        "required": [
+          "object",
+          "schema_version",
+          "currency",
+          "models"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "enum": [
+              "catalog"
+            ]
+          },
+          "schema_version": {
+            "type": "string",
+            "enum": [
+              "1.0"
+            ],
+            "description": "Additive fields may appear. Existing field semantics remain stable within this major version; breaking changes require a new major schema."
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "points",
+              "USD",
+              "CNY",
+              "custom"
+            ],
+            "description": "Uses the configured customer display unit. CUSTOM points uses the configured conversion. Raw-quota TOKENS display is not supported by these public monetary contracts."
+          },
+          "currency_symbol": {
+            "type": "string",
+            "description": "Present for an arbitrary custom display currency."
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeveloperCatalogModel"
+            }
+          }
+        }
+      },
+      "DeveloperKeyBalance": {
+        "type": "object",
+        "required": [
+          "object",
+          "unit",
+          "total",
+          "used",
+          "remaining",
+          "unlimited",
+          "expires_at"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "enum": [
+              "key.balance"
+            ]
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "points",
+              "USD",
+              "CNY",
+              "custom"
+            ],
+            "description": "Uses the configured customer display unit. CUSTOM points uses the configured conversion. Raw-quota TOKENS display is not supported by these public monetary contracts."
+          },
+          "unit_symbol": {
+            "type": "string",
+            "description": "Present for an arbitrary custom display currency."
+          },
+          "total": {
+            "type": "string",
+            "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+            "description": "Used plus remaining key allowance. Null when unlimited; not account wallet or lifetime purchases.",
+            "nullable": true
+          },
+          "used": {
+            "type": "string",
+            "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+            "description": "Decimal amount in the response unit; signed values reflect recorded allowance adjustments."
+          },
+          "remaining": {
+            "type": "string",
+            "pattern": "^-?(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+            "description": "Key allowance remaining; null when unlimited. Account funding can independently restrict inference.",
+            "nullable": true
+          },
+          "unlimited": {
+            "type": "boolean"
+          },
+          "expires_at": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true,
+            "description": "Unix seconds, or null for no expiration. Expired credentials are rejected before this response."
+          }
+        }
+      },
+      "DeveloperAPIError": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "message",
+              "type"
+            ],
+            "properties": {
+              "message": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "code": {
+                "type": "string"
+              },
+              "param": {
+                "type": "string"
+              }
+            }
           }
         }
       }

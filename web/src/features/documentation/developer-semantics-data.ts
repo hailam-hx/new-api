@@ -47,6 +47,11 @@ export const developerSemantics = [
         body: 'Relay authentication checks key status, expiry and remaining key quota unless unlimited. Requests also depend on the enabled account, allowed IP ranges, selected group and model restrictions. A valid key does not grant every model or group. Model-access checks and funding checks can reject the request after authentication; inspect the status and error message before retrying.',
       },
       {
+        id: 'public-read-auth',
+        title: 'Public Catalog',
+        body: 'These public reads require an Authorization Bearer API key and retain account, IP and group restrictions. Browser cookies and dashboard credentials are not accepted. Zero allowance does not block these reads; expired keys still return 401. Responses are private and no-store. The configured global API IP limiter can return an empty 429 body with Retry-After; no inference billing limiter is used.',
+      },
+      {
         id: 'credential-handling',
         title: 'Protecting Credentials',
         body: 'Keep API keys on a trusted server, send authenticated traffic over HTTPS and exclude keys from logs, screenshots and shared examples. Disable a key when it is no longer needed. Read-only token usage and log endpoints allow expired or exhausted keys to inspect records but reject explicitly disabled keys and disabled accounts; this does not authorize new relay requests.',
@@ -102,8 +107,37 @@ export const developerSemantics = [
       'pkg/billingexpr/expr.md',
       'controller/billing.go',
       'controller/token.go',
+      'controller/developer_catalog.go',
+      'controller/developer_balance.go',
+      'dto/developer_catalog.go',
+      'dto/developer_balance.go',
     ],
     sections: [
+      {
+        id: 'public-catalog',
+        title: 'Public Catalog',
+        body: 'GET /v1/catalog provides rich key-scoped model discovery. GET /v1/models remains the OpenAI-compatible model list. Use catalog for configured endpoints and customer pricing; a listed local route is not a guarantee of every upstream feature or current upstream availability.',
+      },
+      {
+        id: 'public-catalog-pricing',
+        title: 'Pricing',
+        body: 'Catalog prices are customer unit rates for this key, represented as decimal strings in currency. Missing fields are not free prices; an explicit "0" is a configured zero price. Different eligible routes or groups, request options and unsupported complex expressions can produce variable=true instead of an inaccurate flat price. Unknown model capabilities are omitted.',
+      },
+      {
+        id: 'public-key-balance',
+        title: 'Public Key Balance',
+        body: 'Balance is the authenticated key allowance, not the account wallet or lifetime purchased funds. For limited keys, total is used plus remaining. For unlimited keys, total and remaining are null while used remains the recorded amount. expires_at is Unix seconds or null when there is no expiry. Query parameters cannot select another key.',
+      },
+      {
+        id: 'public-currency',
+        title: 'Currency',
+        body: 'Catalog and balance use the configured customer display unit. HOTX points configuration returns points with its configured conversion; USD, CNY and another configured custom currency retain their own units. Monetary values are decimal strings. Console raw-quota TOKENS display is unsupported by these public monetary contracts and returns an error instead of exposing internal quota.',
+      },
+      {
+        id: 'legacy-quota',
+        title: 'Compatibility and Versioning',
+        body: 'Legacy quota inspection is retained for compatibility. New public integrations should use GET /v1/key/balance; raw quota from /api/usage/token/ is not a points amount.',
+      },
       {
         id: 'token-categories',
         title: 'Input, Output and Cache',
@@ -127,7 +161,7 @@ export const developerSemantics = [
       {
         id: 'final-charge',
         title: 'Checking the Final Charge',
-        body: 'Use Pricing for the effective customer price and Usage Logs for the recorded consumption and adjustments. Keep the X-Oneapi-Request-Id response header and public task ID for correlation. GET /api/usage/token/ reports API-key quota totals in internal quota units, not model token counts. Dashboard billing compatibility endpoints use the site display unit; fields named *_usd and total_usage are not a universal USD cost contract.',
+        body: 'Use GET /v1/catalog for key-specific customer unit rates and GET /v1/key/balance for the current key allowance. Use Console Usage Logs for recorded consumption and adjustments. Keep X-Oneapi-Request-Id and the public task ID for correlation. Legacy /api/usage/token/ and dashboard billing URLs retain compatibility behavior but are not the recommended new public read contract.',
       },
     ],
   },
@@ -223,6 +257,11 @@ export const developerSemantics = [
         id: 'unsupported',
         title: 'Unsupported Operations',
         body: 'Registered file, fine-tune and image-variation placeholders return 501 rather than implementing those APIs. Claude count_tokens is disabled and Gemini countTokens is rejected as a missing route. Use the endpoint reference and actual response instead of assuming complete provider API coverage.',
+      },
+      {
+        id: 'catalog-schema',
+        title: 'Catalog Schema Compatibility',
+        body: 'The catalog schema_version is "1.0". Additive fields may appear and clients should ignore unknown fields. Existing field meanings remain unchanged within the same schema major; a breaking catalog change requires a new major schema version. This policy applies to the catalog contract and does not create a global API SLA or deprecation schedule.',
       },
       {
         id: 'versions',

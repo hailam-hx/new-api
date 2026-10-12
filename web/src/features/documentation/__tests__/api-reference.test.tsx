@@ -41,7 +41,7 @@ describe('customer API reference', () => {
     expect(getArticle('api-reference')?.kind).toBe('reference')
   })
   it('only documents registered customer operations with token authentication', () => {
-    expect(publicApiEndpoints).toHaveLength(105)
+    expect(publicApiEndpoints).toHaveLength(106)
     for (const endpoint of publicApiEndpoints) {
       const route = reference.endpoints.find(
         (e) => e.method === endpoint.method && e.path === endpoint.path
@@ -54,6 +54,7 @@ describe('customer API reference', () => {
           route?.middleware.some(
             (item) =>
               item.includes('TokenAuth') ||
+              item.includes('PublicAPIKeyReadAuth') ||
               item.includes('TokenOrTaskArtifactAccessAuth')
           ) ||
             ['/mj/image/{id}', '/{mode}/mj/image/{id}'].includes(endpoint.path)
@@ -65,7 +66,62 @@ describe('customer API reference', () => {
         .filter((endpoint) => endpoint.path.startsWith('/api/'))
         .map((endpoint) => endpoint.path)
         .sort()
-    ).toEqual(['/api/usage/token/'])
+    ).toEqual([])
+  })
+  it('documents public catalog and key balance with exact decimal and unlimited semantics', () => {
+    const catalog = publicApiEndpoints.find(
+      (endpoint) => endpoint.path === '/v1/catalog'
+    )
+    const balance = publicApiEndpoints.find(
+      (endpoint) => endpoint.path === '/v1/key/balance'
+    )
+    expect(catalog?.response).toMatchObject({
+      object: 'catalog',
+      schema_version: '1.0',
+      currency: 'points',
+      models: [
+        {
+          pricing: {
+            variable: false,
+            input_per_1m_tokens: '2.5',
+            output_per_1m_tokens: '10',
+            cached_input_per_1m_tokens: '0.25',
+          },
+        },
+      ],
+    })
+    expect(balance?.response).toEqual({
+      object: 'key.balance',
+      unit: 'points',
+      total: '100',
+      used: '25',
+      remaining: '75',
+      unlimited: false,
+      expires_at: null,
+    })
+    expect(balance?.responseAlternatives?.[0].response).toEqual({
+      object: 'key.balance',
+      unit: 'points',
+      total: null,
+      used: '25',
+      remaining: null,
+      unlimited: true,
+      expires_at: null,
+    })
+    for (const endpoint of [catalog, balance]) {
+      expect(endpoint?.method).toBe('GET')
+      expect(endpoint?.fields).toEqual([])
+      expect(endpoint?.example).toContain(
+        `https://hotx-api.com${endpoint?.path}`
+      )
+      expect(endpoint?.example).toContain('Authorization: Bearer YOUR_API_KEY')
+      expect(endpoint?.example).not.toContain(' -d ')
+    }
+    expect(
+      publicApiEndpoints.some((endpoint) =>
+        endpoint.path.startsWith('/v1/usage/requests/')
+      )
+    ).toBe(false)
   })
   it('finds public endpoints through ordinary docs search but excludes console APIs', () => {
     for (const endpoint of publicApiEndpoints) {
@@ -129,10 +185,9 @@ describe('customer API reference', () => {
     expect(
       screen.getByText('https://hotx-api.com/v1', { exact: true })
     ).toBeVisible()
-    expect(screen.getByRole('link', { name: 'Models API' })).toHaveAttribute(
-      'href',
-      '/docs/api-reference-models'
-    )
+    expect(
+      screen.getByRole('link', { name: 'Models & Catalog' })
+    ).toHaveAttribute('href', '/docs/api-reference-models')
     expect(
       screen.queryByText('Request parameters', { exact: true })
     ).not.toBeInTheDocument()

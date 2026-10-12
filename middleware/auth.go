@@ -359,50 +359,97 @@ func TokenAuthReadOnly() func(c *gin.Context) {
 }
 
 func TokenAuth() func(c *gin.Context) {
+	return tokenAuth(false)
+}
+
+const publicAPIKeyContextKey = "public_api_key"
+
+// PublicAPIKeyReadAuth permits exhausted quota only on the two public read routes.
+// Expiry, revocation, IP and current group permissions remain enforced.
+func PublicAPIKeyReadAuth() gin.HandlerFunc {
+	return tokenAuth(true)
+}
+
+// GetPublicAPIKey returns the key snapshot authenticated for a public read.
+func GetPublicAPIKey(c *gin.Context) (*model.Token, bool) {
+	value, exists := c.Get(publicAPIKeyContextKey)
+	token, valid := value.(*model.Token)
+	return token, exists && valid && token != nil
+}
+
+func tokenAuth(publicRead bool) func(c *gin.Context) {
 	return func(c *gin.Context) {
-		// 先检测是否为ws
-		applyWebSocketSubprotocolAuthorization(c.Request.Header)
-		// 检查path包含/v1/messages 或 /v1/models
-		if strings.Contains(c.Request.URL.Path, "/v1/messages") || strings.Contains(c.Request.URL.Path, "/v1/models") {
-			anthropicKey := c.Request.Header.Get("x-api-key")
-			if anthropicKey != "" {
-				c.Request.Header.Set("Authorization", "Bearer "+anthropicKey)
+		var key string
+		var parts []string
+		var token *model.Token
+		var err error
+		if publicRead {
+			if c.Request.Method != http.MethodGet || (c.Request.URL.Path != "/v1/catalog" && c.Request.URL.Path != "/v1/key/balance") {
+				abortWithOpenAiMessage(c, http.StatusForbidden, "Access denied", types.ErrorCodeAccessDenied)
+				return
 			}
-		}
-		// gemini api 从query中获取key
-		if c.Request.URL.Path == "/v1/models" ||
-			strings.HasPrefix(c.Request.URL.Path, "/v1beta/models") ||
-			strings.HasPrefix(c.Request.URL.Path, "/v1beta/openai/models") ||
-			strings.HasPrefix(c.Request.URL.Path, "/v1/models/") {
-			skKey := c.Query("key")
-			if skKey != "" {
-				c.Request.Header.Set("Authorization", "Bearer "+skKey)
+			credentials := strings.Fields(c.GetHeader("Authorization"))
+			if len(credentials) != 2 || !strings.EqualFold(credentials[0], "Bearer") {
+				abortWithOpenAiMessage(c, http.StatusUnauthorized, common.TranslateMessage(c, i18n.MsgTokenInvalid))
+				return
 			}
-			// 从x-goog-api-key header中获取key
-			xGoogKey := c.Request.Header.Get("x-goog-api-key")
-			if xGoogKey != "" {
-				c.Request.Header.Set("Authorization", "Bearer "+xGoogKey)
+			key = strings.TrimPrefix(credentials[1], "sk-")
+			if key == "" {
+				abortWithOpenAiMessage(c, http.StatusUnauthorized, common.TranslateMessage(c, i18n.MsgTokenInvalid))
+				return
 			}
-		}
-		key := c.Request.Header.Get("Authorization")
-		parts := make([]string, 0)
-		if strings.HasPrefix(key, "Bearer ") || strings.HasPrefix(key, "bearer ") {
-			key = strings.TrimSpace(key[7:])
-		}
-		if key == "" || key == "midjourney-proxy" {
-			key = c.Request.Header.Get("mj-api-secret")
+			token, err = model.GetTokenByKeyForPublicRead(key)
+			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+				err = fmt.Errorf("%w: %v", model.ErrDatabase, err)
+			}
+			if err == nil && ((token.Status != common.TokenStatusEnabled && token.Status != common.TokenStatusExhausted) || (token.ExpiredTime != -1 && token.ExpiredTime < common.GetTimestamp())) {
+				err = model.ErrTokenInvalid
+			}
+		} else {
+			// 先检测是否为ws
+			applyWebSocketSubprotocolAuthorization(c.Request.Header)
+			// 检查path包含/v1/messages 或 /v1/models
+			if strings.Contains(c.Request.URL.Path, "/v1/messages") || strings.Contains(c.Request.URL.Path, "/v1/models") {
+				anthropicKey := c.Request.Header.Get("x-api-key")
+				if anthropicKey != "" {
+					c.Request.Header.Set("Authorization", "Bearer "+anthropicKey)
+				}
+			}
+			// gemini api 从query中获取key
+			if c.Request.URL.Path == "/v1/models" ||
+				strings.HasPrefix(c.Request.URL.Path, "/v1beta/models") ||
+				strings.HasPrefix(c.Request.URL.Path, "/v1beta/openai/models") ||
+				strings.HasPrefix(c.Request.URL.Path, "/v1/models/") {
+				skKey := c.Query("key")
+				if skKey != "" {
+					c.Request.Header.Set("Authorization", "Bearer "+skKey)
+				}
+				// 从x-goog-api-key header中获取key
+				xGoogKey := c.Request.Header.Get("x-goog-api-key")
+				if xGoogKey != "" {
+					c.Request.Header.Set("Authorization", "Bearer "+xGoogKey)
+				}
+			}
+			key = c.Request.Header.Get("Authorization")
+			parts = make([]string, 0)
 			if strings.HasPrefix(key, "Bearer ") || strings.HasPrefix(key, "bearer ") {
 				key = strings.TrimSpace(key[7:])
 			}
-			key = strings.TrimPrefix(key, "sk-")
-			parts = strings.Split(key, "-")
-			key = parts[0]
-		} else {
-			key = strings.TrimPrefix(key, "sk-")
-			parts = strings.Split(key, "-")
-			key = parts[0]
+			if key == "" || key == "midjourney-proxy" {
+				key = c.Request.Header.Get("mj-api-secret")
+				if strings.HasPrefix(key, "Bearer ") || strings.HasPrefix(key, "bearer ") {
+					key = strings.TrimSpace(key[7:])
+				}
+				key = strings.TrimPrefix(key, "sk-")
+				parts = strings.Split(key, "-")
+				key = parts[0]
+			} else {
+				key = strings.TrimPrefix(key, "sk-")
+				parts = strings.Split(key, "-")
+				key = parts[0]
+			}
+			token, err = model.ValidateUserToken(key)
 		}
-		token, err := model.ValidateUserToken(key)
 		if token != nil {
 			id := c.GetInt("id")
 			if id == 0 {
@@ -474,6 +521,9 @@ func TokenAuth() func(c *gin.Context) {
 		err = SetupContextForToken(c, token, parts...)
 		if err != nil {
 			return
+		}
+		if publicRead {
+			c.Set(publicAPIKeyContextKey, token)
 		}
 		c.Next()
 	}

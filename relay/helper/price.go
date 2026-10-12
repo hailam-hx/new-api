@@ -317,6 +317,12 @@ func HasPriceOrRatioEntry(name string) bool {
 	return billing_setting.GetBillingMode(formatted) == billing_setting.BillingModeTieredExpr
 }
 
+// ResolveRequestBillingModelName returns the billing identity selected by relay.
+// Catalog reads share this resolution without estimating or reserving quota.
+func ResolveRequestBillingModelName(origin string) string {
+	return resolveBillingModelName(origin)
+}
+
 func resolveBillingModelName(origin string) string {
 	var candidates []string
 	if !reasoning.ParseModelModifiers(origin).HasModifiers() {

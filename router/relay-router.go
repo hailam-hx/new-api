@@ -17,6 +17,10 @@ func SetRelayRouter(router *gin.Engine) {
 	router.Use(middleware.DecompressRequestMiddleware())
 	router.Use(middleware.BodyStorageCleanup()) // 清理请求体存储
 	router.Use(middleware.StatsMiddleware())
+	developerRouter := router.Group("/v1")
+	developerRouter.Use(middleware.RouteTag("relay"), middleware.DisableCache(), middleware.GlobalAPIRateLimit(), middleware.PublicAPIKeyReadAuth())
+	developerRouter.GET("/catalog", controller.GetDeveloperCatalog)
+	developerRouter.GET("/key/balance", controller.GetDeveloperKeyBalance)
 	// https://platform.openai.com/docs/api-reference/introduction
 	modelsRouter := router.Group("/v1/models")
 	modelsRouter.Use(middleware.RouteTag("relay"))
