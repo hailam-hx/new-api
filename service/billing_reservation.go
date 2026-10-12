@@ -90,7 +90,7 @@ func (s *BillingSession) reservationMetadata(state string, facts map[string]any)
 	other.SetPublic("billing_state", state)
 	other.SetPublic("settlement_verified", state == "SETTLED")
 	info := s.relayInfo
-	detail := map[string]any{"reserved_quota": s.preConsumedQuota, "token_reserved_quota": s.tokenConsumed, "billing_source": info.BillingSource, "subscription_id": info.SubscriptionId, "client_model": info.OriginModelName, "upstream_model": info.UpstreamModelName, "channel_id": info.ChannelId, "request_id": info.RequestId, "upstream_request_id": info.PassiveRequestID, "x_gateway_trace": info.PassiveTraceID, "usage": facts}
+	detail := map[string]any{"reserved_quota": s.preConsumedQuota, "token_reserved_quota": s.tokenConsumed, "billing_source": info.BillingSource, "subscription_id": info.SubscriptionId, "client_model": info.OriginModelName, "upstream_model": info.UpstreamModelName, "channel_id": info.ChannelId, "request_id": info.RequestId, "canonical_request_id": info.CanonicalRequestId, "upstream_request_id": info.PassiveRequestID, "x_gateway_trace": info.PassiveTraceID, "usage": facts}
 	if snap := info.TieredBillingSnapshot; snap != nil {
 		detail["expression"] = snap.ExprString
 		detail["expression_hash"] = snap.ExprHash
@@ -160,9 +160,13 @@ func PrepareDFLOPTaskBillingIdentity(c *gin.Context, info *relaycommon.RelayInfo
 			return errors.New("a valid Idempotency-Key is required")
 		}
 	}
-	identity := sha256.Sum256([]byte(fmt.Sprintf("%d\x00%s\x00%s", info.UserId, plugin, key)))
+	legacyIdentity := sha256.Sum256([]byte(fmt.Sprintf("%d\x00%s\x00%s", info.UserId, plugin, key)))
+	info.DFLOPTaskLegacyRequestID = fmt.Sprintf("%x", legacyIdentity)
+	identity := sha256.Sum256([]byte(fmt.Sprintf("%d\x00%d\x00%s\x00%s", info.UserId, info.TokenId, plugin, key)))
 	info.RequestId = fmt.Sprintf("%x", identity)
-	c.Set(common.RequestIdKey, info.RequestId)
+	if info.CanonicalRequestId == "" {
+		info.CanonicalRequestId = c.GetString(common.RequestIdKey)
+	}
 	info.ForcePreConsume = true
 	return nil
 }

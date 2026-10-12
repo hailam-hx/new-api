@@ -1119,12 +1119,12 @@ func applyOriginTaskIntent(c *gin.Context, intent map[string]any, meta pluginrun
 	tasks := make([]*model.Task, 0, len(ids))
 	channelID := 0
 	for _, id := range ids {
-		task, exist, err := model.GetByTaskId(userID, id)
+		task, exist, err := model.GetTaskForToken(userID, common.GetContextKeyInt(c, constant.ContextKeyTokenId), id)
 		if err != nil {
 			return &originTaskIntentError{Code: "origin_task_not_found", Message: "origin task not found or not owned by you", StatusCode: http.StatusInternalServerError}
 		}
 		if !exist || task == nil {
-			return &originTaskIntentError{Code: "origin_task_not_found", Message: "origin task not found or not owned by you", StatusCode: http.StatusBadRequest}
+			return &originTaskIntentError{Code: "origin_task_not_found", Message: "origin task not found or not owned by you", StatusCode: http.StatusNotFound}
 		}
 		if _, allowed := allowedPlatform[task.Platform]; !allowed {
 			return &originTaskIntentError{Code: "origin_task_platform_mismatch", Message: "origin task does not belong to this plugin", StatusCode: http.StatusBadRequest}
@@ -1190,7 +1190,7 @@ func renderTaskPluginQuery(
 	)
 	userID := common.GetContextKeyInt(c, constant.ContextKeyUserId)
 	platforms := taskPluginLegacyPlatforms(pinned.Plugin.Meta)
-	tasks, err := model.GetByTaskIdsForPlatforms(userID, platforms, taskIDs)
+	tasks, err := model.GetTasksForTokenPlatforms(userID, common.GetContextKeyInt(c, constant.ContextKeyTokenId), platforms, taskIDs)
 	if err != nil {
 		logger.LogDebug(
 			c,

@@ -2473,6 +2473,341 @@
           }
         }
       }
+    },
+    "/v1/key/usage": {
+      "get": {
+        "tags": [
+          "Public Developer APIs"
+        ],
+        "summary": "Read recorded usage for the current API key",
+        "description": "Aggregates only retained records with proven ownership by the authenticated key and user. Another key of the same user cannot read them. Recorded amounts are not wallet balances, a complete history or a guarantee of final settlement. Refunds recorded in this interval can relate to consumption outside it, so recorded_net may be negative. Task components show the latest proven snapshot per task within the window, not an incremental request-count or unit ledger. Event counts are not request or success counts. Components require proven frozen billing units and may be partial or unknown. Non-metered local read; no upstream request, reservation, or key last-used update. Strict Bearer authentication retains account, IP and group restrictions; zero allowance is readable.",
+        "operationId": "getDeveloperKeyUsage",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Read recorded usage for the current API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperKeyUsage"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Private no-store response."
+              },
+              "X-Oneapi-Request-Id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Server-generated request correlation identifier."
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, disabled or expired API key. Browser sessions and dashboard credentials are not accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperAPIError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Disabled account, token IP restriction or group access denied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperAPIError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Existing configured global API IP limiter: empty response body.",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Existing limiter wait in seconds, when supplied."
+              }
+            }
+          },
+          "500": {
+            "description": "Local query or unsupported display configuration error; a limiter infrastructure failure can return an empty body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperAPIError"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperAPIError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "start",
+            "in": "query",
+            "description": "Inclusive nonnegative Unix seconds; default max(0, end minus 30 days). The nonempty window must not exceed 31 days. Duplicate start, end or model parameters are rejected.",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "description": "Exclusive nonnegative Unix seconds; defaults to the current Unix second plus one, including events recorded in the current second.",
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "description": "Exact recorded model filter, at most 255 UTF-8 bytes.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/tasks": {
+      "get": {
+        "tags": [
+          "Public Developer APIs"
+        ],
+        "summary": "List tasks created by the current API key",
+        "description": "Newest-first local metadata list scoped to the authenticated key and user. Another key of the same user cannot read these tasks. Availability depends on retained records. Unknown, conflicting or duplicated ownership is excluded. No provider payloads, URLs, private data or billing internals are returned. Non-metered local read with strict Bearer authentication and private no-store responses; zero allowance is readable.",
+        "operationId": "getDeveloperTasks",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List tasks created by the current API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperTaskList"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Private no-store response."
+              },
+              "X-Oneapi-Request-Id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Server-generated request correlation identifier."
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, disabled or expired API key. Browser sessions and dashboard credentials are not accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperAPIError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Disabled account, token IP restriction or group access denied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperAPIError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Existing configured global API IP limiter: empty response body.",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Existing limiter wait in seconds, when supplied."
+              }
+            }
+          },
+          "500": {
+            "description": "Local query or unsupported display configuration error; a limiter infrastructure failure can return an empty body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperAPIError"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperAPIError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Opaque next_cursor returned by the preceding page.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/tasks/{key}": {
+      "get": {
+        "tags": [
+          "Public Developer APIs"
+        ],
+        "summary": "Retrieve a task created by the current API key",
+        "description": "The GET path parameter key is a public task ID, not the plugin key used for POST submission. Reads require proven ownership by both the current API key and user. Another key of the same user has no access. Missing, foreign and unverified ownership returns the same 404. Availability depends on retained records. Non-metered local metadata read; no provider hook or upstream call. Async work may continue after client timeout or disconnect and settle or refund later; check status before resubmitting.",
+        "operationId": "getDeveloperTask",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Retrieve a task created by the current API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperTask"
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Private no-store response."
+              },
+              "X-Oneapi-Request-Id": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Server-generated request correlation identifier."
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, disabled or expired API key. Browser sessions and dashboard credentials are not accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperAPIError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Disabled account, token IP restriction or group access denied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperAPIError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Existing configured global API IP limiter: empty response body.",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Existing limiter wait in seconds, when supplied."
+              }
+            }
+          },
+          "500": {
+            "description": "Local query or unsupported display configuration error; a limiter infrastructure failure can return an empty body.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperAPIError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Task not found, foreign or ownership unverified; indistinguishable response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeveloperAPIError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "description": "Public task ID.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -5042,6 +5377,207 @@
               "param": {
                 "type": "string"
               }
+            }
+          }
+        }
+      },
+      "DeveloperTaskError": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "task_failed"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "enum": [
+              "The task failed."
+            ]
+          }
+        }
+      },
+      "DeveloperTask": {
+        "type": "object",
+        "required": [
+          "object",
+          "id",
+          "type",
+          "model",
+          "status",
+          "progress",
+          "created_at"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "enum": [
+              "task"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "in_progress",
+              "completed",
+              "failed",
+              "unknown"
+            ]
+          },
+          "progress": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "started_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "completed_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "error": {
+            "$ref": "#/components/schemas/DeveloperTaskError"
+          }
+        }
+      },
+      "DeveloperTaskList": {
+        "type": "object",
+        "required": [
+          "object",
+          "data",
+          "has_more"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "enum": [
+              "list"
+            ]
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeveloperTask"
+            }
+          },
+          "has_more": {
+            "type": "boolean"
+          },
+          "next_cursor": {
+            "type": "string",
+            "description": "Opaque cursor for the next page; omitted when has_more is false."
+          }
+        }
+      },
+      "DeveloperUsageComponent": {
+        "type": "object",
+        "required": [
+          "subject",
+          "unit",
+          "quantity"
+        ],
+        "properties": {
+          "subject": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "string"
+          }
+        }
+      },
+      "DeveloperKeyUsage": {
+        "type": "object",
+        "required": [
+          "object",
+          "unit",
+          "recorded_consumption",
+          "recorded_refunds",
+          "recorded_net",
+          "component_status",
+          "start_time",
+          "end_time",
+          "billing_events",
+          "error_events",
+          "components"
+        ],
+        "properties": {
+          "object": {
+            "type": "string",
+            "enum": [
+              "key.usage"
+            ]
+          },
+          "unit": {
+            "type": "string"
+          },
+          "unit_symbol": {
+            "type": "string"
+          },
+          "recorded_consumption": {
+            "type": "string",
+            "description": "Exact decimal amount in the configured customer display unit from retained recorded events; recorded_net may be negative when refunds in this window exceed consumption."
+          },
+          "recorded_refunds": {
+            "type": "string",
+            "description": "Exact decimal amount in the configured customer display unit from retained recorded events; recorded_net may be negative when refunds in this window exceed consumption."
+          },
+          "recorded_net": {
+            "type": "string",
+            "description": "Exact decimal amount in the configured customer display unit from retained recorded events; recorded_net may be negative when refunds in this window exceed consumption."
+          },
+          "component_status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "partial",
+              "unknown"
+            ]
+          },
+          "start_time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "end_time": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "billing_events": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "error_events": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "components": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeveloperUsageComponent"
             }
           }
         }

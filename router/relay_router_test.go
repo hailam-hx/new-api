@@ -8,6 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/pkg/jsplugin"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relaydto "github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
@@ -149,7 +150,8 @@ func TestDeveloperAPIRoutesRequireBearer(t *testing.T) {
 	setupRelayRouterTestDB(t)
 	engine := gin.New()
 	SetRelayRouter(engine)
-	for _, path := range []string{"/v1/catalog", "/v1/key/balance"} {
+	SetTaskRouter(engine)
+	for _, path := range []string{"/v1/catalog", "/v1/key/balance", "/v1/key/usage", "/v1/tasks"} {
 		t.Run(path, func(t *testing.T) {
 			response := httptest.NewRecorder()
 			engine.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
@@ -914,5 +916,161 @@ func TestDeveloperReadAuthenticationDoesNotLogBearerKeys(t *testing.T) {
 			}
 			assert.NotContains(t, sqlLog.String(), key, "debug query tracing must not print public bearer credentials")
 		}
+	}
+}
+
+// Exact persisted provenance must survive a background refund on every dialect.
+func TestCanonicalTaskBillingOwnershipDatabaseMatrix(t *testing.T) {
+	for _, dialect := range []string{"sqlite", "mysql", "postgres"} {
+		t.Run(dialect, func(t *testing.T) {
+			setupDeveloperAPITestDB(t, dialect)
+			require.False(t, model.DB.Migrator().HasTable(&model.Task{}))
+			require.False(t, model.DB.Migrator().HasTable(&model.Midjourney{}))
+			require.NoError(t, model.DB.AutoMigrate(&model.Task{}, &model.Midjourney{}))
+			t.Cleanup(func() { require.NoError(t, model.DB.Migrator().DropTable(&model.Task{}, &model.Midjourney{})) })
+			user := model.User{Username: "canonical-owner", Status: 1, Group: "default", Quota: 9500, UsedQuota: 500, AuthVersion: 1}
+			require.NoError(t, model.DB.Create(&user).Error)
+			token := model.Token{UserId: user.Id, Key: "canonical-key-a", Status: 1, ExpiredTime: -1, RemainQuota: 9500, UsedQuota: 500}
+			other := model.Token{UserId: user.Id, Key: "canonical-key-b", Status: 1, ExpiredTime: -1, RemainQuota: 9500}
+			require.NoError(t, model.DB.Create(&token).Error)
+			require.NoError(t, model.DB.Create(&other).Error)
+			info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}, UserId: user.Id, TokenId: token.Id, UsingGroup: "default", RequestId: "billing-operation", CanonicalRequestId: "canonical-http", BillingSource: service.BillingSourceWallet}
+			task := model.InitTask("fixture", info)
+			task.Quota = 500
+			task.PrivateData.BillingSource = service.BillingSourceWallet
+			task.PrivateData.Execution = &model.TaskExecutionSnapshot{RequestID: "billing-operation", CanonicalRequestID: "canonical-http", RequestPath: "/v1/videos"}
+			require.NoError(t, task.Insert())
+			var persisted model.Task
+			require.NoError(t, model.DB.First(&persisted, task.ID).Error)
+			assert.Equal(t, token.Id, persisted.TokenId)
+			assert.Equal(t, "canonical-http", persisted.RequestId)
+			assert.True(t, persisted.HasCanonicalOwnership())
+			assert.True(t, service.RefundTaskQuota(context.Background(), &persisted, "fixture failure"))
+			var event model.Log
+			require.NoError(t, model.LOG_DB.Where("type = ?", model.LogTypeRefund).First(&event).Error)
+			assert.Equal(t, "canonical-http", event.RequestId)
+			assert.Equal(t, token.Id, event.TokenId)
+			var metadata map[string]any
+			require.NoError(t, common.UnmarshalJsonStr(event.Other, &metadata))
+			assert.Equal(t, float64(task.ID), metadata["admin_info"].(map[string]any)["task_record_id"])
+			assert.Equal(t, "/v1/videos", metadata["request_path"])
+			require.NoError(t, model.DB.First(&token, token.Id).Error)
+			assert.Equal(t, 10000, token.RemainQuota)
+			require.NoError(t, model.DB.First(&other, other.Id).Error)
+			assert.Equal(t, 9500, other.RemainQuota)
+			// A foreign legacy journal is never interpreted as an absent reservation.
+			journal := model.Log{UserId: user.Id, TokenId: other.Id, RequestId: "legacy-operation", Type: model.LogTypeSystem, Content: "BILLING_RESERVATION_HELD"}
+			require.NoError(t, model.LOG_DB.Create(&journal).Error)
+			foreign := model.InitTask("dflop-media", info)
+			foreign.Quota = 500
+			foreign.PrivateData.Execution = &model.TaskExecutionSnapshot{RequestID: "legacy-operation", CanonicalRequestID: "another-http"}
+			require.NoError(t, foreign.Insert())
+			assert.False(t, service.RefundTaskQuota(context.Background(), foreign, "foreign journal"))
+			require.NoError(t, model.DB.First(&token, token.Id).Error)
+			assert.Equal(t, 10000, token.RemainQuota)
+			mj := &model.Midjourney{UserId: user.Id, MjId: "canonical-midjourney"}
+			prepared, err := service.PrepareMidjourneyTaskBilling(info, mj, 0, false)
+			require.NoError(t, err)
+			assert.False(t, prepared)
+			require.NoError(t, mj.Insert())
+			var mjPersisted model.Midjourney
+			require.NoError(t, model.DB.First(&mjPersisted, mj.Id).Error)
+			assert.Equal(t, token.Id, mjPersisted.OwnerTokenId)
+			assert.Equal(t, "canonical-http", mjPersisted.RequestId)
+			assert.Zero(t, mjPersisted.TokenId, "accounting marker is not immutable ownership")
+		})
+	}
+}
+
+func TestPhase3PublicReadsOwnershipDatabaseMatrix(t *testing.T) {
+	for _, dialect := range []string{"sqlite", "mysql", "postgres"} {
+		t.Run(dialect, func(t *testing.T) {
+			setupDeveloperAPITestDB(t, dialect)
+			require.NoError(t, model.DB.AutoMigrate(&model.Task{}))
+			t.Cleanup(func() { require.NoError(t, model.DB.Migrator().DropTable(&model.Task{})) })
+			users := []model.User{{Username: "phase3-owner", AffCode: "phase3owner", Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1}, {Username: "phase3-foreign", AffCode: "phase3foreign", Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1}}
+			for i := range users {
+				require.NoError(t, model.DB.Create(&users[i]).Error)
+			}
+			keys := []model.Token{
+				{UserId: users[0].Id, Key: "phase3-read-a", Status: common.TokenStatusExhausted, ExpiredTime: -1},
+				{UserId: users[0].Id, Key: "phase3-read-b", Status: common.TokenStatusExhausted, ExpiredTime: -1},
+				{UserId: users[1].Id, Key: "phase3-read-c", Status: common.TokenStatusExhausted, ExpiredTime: -1},
+			}
+			for i := range keys {
+				require.NoError(t, model.DB.Create(&keys[i]).Error)
+				task := model.Task{UserId: keys[i].UserId, TokenId: keys[i].Id, TaskID: fmt.Sprintf("task-%d", i), RequestId: fmt.Sprintf("http-%d", i), Platform: "fixture", Status: model.TaskStatusSuccess, Progress: "100%", PrivateData: model.TaskPrivateData{TokenId: keys[i].Id, Key: "provider-secret"}}
+				require.NoError(t, model.DB.Create(&task).Error)
+				require.NoError(t, model.LOG_DB.Create(&model.Log{UserId: keys[i].UserId, TokenId: keys[i].Id, CreatedAt: 1000, Type: model.LogTypeConsume, ModelName: fmt.Sprintf("model-%d", i), Quota: (i + 1) * 500, Other: `{"provider_secret":"secret"}`}).Error)
+			}
+			engine := gin.New()
+			engine.Use(middleware.RequestId())
+			SetRelayRouter(engine)
+			SetTaskRouter(engine)
+			taskQueries := 0
+			require.NoError(t, model.DB.Callback().Query().Before("gorm:query").Register("phase3_task_query_count", func(db *gorm.DB) {
+				if db.Statement.Table == "tasks" && !db.DryRun {
+					taskQueries++
+				}
+			}))
+			t.Cleanup(func() { require.NoError(t, model.DB.Callback().Query().Remove("phase3_task_query_count")) })
+			for i, key := range keys {
+				bearer := "Bearer " + key.Key
+				taskQueries = 0
+				started := time.Now()
+				list := developerAPIRequest(engine, "/v1/tasks", bearer)
+				t.Logf("%s task list HTTP latency %s", dialect, time.Since(started))
+				assert.Equal(t, 1, taskQueries, "task list must not issue per-task queries")
+				require.Equal(t, http.StatusOK, list.Code, list.Body.String())
+				var tasks dto.DeveloperTaskList
+				require.NoError(t, common.Unmarshal(list.Body.Bytes(), &tasks))
+				require.Len(t, tasks.Data, 1)
+				assert.Equal(t, fmt.Sprintf("task-%d", i), tasks.Data[0].ID)
+				assert.Contains(t, list.Header().Get("Cache-Control"), "no-store")
+				for j := range keys {
+					taskQueries = 0
+					detail := developerAPIRequest(engine, fmt.Sprintf("/v1/tasks/task-%d", j), bearer)
+					assert.Equal(t, 1, taskQueries, "task detail uses one bounded owned lookup")
+					if i == j {
+						assert.Equal(t, http.StatusOK, detail.Code, detail.Body.String())
+					} else {
+						assert.Equal(t, http.StatusNotFound, detail.Code)
+						assert.Contains(t, detail.Body.String(), "Task not found")
+					}
+				}
+				usage := developerAPIRequest(engine, "/v1/key/usage?start=900&end=1100", bearer)
+				require.Equal(t, http.StatusOK, usage.Code, usage.Body.String())
+				assert.Contains(t, usage.Header().Get("Cache-Control"), "no-store")
+				assert.Contains(t, usage.Body.String(), `"billing_events":1`)
+				for _, private := range []string{"provider-secret", "provider_secret", "token_id", "user_id", "channel_id", "private_data", "billing_context", "model_ratio"} {
+					assert.NotContains(t, list.Body.String(), private)
+					assert.NotContains(t, usage.Body.String(), private)
+				}
+			}
+			for _, path := range []string{"/v1/key/usage", "/v1/tasks", "/v1/tasks/task-0"} {
+				require.NoError(t, model.DB.Model(&keys[0]).Update("expired_time", common.GetTimestamp()-1).Error)
+				assert.Equal(t, http.StatusUnauthorized, developerAPIRequest(engine, path, "Bearer phase3-read-a").Code)
+				require.NoError(t, model.DB.Model(&keys[0]).Update("expired_time", -1).Error)
+				allow := "192.0.2.1"
+				require.NoError(t, model.DB.Model(&keys[0]).Update("allow_ips", allow).Error)
+				assert.Equal(t, http.StatusForbidden, developerAPIRequest(engine, path, "Bearer phase3-read-a").Code)
+				require.NoError(t, model.DB.Model(&keys[0]).Update("allow_ips", "").Error)
+			}
+			for _, path := range []string{"/v1/key/usage", "/v1/tasks", "/v1/tasks/task-0"} {
+				keys[0].Status = common.TokenStatusDisabled
+				require.NoError(t, model.DB.Model(&keys[0]).Update("status", keys[0].Status).Error)
+				assert.Equal(t, http.StatusUnauthorized, developerAPIRequest(engine, path, "Bearer phase3-read-a").Code)
+			}
+			for _, key := range keys {
+				var after model.Token
+				require.NoError(t, model.DB.First(&after, key.Id).Error)
+				assert.Zero(t, after.RemainQuota)
+				assert.Zero(t, after.UsedQuota)
+				assert.Zero(t, after.AccessedTime)
+			}
+			var count int64
+			require.NoError(t, model.LOG_DB.Model(&model.Log{}).Count(&count).Error)
+			assert.EqualValues(t, 3, count, "public reads must not create billing events")
+		})
 	}
 }

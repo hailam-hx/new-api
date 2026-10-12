@@ -1035,7 +1035,7 @@ export function buildQueryRequest() { return {url: "https://example.com"}; }
 export function parseTaskResult() { return {status: "SUCCESS"}; }
 `)
 	insertTaskPluginRouteTask(t, &model.Task{
-		TaskID: "task-a", UserId: 7, Platform: constant.TaskPlatform("route-query-test"),
+		TaskID: "task-a", UserId: 7, TokenId: 81, Platform: constant.TaskPlatform("route-query-test"),
 		Status: model.TaskStatusSuccess, Progress: "100%", CreatedAt: 10,
 	})
 	taskData, err := common.Marshal(map[string]any{
@@ -1044,7 +1044,7 @@ export function parseTaskResult() { return {status: "SUCCESS"}; }
 	})
 	require.NoError(t, err)
 	insertTaskPluginRouteTask(t, &model.Task{
-		TaskID: "task-b", UserId: 7, Platform: constant.TaskPlatform("route-query-test"),
+		TaskID: "task-b", UserId: 7, TokenId: 81, Platform: constant.TaskPlatform("route-query-test"),
 		Status: model.TaskStatusInProgress, Progress: "50%", CreatedAt: 20, Data: taskData,
 		ChannelId: 999, Quota: 12345, PrivateData: model.TaskPrivateData{UpstreamTaskID: "private-upstream-id", Key: "secret"},
 	})
@@ -1055,6 +1055,7 @@ export function parseTaskResult() { return {status: "SUCCESS"}; }
 		pinTaskPluginRoute(plugin, 0),
 		func(c *gin.Context) {
 			c.Set("id", 7)
+			c.Set("token_id", 81)
 			c.Next()
 		},
 		PrepareTaskPluginRoute(),
@@ -1147,18 +1148,18 @@ export const native = {status: function(ctx, task) { return {id: task.task_id}; 
 		TaskID: "foreign-task", UserId: 8, Platform: constant.TaskPlatform("route-static-query-test"),
 	})
 	insertTaskPluginRouteTask(t, &model.Task{
-		TaskID: "wrong-platform", UserId: 7, Platform: constant.TaskPlatform("another-plugin"),
+		TaskID: "wrong-platform", UserId: 7, TokenId: 81, Platform: constant.TaskPlatform("another-plugin"),
 	})
 	insertTaskPluginRouteTask(t, &model.Task{
-		TaskID: "wrong-legacy-platform", UserId: 7, Platform: constant.TaskPlatform("652"),
+		TaskID: "wrong-legacy-platform", UserId: 7, TokenId: 81, Platform: constant.TaskPlatform("652"),
 	})
 	insertTaskPluginRouteTask(t, &model.Task{
-		TaskID: "legacy-task", UserId: 7, Platform: constant.TaskPlatform("651"),
+		TaskID: "legacy-task", UserId: 7, TokenId: 81, Platform: constant.TaskPlatform("651"),
 	})
 	// Submitted through a route with retainResult: false; owned by the caller
 	// but not retrievable, so it must be indistinguishable from a missing task.
 	insertTaskPluginRouteTask(t, &model.Task{
-		TaskID: "discarded-task", UserId: 7, Platform: constant.TaskPlatform("route-static-query-test"),
+		TaskID: "discarded-task", UserId: 7, TokenId: 81, Platform: constant.TaskPlatform("route-static-query-test"),
 		Status: model.TaskStatusSuccess, PrivateData: model.TaskPrivateData{ResultDiscarded: true},
 	})
 
@@ -1167,6 +1168,7 @@ export const native = {status: function(ctx, task) { return {id: task.task_id}; 
 		pinTaskPluginRoute(plugin, 0),
 		func(c *gin.Context) {
 			c.Set("id", 7)
+			c.Set("token_id", 81)
 			c.Next()
 		},
 		PrepareTaskPluginRoute(),

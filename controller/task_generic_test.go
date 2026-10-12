@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	relaychannel "github.com/QuantumNous/new-api/relay/channel"
@@ -45,7 +47,7 @@ func setupGenericTaskTest(t *testing.T) *model.Task {
 		Id: 1, Name: "artifact", Key: "key", BaseURL: &baseURL, Status: common.ChannelStatusEnabled,
 	}).Error)
 	task := &model.Task{
-		TaskID: "task_generic", Platform: "document", UserId: 7, ChannelId: 1,
+		TaskID: "task_generic", Platform: "document", UserId: 7, TokenId: 81, ChannelId: 1,
 		Status: model.TaskStatusSuccess, Progress: "100%", SubmitTime: 10, FinishTime: 20,
 	}
 	require.NoError(t, database.Create(task).Error)
@@ -76,6 +78,8 @@ func TestGetTaskDoesNotProjectArtifacts(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	c.Set("id", 7)
+	c.Set("token_id", 81)
+	c.Set("public_api_key", &model.Token{Id: 81, UserId: 7})
 	c.Params = gin.Params{{Key: "key", Value: task.TaskID}}
 	c.Request = httptest.NewRequest(http.MethodGet, "/v1/tasks/"+task.TaskID, nil)
 
@@ -84,9 +88,151 @@ func TestGetTaskDoesNotProjectArtifacts(t *testing.T) {
 	assert.Equal(t, http.StatusOK, recorder.Code)
 	var response map[string]any
 	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
-	assert.Equal(t, task.TaskID, response["task_id"])
+	assert.Equal(t, task.TaskID, response["id"])
 	assert.NotContains(t, response, "artifacts")
 	assert.NotContains(t, recorder.Body.String(), "upstream.invalid")
+}
+
+func TestPublicTaskDetailIsolatesKeysAndHidesUnknownOwnership(t *testing.T) {
+	task := setupGenericTaskTest(t)
+	task.TokenId = 81
+	task.RequestId = "http_public"
+	task.PrivateData.TokenId = 81
+	require.NoError(t, model.DB.Save(task).Error)
+	for _, tc := range []struct {
+		name        string
+		user, token int
+		status      int
+	}{
+		{"owner", 7, 81, http.StatusOK},
+		{"same user other key", 7, 82, http.StatusNotFound},
+		{"foreign user", 8, 83, http.StatusNotFound},
+		{"no token", 7, 0, http.StatusNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Set("id", tc.user)
+			c.Set("token_id", tc.token)
+			if tc.token > 0 {
+				c.Set("public_api_key", &model.Token{Id: tc.token, UserId: tc.user})
+			}
+			c.Params = gin.Params{{Key: "key", Value: task.TaskID}}
+			c.Request = httptest.NewRequest(http.MethodGet, "/v1/tasks/"+task.TaskID, nil)
+			GetTask(c)
+			assert.Equal(t, tc.status, recorder.Code)
+		})
+	}
+}
+
+func TestDeveloperTasksPaginationPrivacyAndAmbiguousHistory(t *testing.T) {
+	initial := setupGenericTaskTest(t)
+	require.NoError(t, model.DB.Delete(initial).Error)
+	rows := []model.Task{
+		{TaskID: "task_completed", UserId: 7, TokenId: 81, Platform: "native-plugin", Status: model.TaskStatusSuccess, SubmitTime: 10, FinishTime: 20, Progress: "100%", RequestId: "http_safe", Properties: model.Properties{OriginModelName: "public-model"}},
+		{TaskID: "task_pending", UserId: 7, TokenId: 81, Platform: "video", Status: model.TaskStatusInProgress, Progress: "50%"},
+		{TaskID: "task_failed", UserId: 7, TokenId: 81, Platform: "audio", Status: model.TaskStatusFailure, FailReason: "provider-secret authorization=secret", PrivateData: model.TaskPrivateData{TokenId: 81, Key: "api-secret", UpstreamTaskID: "upstream-secret", Execution: &model.TaskExecutionSnapshot{RequestID: "billing-private"}}},
+		{TaskID: "task_same_user_other_key", UserId: 7, TokenId: 82},
+		{TaskID: "task_foreign_user", UserId: 8, TokenId: 83},
+		{TaskID: "task_unknown", UserId: 7},
+		{TaskID: "task_duplicate", UserId: 7, TokenId: 81},
+		{TaskID: "task_duplicate", UserId: 7, TokenId: 81},
+		{TaskID: "task_discarded", UserId: 7, TokenId: 81, PrivateData: model.TaskPrivateData{ResultDiscarded: true}},
+		{TaskID: "task_conflicting", UserId: 7, TokenId: 81, PrivateData: model.TaskPrivateData{TokenId: 82}},
+		{TaskID: "task_conflicting_request", UserId: 7, TokenId: 81, RequestId: "wrong", PrivateData: model.TaskPrivateData{Execution: &model.TaskExecutionSnapshot{CanonicalRequestID: "original"}}},
+	}
+	for i := range rows {
+		rows[i].SetData(map[string]any{"authorization": "raw-secret", "channel_id": 99, "private_data": "secret"})
+		require.NoError(t, model.DB.Create(&rows[i]).Error)
+	}
+	seen := make([]string, 0)
+	cursor := ""
+	for range len(rows) {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Set("id", 7)
+		c.Set("token_id", 81)
+		c.Set("public_api_key", &model.Token{Id: 81, UserId: 7})
+		requestURL := "/v1/tasks?limit=1&user_id=8&token_id=83"
+		if cursor != "" {
+			requestURL += "&cursor=" + url.QueryEscape(cursor)
+		}
+		c.Request = httptest.NewRequest(http.MethodGet, requestURL, nil)
+		GetDeveloperTasks(c)
+		require.Equal(t, http.StatusOK, recorder.Code)
+		var response dto.DeveloperTaskList
+		require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+		assert.Equal(t, "list", response.Object)
+		for _, task := range response.Data {
+			seen = append(seen, task.ID)
+		}
+		for _, secret := range []string{"user_id", "token_id", "channel_id", "private_data", "billing_context", "authorization", "upstream-secret", "api-secret", "raw-secret", "billing-private", "provider-secret"} {
+			assert.NotContains(t, recorder.Body.String(), secret)
+		}
+		if !response.HasMore {
+			break
+		}
+		require.NotEmpty(t, response.NextCursor)
+		require.NotEqual(t, cursor, response.NextCursor)
+		cursor = response.NextCursor
+	}
+	assert.Equal(t, []string{"task_failed", "task_pending", "task_completed"}, seen)
+	for _, taskID := range []string{"task_duplicate", "task_unknown", "task_discarded", "task_conflicting", "task_conflicting_request", "task_same_user_other_key", "task_foreign_user", "task_missing"} {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Set("id", 7)
+		c.Set("token_id", 81)
+		c.Set("public_api_key", &model.Token{Id: 81, UserId: 7})
+		c.Params = gin.Params{{Key: "key", Value: taskID}}
+		c.Request = httptest.NewRequest(http.MethodGet, "/v1/tasks/"+taskID, nil)
+		GetTask(c)
+		assert.Equal(t, http.StatusNotFound, recorder.Code, taskID)
+		assert.Equal(t, `{"error":{"message":"Task not found","type":"invalid_request_error"}}`, recorder.Body.String(), taskID)
+	}
+	for _, query := range []string{"limit=0", "limit=101", "limit=no", "limit=", "limit=1&limit=2", "cursor=", "cursor=bad&cursor=bad", "cursor=bad", "cursor=" + strings.Repeat("x", 100)} {
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Set("id", 7)
+		c.Set("token_id", 81)
+		c.Set("public_api_key", &model.Token{Id: 81, UserId: 7})
+		c.Request = httptest.NewRequest(http.MethodGet, "/v1/tasks?"+query, nil)
+		GetDeveloperTasks(c)
+		assert.Equal(t, http.StatusBadRequest, recorder.Code, fmt.Sprint(query))
+	}
+}
+
+func TestBearerTaskArtifactsAndProtocolsCannotBypassKeyOwnership(t *testing.T) {
+	task := setupGenericTaskTest(t)
+	task.TokenId = 82
+	task.Properties.OriginModelName = "voice-tts-pro"
+	task.Platform = "dflop-tts"
+	require.NoError(t, model.DB.Save(task).Error)
+	for _, tc := range []struct {
+		name, path, param string
+		handler           gin.HandlerFunc
+	}{
+		{"artifacts", "/v1/tasks/", "key", GetTaskArtifacts},
+		{"content", "/v1/tasks/", "key", TaskArtifactContent},
+		{"video", "/v1/videos/", "task_id", VideoProxy},
+		{"speech", "/v1/audio/speech/", "task_id", RetrieveTaskPluginAudioSpeech},
+		{"responses", "/v1/responses/", "response_id", RetrieveTaskPluginResponse},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(recorder)
+			c.Set("id", 7)
+			c.Set("token_id", 81)
+			c.Set("public_api_key", &model.Token{Id: 81, UserId: 7})
+			id := task.TaskID
+			if tc.param == "response_id" {
+				id = strings.Replace(task.TaskID, "task_", "resp_", 1)
+			}
+			c.Params = gin.Params{{Key: tc.param, Value: id}, {Key: "artifact_key", Value: "audio"}}
+			c.Request = httptest.NewRequest(http.MethodGet, tc.path+id, nil)
+			tc.handler(c)
+			assert.Equal(t, http.StatusNotFound, recorder.Code)
+		})
+	}
 }
 
 func TestGetTaskArtifactsReturnsEmptyForLegacyTask(t *testing.T) {
@@ -94,6 +240,7 @@ func TestGetTaskArtifactsReturnsEmptyForLegacyTask(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	c.Set("id", task.UserId)
+	c.Set("token_id", task.TokenId)
 	c.Params = gin.Params{{Key: "key", Value: task.TaskID}}
 	c.Request = httptest.NewRequest(http.MethodGet, "/v1/tasks/"+task.TaskID+"/artifacts", nil)
 

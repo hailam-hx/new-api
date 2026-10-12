@@ -48,7 +48,7 @@ func PreConsumeBilling(c *gin.Context, preConsumedQuota int, relayInfo *relaycom
 		if relayInfo.RequestId == "" {
 			relayInfo.RequestId = c.GetString(common.RequestIdKey)
 		}
-		record, err := model.FindBillingReservationLog(relayInfo.RequestId, relayInfo.UserId)
+		record, err := model.FindBillingReservationLog(relayInfo.RequestId, relayInfo.UserId, relayInfo.TokenId)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeUpdateDataError, types.ErrOptionWithSkipRetry())
 		}
@@ -66,6 +66,15 @@ func PreConsumeBilling(c *gin.Context, preConsumedQuota int, relayInfo *relaycom
 		}
 		if relayInfo.RequestId == "" {
 			return types.NewError(errors.New("task billing identity missing"), types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
+		}
+		if relayInfo.DFLOPTaskLegacyRequestID != "" {
+			legacy, err := model.FindBillingReservationLog(relayInfo.DFLOPTaskLegacyRequestID, relayInfo.UserId, relayInfo.TokenId)
+			if err != nil {
+				return types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
+			}
+			if legacy != nil {
+				return types.NewError(errors.New("BILLING_RESERVATION_REPLAY_REQUIRES_MANUAL_RESOLUTION"), types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
+			}
 		}
 		journal := model.Log{UserId: relayInfo.UserId, TokenId: relayInfo.TokenId, ChannelId: relayInfo.ChannelId, ModelName: relayInfo.OriginModelName, RequestId: relayInfo.RequestId, CreatedAt: common.GetTimestamp(), Type: model.LogTypeSystem, Content: "BILLING_RESERVATION_CLAIMED", Other: `{"billing_state":"CLAIMED","settlement_verified":false}`}
 		if err := model.CreateBillingReservationLog(&journal); err != nil {

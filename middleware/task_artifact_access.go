@@ -3,10 +3,12 @@ package middleware
 import (
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
@@ -116,7 +118,8 @@ func redactTaskArtifactAccessQuery() gin.HandlerFunc {
 			strings.HasSuffix(path, "/content")
 		isLegacyVideoContent := strings.HasPrefix(path, "/v1/videos/") &&
 			strings.HasSuffix(path, "/content")
-		if !isArtifactContent && !isLegacyVideoContent {
+		isMidjourneyImage := (strings.HasPrefix(path, "/mj/") || strings.HasPrefix(path, "/mj-")) && strings.Contains(path, "/image/")
+		if !isArtifactContent && !isLegacyVideoContent && !isMidjourneyImage {
 			c.Next()
 			return
 		}
@@ -128,6 +131,39 @@ func redactTaskArtifactAccessQuery() gin.HandlerFunc {
 			c.Set(taskArtifactAccessInvalidContextKey, invalid)
 		}
 		c.Next()
+	}
+}
+
+// MidjourneyImageAuth preserves browser previews through the existing artifact
+// capability scheme, with a signed 15-minute expiry and a separate namespace.
+func MidjourneyImageAuth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Cache-Control", "private, no-store")
+		if raw, present, invalid := popTaskArtifactAccessQuery(c.Request); present {
+			c.Set(taskArtifactAccessRawContextKey, raw)
+			c.Set(taskArtifactAccessPresentContextKey, true)
+			c.Set(taskArtifactAccessInvalidContextKey, invalid)
+		}
+		if !c.GetBool(taskArtifactAccessPresentContextKey) {
+			TokenAuth()(c)
+			return
+		}
+		values := c.Request.URL.Query()["expires"]
+		var expiresAt int64
+		if len(values) == 1 && len(values[0]) <= 20 {
+			expiresAt, _ = strconv.ParseInt(values[0], 10, 64)
+		}
+		taskID := c.Param("id")
+		if c.GetBool(taskArtifactAccessInvalidContextKey) || !service.VerifyMidjourneyImageAccess(c.GetString(taskArtifactAccessRawContextKey), taskID, expiresAt, common.GetTimestamp()) {
+			if !taskArtifactAnonymousLimiter.invalidAttempt(time.Now(), c.ClientIP()) {
+				writeTaskArtifactAccessLimited(c)
+				return
+			}
+			writeTaskArtifactAccessNotFound(c)
+			return
+		}
+		c.Params = append(c.Params, gin.Param{Key: "mj_capability_id", Value: "/mj/image/" + taskID}, gin.Param{Key: "mj_capability_artifact", Value: "image:" + strconv.FormatInt(expiresAt, 10)})
+		TokenOrTaskArtifactAccessAuth("mj_capability_id", "mj_capability_artifact")(c)
 	}
 }
 

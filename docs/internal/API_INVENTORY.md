@@ -1,6 +1,6 @@
 # API inventory
 
-Audit baseline `c78d5f465` (2026-10-12), updated with the two Phase 2 public reads. Method/path pairs are counted separately; aliases, GET/HEAD, and the two Midjourney prefixes are separate operations. This records a registered surface, not a published stability promise. No repository-wide version/deprecation policy was found that guarantees every `/v1` route is stable. Provider compatibility, channel configuration, enabled plugin bindings, model access, request modes, ownership, retention, and upstream support still determine availability.
+Audit baseline `c78d5f465` (2026-10-12), updated with Phase 2 and Phase 3 public reads. Method/path pairs are counted separately; aliases, GET/HEAD, and the two Midjourney prefixes are separate operations. This records a registered surface, not a published stability promise. No repository-wide version/deprecation policy was found that guarantees every `/v1` route is stable. Provider compatibility, channel configuration, enabled plugin bindings, model access, request modes, ownership, retention, and upstream support still determine availability.
 
 Classification follows the consuming contract, not the URL prefix or anonymous access. `PUBLIC` means the API-key relay/integration surface. `CONSOLE` means dashboard/account/site workflows, including console payment callbacks. `ADMIN_INTERNAL` means operator/bootstrap/verification workflows and privileged administration. A dashboard PAT or access token accepted by a management route does not turn it into a public inference API. `/api/pricing`, ordinary `/api/log`, `/api/task`, `/api/user`, and console model endpoints stay out of the developer reference. Legacy `/api/usage/token/` remains registered for compatibility but is classified CONSOLE and excluded from the recommended public v1 reference. Per the requested developer-documentation scope, `/api/log/token` remains `CONSOLE` even though it uses read-only API-key authentication; the entire `/api/log/*` family is excluded from the public reference. The four legacy dashboard billing compatibility URLs are public.
 
@@ -8,18 +8,18 @@ Classification follows the consuming contract, not the URL prefix or anonymous a
 
 | Class | Implemented static | Registered not implemented | Static total |
 | --- | ---: | ---: | ---: |
-| PUBLIC | 77 | 12 | 89 |
+| PUBLIC | 79 | 12 | 91 |
 | CONSOLE | 122 | 0 | 122 |
 | ADMIN_INTERNAL | 204 | 0 | 204 |
-| **Total** | **403** | **12** | **415** |
+| **Total** | **405** | **12** | **417** |
 
-The shipped manifests additionally declare **29 conditional PUBLIC native operations** across seven plugins. They are implemented code contracts but are admitted through the live plugin routing generation, not unconditionally registered static Gin routes. Thus 403 is not the complete deployed route count. With all seven native manifests admitted, there are 432 implemented operations (106 public) and 12 public placeholders, or 444 declared method/path pairs. Uploaded, disabled, overridden, conflicting or rejected plugins can change the deployed count; this audit does not claim a running instance has all 29.
+The shipped manifests additionally declare **29 conditional PUBLIC native operations** across seven plugins. They are implemented code contracts but are admitted through the live plugin routing generation, not unconditionally registered static Gin routes. Thus 405 is not the complete deployed route count. With all seven native manifests admitted, there are 434 implemented operations (108 public) and 12 public placeholders, or 446 declared method/path pairs. Uploaded, disabled, overridden, conflicting or rejected plugins can change the deployed count; this audit does not claim a running instance has all 29.
 
 ## Reading the audit
 
 `IMPLEMENTED` means a real handler is registered, not that every provider implements the capability. `NOT_IMPLEMENTED` means registration explicitly uses `controller.RelayNotImplemented`; it produces HTTP 501 with `error.code=api_not_implemented` if preceding auth/distribution middleware reaches the handler. `IMPLEMENTED_CONDITIONAL` means a native manifest route whose runtime admission and plugin availability must be checked. “Documented” means present in the developer metadata, not a guarantee of full OpenAPI coverage or endpoint availability. A registered handler can still have a broken dispatch path; these limitations are called out explicitly.
 
-Auth labels summarize route gates; the exact inherited group/per-route chain is listed in the middleware registry below. Dashboard user/admin/root identity flows are distinct from inference API keys; handler-level reauthentication, verification, webhook signatures, ownership and validation also apply. API-key routes retain token/model/IP/group/channel policies. Read-only API-key authentication permits expired/exhausted keys, denies explicitly disabled keys and banned users (the older comment above the implementation is stale). `/api/usage/token/` additionally parses a Bearer header in its controller. Task content GET/HEAD can use an API key or a valid scoped artifact access token; other task reads require a key and enforce ownership. Midjourney image proxy routes have no TokenAuth at registration; their handlers still constrain retrieval.
+Auth labels summarize route gates; the exact inherited group/per-route chain is listed in the middleware registry below. Dashboard user/admin/root identity flows are distinct from inference API keys; handler-level reauthentication, verification, webhook signatures, ownership and validation also apply. API-key routes retain token/model/IP/group/channel policies. Read-only API-key authentication permits expired/exhausted keys, denies explicitly disabled keys and banned users (the older comment above the implementation is stale). `/api/usage/token/` additionally parses a Bearer header in its controller. Task content GET/HEAD can use an API key or a valid scoped artifact access token; other task reads require a key and enforce ownership. Midjourney image proxies require the creating key or an expiring signed Console preview capability; guessed IDs and unsigned anonymous access no longer authorize retrieval.
 
 Host protocol URLs are enumerated from `pkg/jsplugin/routing.go` and mapped to `router/task-plugin-protocol-router.go` handlers. Responses, image and speech submission have built-in relay fallback for unclaimed requests; retrieval is limited to retained task-plugin results. Native URLs belong to the plugin, use its wire contract, require API keys, and have no generic relay fallback. `/v1/tasks/{key}` uses a plugin key for POST and a task ID for GET; only the placeholder name is shared.
 
@@ -34,10 +34,12 @@ Source links point to route declarations/handler mapping, not schemas. The extra
 | Method | Path | Purpose | Auth | Class | Status | Developer docs | Source | Middleware |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | GET | `/v1/catalog` | Key-scoped customer catalog | Public API key read | PUBLIC | IMPLEMENTED | Documented | [router/relay-router.go:22](../../router/relay-router.go#L22) | M51 |
+| GET | `/v1/key/usage` | Retained current-key consumption/refund aggregates | Public API key read | PUBLIC | IMPLEMENTED | Documented | [router/relay-router.go](../../router/relay-router.go) | M51 |
+| GET | `/v1/tasks` | Current-key task metadata list | Public API key read | PUBLIC | IMPLEMENTED | Documented | [router/task-router.go](../../router/task-router.go) | M59 |
 | GET | `/v1/key/balance` | Current key allowance | Public API key read | PUBLIC | IMPLEMENTED | Documented | [router/relay-router.go:23](../../router/relay-router.go#L23) | M51 |
 | GET | `/dashboard/billing/subscription` | Get Subscription | API key | PUBLIC | IMPLEMENTED | Documented | [router/dashboard.go:18](../../router/dashboard.go#L18) | M50 |
 | GET | `/dashboard/billing/usage` | Get Usage | API key | PUBLIC | IMPLEMENTED | Documented | [router/dashboard.go:20](../../router/dashboard.go#L20) | M50 |
-| GET | `/mj/image/{id}` | Relay Midjourney Image | No route auth middleware; handler conditions apply | PUBLIC | IMPLEMENTED | Documented | [router/relay-router.go:209](../../router/relay-router.go#L209) | M3 |
+| GET | `/mj/image/{id}` | Relay Midjourney Image | API key or signed 15-minute image capability | PUBLIC | IMPLEMENTED | Documented | [router/relay-router.go:214](../../router/relay-router.go#L214) | M60 |
 | POST | `/mj/insight-face/swap` | Relay Midjourney | API key | PUBLIC | IMPLEMENTED | Documented | [router/relay-router.go:226](../../router/relay-router.go#L226) | M5 |
 | POST | `/mj/submit/action` | Relay Midjourney | API key | PUBLIC | IMPLEMENTED | Documented | [router/relay-router.go:212](../../router/relay-router.go#L212) | M5 |
 | POST | `/mj/submit/blend` | Relay Midjourney | API key | PUBLIC | IMPLEMENTED | Documented | [router/relay-router.go:219](../../router/relay-router.go#L219) | M5 |
@@ -78,7 +80,7 @@ Source links point to route declarations/handler mapping, not schemas. The extra
 | POST | `/v1/responses` | Relay Task Plugin Endpoint; Relay | API key | PUBLIC | IMPLEMENTED | Documented | [router/task-plugin-protocol-router.go:30](../../router/task-plugin-protocol-router.go#L30) | M52 |
 | POST | `/v1/responses/compact` | Relay responses/compact | API key | PUBLIC | IMPLEMENTED | Documented | [router/relay-router.go:110](../../router/relay-router.go#L110) | M6 |
 | GET | `/v1/responses/{response_id}` | Retrieve Task Plugin Response | API key | PUBLIC | IMPLEMENTED | Documented | [router/task-plugin-protocol-router.go:63](../../router/task-plugin-protocol-router.go#L63) | M53 |
-| GET | `/v1/tasks/{key}` | Get Task | API key | PUBLIC | IMPLEMENTED | Documented | [router/task-router.go:24](../../router/task-router.go#L24) | M53 |
+| GET | `/v1/tasks/{key}` | Current-key safe task detail | Public API key read | PUBLIC | IMPLEMENTED | Documented | [router/task-router.go:25](../../router/task-router.go#L25) | M59 |
 | POST | `/v1/tasks/{key}` | Relay Task | API key | PUBLIC | IMPLEMENTED | Documented | [router/task-router.go:18](../../router/task-router.go#L18) | M55 |
 | GET | `/v1/tasks/{key}/artifacts` | Get Task Artifacts | API key | PUBLIC | IMPLEMENTED | Documented | [router/task-router.go:25](../../router/task-router.go#L25) | M53 |
 | GET | `/v1/tasks/{key}/artifacts/{artifact_key}/content` | Task Artifact Content | API key or scoped artifact access token | PUBLIC | IMPLEMENTED | Documented | [router/task-router.go:34](../../router/task-router.go#L34) | M57 |
@@ -94,7 +96,7 @@ Source links point to route declarations/handler mapping, not schemas. The extra
 | GET | `/v1beta/models` | List Models | API key | PUBLIC | IMPLEMENTED | Documented | [router/relay-router.go:50](../../router/relay-router.go#L50) | M8 |
 | POST | `/v1beta/models/{path}` | Relay models/{path} | API key | PUBLIC | IMPLEMENTED | Documented | [router/relay-router.go:202](../../router/relay-router.go#L202) | M2 |
 | GET | `/v1beta/openai/models` | List Models | API key | PUBLIC | IMPLEMENTED | Documented | [router/relay-router.go:59](../../router/relay-router.go#L59) | M8 |
-| GET | `/{mode}/mj/image/{id}` | Relay Midjourney Image | No route auth middleware; handler conditions apply | PUBLIC | IMPLEMENTED | Documented | [router/relay-router.go:209](../../router/relay-router.go#L209) | M3 |
+| GET | `/{mode}/mj/image/{id}` | Relay Midjourney Image | API key or signed 15-minute image capability | PUBLIC | IMPLEMENTED | Documented | [router/relay-router.go:214](../../router/relay-router.go#L214) | M60 |
 | POST | `/{mode}/mj/insight-face/swap` | Relay Midjourney | API key | PUBLIC | IMPLEMENTED | Documented | [router/relay-router.go:226](../../router/relay-router.go#L226) | M5 |
 | POST | `/{mode}/mj/submit/action` | Relay Midjourney | API key | PUBLIC | IMPLEMENTED | Documented | [router/relay-router.go:212](../../router/relay-router.go#L212) | M5 |
 | POST | `/{mode}/mj/submit/blend` | Relay Midjourney | API key | PUBLIC | IMPLEMENTED | Documented | [router/relay-router.go:219](../../router/relay-router.go#L219) | M5 |
@@ -567,3 +569,13 @@ The order below is the extracted group/per-route order. Function arguments prese
 The existing syntax extractor emitted 401 implemented static operations. A temporary copy with only the `RelayNotImplemented` exclusion removed emitted 413; method/path deduplication preserved all 413, adding exactly the 12 placeholders above. Literal `meta.routes` declarations were separately counted from the seven shipped plugin source files (29). Registration order, generic tasks, host protocols, plugin runtime admission, web fallbacks, read-only auth branches and compatibility billing controllers were inspected directly. This audit does not execute requests, initialize a database, or alter API/auth/billing/schema behavior. Runtime capability testing and a formal compatibility/versioning commitment remain separate work.
 
 Phase 2 adds two static operations and excludes legacy quota inspection from recommended public metadata. The generated registry now contains 403 implemented static operations; the two new routes have direct fixture-backed HTTP coverage. No existing route is removed.
+
+## Phase 3 ownership boundary
+
+Phase 3 adds two static GET operations: `/v1/key/usage` and `/v1/tasks`. The existing `/v1/tasks/{key}` detail now uses exact authenticated user/key ownership and an explicit metadata DTO. All three public reads allow exhausted quota while enforcing current key expiry, revocation, IP and group restrictions; they are non-billable and use no-store and the general public API limiter. Task IDs with unknown/conflicting ownership or duplicate retained rows within the key fail closed. Bearer native/protocol/artifact/origin queries use the same key boundary; Console session and explicit signed artifact capabilities retain their own contracts.
+
+Usage aggregates retained events over a bounded half-open interval, not an authoritative final wallet ledger. Request-correlated final usage remains blocked and cancellation remains design-only. See [ownership coverage](OWNERSHIP_COVERAGE.md). No request-usage or cancellation operation is registered.
+
+- **M59**: `middleware.RouteTag("relay") → middleware.DisableCache() → middleware.GlobalAPIRateLimit() → middleware.PublicAPIKeyReadAuth()` (task metadata list/detail only).
+
+- **M60**: Midjourney image route inherits M3 and adds `middleware.MidjourneyImageAuth()` (creating-key auth or bounded signed image capability). The handler verifies ownership/unique delegated record and serves verified raster bytes only.

@@ -687,7 +687,7 @@ func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor
 	if task.Status == model.TaskStatusSuccess && IsDFLOPTaskPlatform(task.Platform) && TaskBillingIsPending(task.PrivateData.PluginState) {
 		logger.LogWarn(ctx, fmt.Sprintf("DFLOP task %s billing quarantined; retaining reservation", task.TaskID))
 		if task.ID > 0 {
-			model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{UserId: task.UserId, LogType: model.LogTypeError, Content: "DFLOP task billing requires authoritative final usage", ChannelId: task.ChannelId, ModelName: taskModelName(task), Quota: 0, TokenId: task.PrivateData.TokenId, Group: task.Group, Other: taskBillingOther(task), NodeName: task.PrivateData.NodeName})
+			model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{RequestId: taskCanonicalRequestID(task), UserId: task.UserId, LogType: model.LogTypeError, Content: "DFLOP task billing requires authoritative final usage", ChannelId: task.ChannelId, ModelName: taskModelName(task), Quota: 0, TokenId: task.PrivateData.TokenId, Group: task.Group, Other: taskBillingOther(task), NodeName: task.PrivateData.NodeName})
 		}
 		return true
 	}
@@ -869,6 +869,10 @@ func prepareDFLOPTaskCompletion(ctx context.Context, task *model.Task, result *r
 	if task.Status != model.TaskStatusSuccess || !IsDFLOPTaskPlatform(task.Platform) {
 		return
 	}
+	if task.TokenId > 0 && task.TokenId != task.PrivateData.TokenId {
+		logger.LogError(ctx, fmt.Sprintf("DFLOP task %s token ownership conflict", task.TaskID))
+		return
+	}
 	bc := task.PrivateData.BillingContext
 	if bc == nil || bc.TieredSnapshot == nil {
 		return
@@ -882,7 +886,7 @@ func prepareDFLOPTaskCompletion(ctx context.Context, task *model.Task, result *r
 		task.PrivateData.PluginState = state
 		result.PluginState = state
 		if task.PrivateData.Execution != nil {
-			journal, journalErr := model.FindBillingReservationLog(task.PrivateData.Execution.RequestID, task.UserId)
+			journal, journalErr := model.FindBillingReservationLog(task.PrivateData.Execution.RequestID, task.UserId, task.PrivateData.TokenId)
 			if journalErr == nil && journal != nil && journal.Content == "BILLING_RESERVATION_HELD" {
 				journalErr = model.TransitionBillingReservationLog(journal.Id, "HELD", "PENDING", taskBillingOther(task))
 			}

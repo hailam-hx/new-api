@@ -52,6 +52,11 @@ export const developerSemantics = [
         body: 'These public reads require an Authorization Bearer API key and retain account, IP and group restrictions. Browser cookies and dashboard credentials are not accepted. Zero allowance does not block these reads; expired keys still return 401. Responses are private and no-store. The configured global API IP limiter can return an empty 429 body with Retry-After; no inference billing limiter is used.',
       },
       {
+        id: 'key-owned-history',
+        title: 'Key-Owned History',
+        body: 'GET /v1/key/usage and GET /v1/tasks read records created by the authenticated API key. Another key of the same user cannot read them. Task detail and Bearer artifact reads require proven key ownership; missing, foreign and unverified tasks are indistinguishable. Native compatibility response shapes and signed artifact URLs retain their documented contracts. Midjourney image reads require the creating API key or a signed Console preview URL.',
+      },
+      {
         id: 'credential-handling',
         title: 'Protecting Credentials',
         body: 'Keep API keys on a trusted server, send authenticated traffic over HTTPS and exclude keys from logs, screenshots and shared examples. Disable a key when it is no longer needed. Read-only token usage and log endpoints allow expired or exhausted keys to inspect records but reject explicitly disabled keys and disabled accounts; this does not authorize new relay requests.',
@@ -109,8 +114,12 @@ export const developerSemantics = [
       'controller/token.go',
       'controller/developer_catalog.go',
       'controller/developer_balance.go',
+      'controller/developer_usage.go',
+      'controller/developer_tasks.go',
       'dto/developer_catalog.go',
       'dto/developer_balance.go',
+      'dto/developer_usage.go',
+      'dto/developer_tasks.go',
     ],
     sections: [
       {
@@ -132,6 +141,11 @@ export const developerSemantics = [
         id: 'public-currency',
         title: 'Currency',
         body: 'Catalog and balance use the configured customer display unit. HOTX points configuration returns points with its configured conversion; USD, CNY and another configured custom currency retain their own units. Monetary values are decimal strings. Console raw-quota TOKENS display is unsupported by these public monetary contracts and returns an error instead of exposing internal quota.',
+      },
+      {
+        id: 'recorded-key-usage',
+        title: 'Recorded Key Usage',
+        body: 'GET /v1/key/usage aggregates retained consumption, refund and error events for this API key. Event counts are not a complete request count or success count. Amounts do not promise final settlement or full history. Components use proven billing units and can be partial or unknown. Availability depends on retained records; no retention SLA is promised. Async work can continue after timeout or disconnect and settle or refund later. Check task status before resubmitting. Refunds recorded in this interval can relate to consumption outside it, so recorded_net may be negative. Task components show the latest proven snapshot per task within the window, not an incremental request-count or unit ledger.',
       },
       {
         id: 'legacy-quota',

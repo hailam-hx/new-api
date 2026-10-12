@@ -64,7 +64,7 @@ func serveTaskPluginAudioSpeech(c *gin.Context, pinned pluginruntime.PinnedEndpo
 }
 
 // RetrieveTaskPluginAudioSpeech never queries a provider with a client supplied
-// ID. The task is looked up under the authenticated user and returned from the
+// ID. The task is looked up under the authenticated key and user and returned from the
 // host's persisted view, which excludes the private upstream ID and key.
 func RetrieveTaskPluginAudioSpeech(c *gin.Context) {
 	taskID := strings.TrimSpace(c.Param("task_id"))
@@ -73,7 +73,7 @@ func RetrieveTaskPluginAudioSpeech(c *gin.Context) {
 		respondPluginProtocolError(c, http.StatusNotFound, "task_not_found", "Task not found")
 		return
 	}
-	task, found, err := model.GetByTaskId(userID, taskID)
+	task, found, err := model.GetTaskForToken(userID, common.GetContextKeyInt(c, constant.ContextKeyTokenId), taskID)
 	if err != nil {
 		respondPluginProtocolError(c, http.StatusInternalServerError, "task_protocol_error", "Task lookup failed")
 		return

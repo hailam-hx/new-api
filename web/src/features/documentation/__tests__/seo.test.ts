@@ -229,7 +229,7 @@ it('prerenders a short public index and domain pages without console/admin opera
   expect(models).toContain('Developer reference navigation')
 })
 
-it('preserves public image and scoped artifact access contracts in static endpoint pages', () => {
+it('preserves key-owned image and scoped artifact access contracts in static endpoint pages', () => {
   const midjourney = new DOMParser().parseFromString(
     fs.readFileSync(
       path.join(directory, 'docs/api-reference-midjourney/index.html'),
@@ -241,9 +241,14 @@ it('preserves public image and scoped artifact access contracts in static endpoi
     `#${endpointAnchor('GET', '/mj/image/{id}')}`
   )
   expect(image?.textContent).toContain(
-    'Public image proxy registered before API-key authentication.'
+    'Authenticate with the API key that created this Midjourney task'
   )
-  expect(image?.textContent).not.toContain('Authentication: Bearer')
+  expect(image?.textContent).toContain('signed Console preview URL')
+  expect(image?.textContent).toContain('Unsigned anonymous reads return 401')
+  expect(image?.textContent).toContain('expire after 15 minutes')
+  expect(image?.textContent).toContain(
+    'access signature and expires Unix-seconds parameter'
+  )
   const tasks = new DOMParser().parseFromString(
     fs.readFileSync(
       path.join(directory, 'docs/api-reference-tasks/index.html'),
@@ -328,4 +333,27 @@ it('resolves every developer page navigation and operation anchor in prerendered
       }
     }
   }
+})
+
+it('publishes retained key usage and task ownership semantics before JavaScript runs', () => {
+  const billing = fs.readFileSync(
+    path.join(directory, 'docs/api-reference-billing/index.html'),
+    'utf8'
+  )
+  expect(billing).toContain('/v1/key/usage')
+  expect(billing).toContain('recorded_consumption')
+  expect(billing).toContain('component_status')
+  const tasks = fs.readFileSync(
+    path.join(directory, 'docs/api-reference-tasks/index.html'),
+    'utf8'
+  )
+  expect(tasks).toContain('List tasks created by the current API key')
+  expect(tasks).toContain('same user')
+  expect(tasks).toContain('retained records')
+  const semantics = fs.readFileSync(
+    path.join(directory, 'docs/developer-billing-usage/index.html'),
+    'utf8'
+  )
+  expect(semantics).toContain('Recorded Key Usage')
+  expect(semantics).toContain('not a complete request count')
 })

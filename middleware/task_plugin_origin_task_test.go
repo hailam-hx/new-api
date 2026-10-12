@@ -55,6 +55,7 @@ func insertOriginOwnedTask(t *testing.T, taskID string, userID, channelID int, p
 	task := &model.Task{
 		TaskID:    taskID,
 		UserId:    userID,
+		TokenId:   81,
 		ChannelId: channelID,
 		Platform:  platform,
 		Action:    "text_to_video",
@@ -75,6 +76,7 @@ func originTaskTestContext(userID int) *gin.Context {
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest(http.MethodPost, "/vendor/jobs", nil)
 	common.SetContextKey(c, constant.ContextKeyUserId, userID)
+	common.SetContextKey(c, constant.ContextKeyTokenId, 81)
 	return c
 }
 
@@ -93,6 +95,9 @@ func TestApplyOriginTaskIntent(t *testing.T) {
 	disabled := insertOriginTaskChannel(t, common.ChannelStatusManuallyDisabled)
 	insertOriginOwnedTask(t, "task-own", 7, enabled.Id, "origin-plugin")
 	insertOriginOwnedTask(t, "task-own-b", 7, enabled.Id, "origin-plugin")
+	otherKey := insertOriginOwnedTask(t, "task-other-key", 7, enabled.Id, "origin-plugin")
+	otherKey.TokenId = 82
+	require.NoError(t, model.DB.Save(otherKey).Error)
 	insertOriginOwnedTask(t, "task-other-channel", 7, otherEnabled.Id, "origin-plugin")
 	insertOriginOwnedTask(t, "task-foreign", 8, enabled.Id, "origin-plugin")
 	insertOriginOwnedTask(t, "task-wrong-platform", 7, enabled.Id, "other-plugin")
@@ -119,6 +124,12 @@ func TestApplyOriginTaskIntent(t *testing.T) {
 			intent:     map[string]any{"originTaskIds": []any{"task-own"}},
 			wantPinned: enabled.Id,
 			wantIDs:    []string{"task-own"},
+		},
+		{
+			name:     "same user different key origin denied",
+			userID:   7,
+			intent:   map[string]any{"originTaskIds": []any{"task-other-key"}},
+			wantCode: "origin_task_not_found",
 		},
 		{
 			name:       "dedupes preserving first order",
@@ -192,7 +203,11 @@ func TestApplyOriginTaskIntent(t *testing.T) {
 			if testCase.wantCode != "" {
 				require.NotNil(t, intentErr)
 				assert.Equal(t, testCase.wantCode, intentErr.Code)
-				assert.Equal(t, http.StatusBadRequest, intentErr.StatusCode)
+				if testCase.wantCode == "origin_task_not_found" {
+					assert.Equal(t, http.StatusNotFound, intentErr.StatusCode)
+				} else {
+					assert.Equal(t, http.StatusBadRequest, intentErr.StatusCode)
+				}
 				_, pinned := resolvedOriginPin(c)
 				assert.False(t, pinned)
 				return
@@ -244,6 +259,7 @@ export function parseTaskResult() { return {status: "SUCCESS"}; }
 	router := gin.New()
 	router.POST("/vendor/jobs", pinTaskPluginRoute(plugin, 0), func(c *gin.Context) {
 		common.SetContextKey(c, constant.ContextKeyUserId, 7)
+		common.SetContextKey(c, constant.ContextKeyTokenId, 81)
 		c.Next()
 	}, PrepareTaskPluginRoute(), func(c *gin.Context) {
 		reached = true
@@ -282,6 +298,7 @@ export function parseTaskResult() { return {status: "SUCCESS"}; }
 	router := gin.New()
 	router.POST("/vendor/jobs", pinTaskPluginRoute(plugin, 0), func(c *gin.Context) {
 		common.SetContextKey(c, constant.ContextKeyUserId, 7)
+		common.SetContextKey(c, constant.ContextKeyTokenId, 81)
 		c.Next()
 	}, PrepareTaskPluginRoute(), func(c *gin.Context) { reached = true })
 	request := httptest.NewRequest(http.MethodPost, "/vendor/jobs", strings.NewReader(`{"model":"resolved-model"}`))
@@ -289,7 +306,7 @@ export function parseTaskResult() { return {status: "SUCCESS"}; }
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, request)
 	assert.False(t, reached)
-	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Equal(t, http.StatusNotFound, recorder.Code)
 }
 
 func TestPrepareTaskPluginEndpointPinsOriginTaskChannel(t *testing.T) {
@@ -311,6 +328,7 @@ func TestPrepareTaskPluginEndpointPinsOriginTaskChannel(t *testing.T) {
 	router := gin.New()
 	router.POST("/v1/responses", func(c *gin.Context) {
 		common.SetContextKey(c, constant.ContextKeyUserId, 7)
+		common.SetContextKey(c, constant.ContextKeyTokenId, 81)
 		c.Next()
 	}, PinTaskPluginEndpoint(), PrepareTaskPluginEndpoint(), func(c *gin.Context) {
 		reached = true
@@ -344,6 +362,7 @@ func TestPrepareTaskPluginEndpointRejectsUnknownOriginTask(t *testing.T) {
 	router := gin.New()
 	router.POST("/v1/responses", func(c *gin.Context) {
 		common.SetContextKey(c, constant.ContextKeyUserId, 7)
+		common.SetContextKey(c, constant.ContextKeyTokenId, 81)
 		c.Next()
 	}, PinTaskPluginEndpoint(), PrepareTaskPluginEndpoint(), func(c *gin.Context) { reached = true })
 	request := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"model":"claimed-model","input":"hello"}`))
@@ -351,7 +370,7 @@ func TestPrepareTaskPluginEndpointRejectsUnknownOriginTask(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, request)
 	assert.False(t, reached)
-	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Equal(t, http.StatusNotFound, recorder.Code)
 	assert.Contains(t, recorder.Body.String(), "origin_task_not_found")
 }
 

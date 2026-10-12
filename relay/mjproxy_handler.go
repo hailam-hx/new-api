@@ -2,6 +2,7 @@ package relay
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -14,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -22,14 +24,28 @@ import (
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 
+	"github.com/gabriel-vasile/mimetype"
 	"github.com/gin-gonic/gin"
 )
 
 func RelayMidjourneyImage(c *gin.Context) {
 	taskId := c.Param("id")
-	midjourneyTask := model.GetByOnlyMJId(taskId)
-	if midjourneyTask == nil {
-		c.JSON(400, gin.H{
+	var midjourneyTask *model.Midjourney
+	var ownershipErr error
+	if middleware.IsTaskArtifactAccess(c) {
+		midjourneyTask, ownershipErr = model.GetUniqueMidjourneyForImage(taskId)
+		if ownershipErr == nil && midjourneyTask != nil {
+			owner, ownerErr := model.GetUserCache(midjourneyTask.UserId)
+			if ownerErr != nil || owner == nil || owner.Status != common.UserStatusEnabled {
+				midjourneyTask = nil
+			}
+		}
+	} else {
+		midjourneyTask, ownershipErr = model.GetMidjourneyForToken(c.GetInt("id"), c.GetInt("token_id"), taskId)
+	}
+	c.Header("Cache-Control", "private, no-store")
+	if ownershipErr != nil || midjourneyTask == nil {
+		c.JSON(http.StatusNotFound, gin.H{
 			"error": "midjourney_task_not_found",
 		})
 		return
@@ -61,7 +77,7 @@ func RelayMidjourneyImage(c *gin.Context) {
 	}
 	if validateErr != nil {
 		c.JSON(http.StatusForbidden, gin.H{
-			"error": fmt.Sprintf("request blocked: %v", validateErr),
+			"error": "image_request_blocked",
 		})
 		return
 	}
@@ -74,22 +90,29 @@ func RelayMidjourneyImage(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		responseBody, _ := io.ReadAll(resp.Body)
-		c.JSON(resp.StatusCode, gin.H{
-			"error": string(responseBody),
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error": "image_retrieval_failed",
 		})
 		return
 	}
-	// 从Content-Type头获取MIME类型
-	contentType := resp.Header.Get("Content-Type")
-	if contentType == "" {
-		// 如果无法确定内容类型，则默认为jpeg
-		contentType = "image/jpeg"
+	// Provider headers are not evidence that a body is an image. Sniff only a
+	// bounded prefix and serve raster formats with an authoritative MIME type.
+	var prefix [512]byte
+	n, readErr := io.ReadFull(resp.Body, prefix[:])
+	if n == 0 || (readErr != nil && !errors.Is(readErr, io.ErrUnexpectedEOF)) {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "image_retrieval_failed"})
+		return
 	}
-	// 设置响应的内容类型
-	c.Writer.Header().Set("Content-Type", contentType)
-	// 将图片流式传输到响应体
-	_, err = io.Copy(c.Writer, resp.Body)
+	contentType := mimetype.Detect(prefix[:n]).String()
+	switch contentType {
+	case "image/jpeg", "image/png", "image/gif", "image/webp", "image/avif", "image/bmp", "image/x-icon", "image/tiff":
+	default:
+		c.JSON(http.StatusBadGateway, gin.H{"error": "image_retrieval_failed"})
+		return
+	}
+	c.Header("Content-Type", contentType)
+	c.Header("X-Content-Type-Options", "nosniff")
+	_, err = io.Copy(c.Writer, io.MultiReader(bytes.NewReader(prefix[:n]), resp.Body))
 	if err != nil {
 		log.Println("Failed to stream image:", err)
 	}
@@ -149,9 +172,9 @@ func coverMidjourneyTaskDto(c *gin.Context, originTask *model.Midjourney) (midjo
 	midjourneyTask.FinishTime = originTask.FinishTime
 	midjourneyTask.ImageUrl = ""
 	if originTask.ImageUrl != "" && setting.MjForwardUrlEnabled {
-		midjourneyTask.ImageUrl = system_setting.ServerAddress + "/mj/image/" + originTask.MjId
+		midjourneyTask.ImageUrl, _ = service.BuildMidjourneyImageURL(originTask.MjId)
 		if originTask.Status != "SUCCESS" {
-			midjourneyTask.ImageUrl += "?rand=" + strconv.FormatInt(time.Now().UnixNano(), 10)
+			midjourneyTask.ImageUrl += "&rand=" + strconv.FormatInt(time.Now().UnixNano(), 10)
 		}
 	} else {
 		midjourneyTask.ImageUrl = originTask.ImageUrl
@@ -277,6 +300,8 @@ func RelaySwapFace(c *gin.Context, info *relaycommon.RelayInfo) *dto.MidjourneyR
 		tokenName := c.GetString("token_name")
 		logContent := fmt.Sprintf("模型固定价格 %.2f，分组倍率 %.2f，操作 %s", priceData.ModelPrice, priceData.GroupRatioInfo.GroupRatio, constant.MjActionSwapFace)
 		other := service.GenerateMjOtherInfo(info, priceData)
+		other.SetPublic("task_id", midjourneyTask.MjId)
+		other.SetAdmin("midjourney_record_id", midjourneyTask.Id)
 		service.AppendRelayLogAdminInfo(c, info, other)
 		model.RecordConsumeLog(c, info.UserId, model.RecordConsumeLogParams{
 			ChannelId: billingChannelId,
@@ -284,7 +309,7 @@ func RelaySwapFace(c *gin.Context, info *relaycommon.RelayInfo) *dto.MidjourneyR
 			TokenName: tokenName,
 			Quota:     midjourneyTask.Quota,
 			Content:   logContent,
-			TokenId:   midjourneyTask.TokenId,
+			TokenId:   midjourneyTask.OwnerTokenId,
 			Group:     info.UsingGroup,
 			Other:     other,
 		})
@@ -306,7 +331,10 @@ func RelaySwapFace(c *gin.Context, info *relaycommon.RelayInfo) *dto.MidjourneyR
 func RelayMidjourneyTaskImageSeed(c *gin.Context) *dto.MidjourneyResponse {
 	taskId := c.Param("id")
 	userId := c.GetInt("id")
-	originTask := model.GetByMJId(userId, taskId)
+	originTask, ownershipErr := model.GetMidjourneyForToken(userId, common.GetContextKeyInt(c, constant.ContextKeyTokenId), taskId)
+	if ownershipErr != nil {
+		return service.MidjourneyErrorWrapper(constant.MjRequestError, "get_task_failed")
+	}
 	if originTask == nil {
 		return service.MidjourneyErrorWrapper(constant.MjRequestError, "task_no_found")
 	}
@@ -343,7 +371,10 @@ func RelayMidjourneyTask(c *gin.Context, relayMode int) *dto.MidjourneyResponse 
 	switch relayMode {
 	case relayconstant.RelayModeMidjourneyTaskFetch:
 		taskId := c.Param("id")
-		originTask := model.GetByMJId(userId, taskId)
+		originTask, ownershipErr := model.GetMidjourneyForToken(userId, common.GetContextKeyInt(c, constant.ContextKeyTokenId), taskId)
+		if ownershipErr != nil {
+			return service.MidjourneyErrorWrapper(constant.MjRequestError, "get_task_failed")
+		}
 		if originTask == nil {
 			return &dto.MidjourneyResponse{
 				Code:        4,
@@ -371,7 +402,10 @@ func RelayMidjourneyTask(c *gin.Context, relayMode int) *dto.MidjourneyResponse 
 		}
 		var tasks []dto.MidjourneyDto
 		if len(condition.IDs) != 0 {
-			originTasks := model.GetByMJIds(userId, condition.IDs)
+			originTasks, ownershipErr := model.GetMidjourneysForToken(userId, common.GetContextKeyInt(c, constant.ContextKeyTokenId), condition.IDs)
+			if ownershipErr != nil {
+				return service.MidjourneyErrorWrapper(constant.MjRequestError, "get_task_failed")
+			}
 			for _, originTask := range originTasks {
 				midjourneyTask := coverMidjourneyTaskDto(c, originTask)
 				tasks = append(tasks, midjourneyTask)
@@ -475,7 +509,10 @@ func RelayMidjourneySubmit(c *gin.Context, relayInfo *relaycommon.RelayInfo) *dt
 			mjId = midjRequest.TaskId
 		}
 
-		originTask := model.GetByMJId(relayInfo.UserId, mjId)
+		originTask, ownershipErr := model.GetMidjourneyForToken(relayInfo.UserId, relayInfo.TokenId, mjId)
+		if ownershipErr != nil {
+			return service.MidjourneyErrorWrapper(constant.MjRequestError, "get_task_failed")
+		}
 		if originTask == nil {
 			return service.MidjourneyErrorWrapper(constant.MjRequestError, "task_not_found")
 		} else { //原任务的Status=SUCCESS，则可以做放大UPSCALE、变换VARIATION等动作，此时必须使用原来的请求地址才能正确处理
@@ -651,6 +688,8 @@ func RelayMidjourneySubmit(c *gin.Context, relayInfo *relaycommon.RelayInfo) *dt
 		tokenName := c.GetString("token_name")
 		logContent := fmt.Sprintf("模型固定价格 %.2f，分组倍率 %.2f，操作 %s，ID %s", priceData.ModelPrice, priceData.GroupRatioInfo.GroupRatio, midjRequest.Action, midjResponse.Result)
 		other := service.GenerateMjOtherInfo(relayInfo, priceData)
+		other.SetPublic("task_id", midjourneyTask.MjId)
+		other.SetAdmin("midjourney_record_id", midjourneyTask.Id)
 		service.AppendRelayLogAdminInfo(c, relayInfo, other)
 		model.RecordConsumeLog(c, relayInfo.UserId, model.RecordConsumeLogParams{
 			ChannelId: billingChannelId,
@@ -658,7 +697,7 @@ func RelayMidjourneySubmit(c *gin.Context, relayInfo *relaycommon.RelayInfo) *dt
 			TokenName: tokenName,
 			Quota:     midjourneyTask.Quota,
 			Content:   logContent,
-			TokenId:   midjourneyTask.TokenId,
+			TokenId:   midjourneyTask.OwnerTokenId,
 			Group:     relayInfo.UsingGroup,
 			Other:     other,
 		})

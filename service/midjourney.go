@@ -35,6 +35,10 @@ func PrepareMidjourneyTaskBilling(relayInfo *relaycommon.RelayInfo, task *model.
 	if task == nil {
 		return false, errors.New("Midjourney task is nil")
 	}
+	if relayInfo != nil {
+		task.OwnerTokenId = relayInfo.TokenId
+		task.RequestId = relayInfo.CanonicalRequestId
+	}
 	task.Quota = 0
 	task.TokenId = 0
 	task.BillingChannelId = 0
@@ -118,15 +122,24 @@ func RefundMidjourneyQuota(ctx context.Context, task *model.Midjourney, reason s
 	model.UpdateChannelUsedQuota(billingChannelId, -quota)
 	other := model.NewLogOther()
 	other.SetPublic("task_id", task.MjId)
+	if task.Id > 0 {
+		other.SetAdmin("midjourney_record_id", task.Id)
+	}
 	other.SetPublic("reason", reason)
+	ownerTokenId := task.OwnerTokenId
+	if ownerTokenId == 0 {
+		// Historical applied token billing is deterministic owner evidence.
+		ownerTokenId = task.TokenId
+	}
 	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
+		RequestId: task.RequestId,
 		UserId:    task.UserId,
 		LogType:   model.LogTypeRefund,
 		Content:   "",
 		ChannelId: billingChannelId,
 		ModelName: CovertMjpActionToModelName(task.Action),
 		Quota:     quota,
-		TokenId:   task.TokenId,
+		TokenId:   ownerTokenId,
 		Other:     other,
 	})
 

@@ -1,16 +1,16 @@
 # Public developer API gap report
 
-This report records the repository's implemented surface and proposes additions. The original documentation audit did not change backend, authentication, database or billing behavior. Phase 2 adds public read contracts; their implementation and verification status is recorded separately below. Proposed paths and schemas remain **design proposals** until their implementation is verified. Priorities are product recommendations: P0 blocks a safe integration, P1 materially improves developer operations, P2 is optional workflow support.
+This report records the repository's implemented surface and proposes additions. The original documentation audit did not change backend, authentication, database or billing behavior. Phase 2 and Phase 3 add public read contracts; their implementation and verification status is recorded separately below. Proposed paths and schemas remain **design proposals** until their implementation is verified. Priorities are product recommendations: P0 blocks a safe integration, P1 materially improves developer operations, P2 is optional workflow support.
 
-## Phase 2 status
+## Implemented capability status
 
 | Priority | Capability | Status |
 | --- | --- | --- |
 | P0 | `GET /v1/catalog` | **COMPLETED**. Typed schema and key-scoped local pricing/routing projection; authorization, zero balance and three-database regression matrix passed. |
 | P0 | `GET /v1/key/balance` | **COMPLETED**. Decimal display-unit conversion and exact authenticated-key allowance; quota/expiry, cache/revocation and three-database matrix passed. |
 | P0 | Request-correlated final usage | **BLOCKED_BY_OWNERSHIP_MODEL** for complete canonical async/refund request-to-task/event attribution. No endpoint implemented; no automatic schema migration. Existing synchronous logs already persist user/key ownership. |
-| P1 | Full key usage/history | Remaining: versioned period/history contract, distinct from current-key balance. |
-| P1 | Public task listing | Remaining. Public generic task detail and artifacts already exist. |
+| P1 | Key usage | **COMPLETED in Phase 3**: bounded retained-event amounts/components, exact current-key scope; not an authoritative all-history wallet ledger. |
+| P1 | Public task listing/detail | **COMPLETED in Phase 3**: key-owned metadata list/detail, bounded cursor and fail-closed historical ownership. |
 | P2 | Capability-aware cancellation and advanced monitoring | Remaining; do not advertise unimplemented capabilities. |
 
 `/api/pricing`, `/api/usage/token/`, `/v1/models` and existing inference APIs retain their existing roles and behavior. New recommended public read contracts use `/v1`; legacy compatibility does not establish a public v1 contract.
@@ -25,7 +25,7 @@ This report records the repository's implemented surface and proposes additions.
 | API-key consumption history | `GET /api/log/token`, `TokenAuthReadOnly`, `controller/log.go:GetLogByKey`, `model/log.go:GetLogByTokenId` | CONSOLE by the requested documentation boundary (§35), despite its read-only API-key middleware. It uses `{success,message,data}` internally; do not promote it in the public reference. No dedicated versioned request-ID lookup or cursor contract exists. |
 | Compatibility billing | `router/dashboard.go`: `/dashboard/billing/subscription`, `/dashboard/billing/usage`, plus `/v1` aliases; `TokenAuth`; `controller/billing.go` | Implemented compatibility surface. Scope changes with `DisplayTokenStatEnabled`; amounts follow site display mode (USD, CNY or TOKENS), and usage is multiplied by 100. `*_usd` naming is not proof of invariant USD values. Controller lookup failures may be HTTP 200 with an error object. No removal/deprecation schedule is established. |
 | User consumption / task lists | `/api/log/self`, `/api/log/self/stat`, `/api/task/self`, `UserAuth`; administrator equivalents use `AdminAuth` | Dashboard/session APIs. They provide existing internal query and projection building blocks but are not API-key task-list contracts. |
-| Generic task submit/retrieve | `router/task-router.go`: `POST /v1/tasks/:key` (plugin key), `GET /v1/tasks/:key` (task ID); `TokenAuth`; `controller/task.go:GetTask` | Already implemented public task surface. Retrieve returns public task ID, platform, status, progress, fail reason and timestamps, owner-scoped. Do not propose another generic retrieve endpoint as missing. |
+| Generic task submit/retrieve | `router/task-router.go`: `POST /v1/tasks/:key` (plugin key), `GET /v1/tasks/:key` (task ID); `PublicAPIKeyReadAuth` on reads; `controller/task.go:GetTask` | Already implemented public task surface. Phase 3 retrieve returns a typed metadata projection, normalized status and fixed failure summary, scoped to the exact submitting key. Raw fail reason and private provider payload are omitted. Do not propose another generic retrieve endpoint as missing. |
 | Generic task artifacts | `GET /v1/tasks/:key/artifacts`; `GET` / `HEAD .../artifacts/:artifact_key/content` | Already implemented. Artifact listing uses `TokenAuth`; content supports token or scoped artifact-access authentication. Projection is explicit, not embedded in task lists. |
 | Host task protocols | `pkg/jsplugin/routing.go:hostProtocols`, `router/task-plugin-protocol-router.go` | Responses create/retrieve; video create, generations alias, retrieve and GET/HEAD content; images generate/edit; audio speech create/retrieve. Runtime claims and bindings determine execution. |
 | Provider-native tasks | Plugin manifests and routing, `docs/plugin-api/v1.md` | Installed and enabled plugin routes, provider-specific envelopes. They cannot establish a uniform cancellation or list API. |
@@ -205,3 +205,17 @@ No paid/provider upstream API calls, dependency/lockfile changes, schema migrati
 ```
 
 Six untracked implementation files contain 942 source lines. `git diff --stat` lists the tracked edits separately; no files were staged.
+
+## Phase 3 implementation update
+
+Baseline: clean main at `319bd4d47`. Phase 3A audit and the minimal portable ownership migration are recorded in [OWNERSHIP_COVERAGE.md](OWNERSHIP_COVERAGE.md). The earlier Phase 2 blocker descriptions above are historical evidence: new task/log writers now pin canonical request/key identity, DFLOP billing identity includes the key, and exact task-record provenance is recorded when available. No historical identity is guessed.
+
+Phase 3B introduces `GET /v1/key/usage`: current-key, retained-event consumption/refund/net totals with bounded timestamps and optional exact model. It deliberately does not infer request/success counts from billing events. Components require valid frozen unit/provenance evidence; unavailable quantities remain unknown. Retention and optional log writing can limit completeness.
+
+Phase 3C introduces `GET /v1/tasks` and tightens the existing `GET /v1/tasks/{key}` detail to exact key ownership, bounded cursor pagination and a whitelist metadata DTO. Foreign, unknown, conflicting, discarded or ambiguous rows are excluded; foreign/missing detail shares 404. No private provider result payload, raw error, credential, upstream ID, billing expression or internal principal is included. Console task/log APIs remain separate.
+
+Phase 3D remains **BLOCKED_BY_OWNERSHIP_MODEL**. New provenance does not provide a durable canonical billing-event identity, proof of complete logging across independent main/log stores, collision-safe historical request lineage, or authoritative settlement finality. A request detail must not advertise a final cost based on one consume row or a missing refund. A future durable event relation/finality contract must account for ClickHouse IDs, disabled/failed logging and retention before an endpoint is published.
+
+Phase 3E is **DESIGN_ONLY**. Proposed `POST /v1/tasks/{task_id}/cancel` requires exact key ownership, explicit versioned plugin/provider cancellation capability, idempotent acknowledgement, terminal-state race handling and verified financial reconciliation. Unsupported tasks must reject cancellation; acknowledgement must not promise provider stoppage or automatic refund. Task Plugin API v1 has no canonical cancellation hook; no operation or capability flag is implemented. HTTP disconnect only closes the client stream.
+
+Phase 4 candidates: durable event identity and completeness/finality; request usage after its gate; measured usage provenance for legacy media; capability-specific cancellation; operator retention policy and DOCS_SITE_URL. No production origin or SLA is invented.

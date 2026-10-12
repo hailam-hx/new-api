@@ -21,6 +21,7 @@ func SetRelayRouter(router *gin.Engine) {
 	developerRouter.Use(middleware.RouteTag("relay"), middleware.DisableCache(), middleware.GlobalAPIRateLimit(), middleware.PublicAPIKeyReadAuth())
 	developerRouter.GET("/catalog", controller.GetDeveloperCatalog)
 	developerRouter.GET("/key/balance", controller.GetDeveloperKeyBalance)
+	developerRouter.GET("/key/usage", controller.GetDeveloperKeyUsage)
 	// https://platform.openai.com/docs/api-reference/introduction
 	modelsRouter := router.Group("/v1/models")
 	modelsRouter.Use(middleware.RouteTag("relay"))
@@ -210,7 +211,7 @@ func SetRelayRouter(router *gin.Engine) {
 }
 
 func registerMjRouterGroup(relayMjRouter *gin.RouterGroup) {
-	relayMjRouter.GET("/image/:id", relay.RelayMidjourneyImage)
+	relayMjRouter.GET("/image/:id", middleware.MidjourneyImageAuth(), relay.RelayMidjourneyImage)
 	relayMjRouter.Use(middleware.TokenAuth(), middleware.Distribute())
 	{
 		relayMjRouter.POST("/submit/action", controller.RelayMidjourney)

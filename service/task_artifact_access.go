@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -22,6 +23,48 @@ const (
 )
 
 var ErrTaskArtifactAccessInvalid = errors.New("task artifact access is invalid")
+
+// VerifyMidjourneyImageAccess reuses the artifact signer with a distinct route
+// namespace and a signed, bounded expiry. It cannot authorize task-record APIs.
+func VerifyMidjourneyImageAccess(access, taskID string, expiresAt, now int64) bool {
+	if now < 0 || expiresAt <= now || expiresAt-now > 900 || taskID == "" || strings.TrimSpace(taskID) != taskID || strings.ContainsAny(taskID, "/\\\x00\r\n") {
+		return false
+	}
+	return VerifyTaskArtifactAccess(access, "/mj/image/"+taskID, "image:"+strconv.FormatInt(expiresAt, 10))
+}
+
+// BuildMidjourneyImageURL is called only after account/key authorization has
+// selected a task. Refreshing that projection issues a fresh 15-minute preview.
+func BuildMidjourneyImageURL(taskID string) (string, error) {
+	if taskID == "" || strings.TrimSpace(taskID) != taskID || strings.ContainsAny(taskID, "/\\\x00\r\n") {
+		return "", ErrTaskArtifactAccessInvalid
+	}
+	baseAddress := strings.TrimSpace(system_setting.TaskPublicAddress)
+	if baseAddress == "" {
+		baseAddress = strings.TrimSpace(system_setting.ServerAddress)
+	}
+	if err := ValidateTaskArtifactBaseURL(baseAddress); err != nil {
+		return "", err
+	}
+	baseURL, err := url.Parse(baseAddress)
+	if err != nil {
+		return "", err
+	}
+	expiresAt := common.GetTimestamp() + 900
+	access, err := IssueTaskArtifactAccess("/mj/image/"+taskID, "image:"+strconv.FormatInt(expiresAt, 10))
+	if err != nil {
+		return "", err
+	}
+	basePath := strings.TrimRight(baseURL.Path, "/")
+	escapedBasePath := strings.TrimRight(baseURL.EscapedPath(), "/")
+	baseURL.Path = basePath + "/mj/image/" + taskID
+	baseURL.RawPath = escapedBasePath + "/mj/image/" + url.PathEscape(taskID)
+	query := baseURL.Query()
+	query.Set(TaskArtifactAccessQueryParameter, access)
+	query.Set("expires", strconv.FormatInt(expiresAt, 10))
+	baseURL.RawQuery = query.Encode()
+	return baseURL.String(), nil
+}
 
 func taskArtifactAccessMessage(taskID, artifactKey string) []byte {
 	return []byte(taskArtifactAccessVersion + "\x00" + taskID + "\x00" + artifactKey)

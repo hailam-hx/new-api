@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"maps"
 	"math"
@@ -78,7 +79,7 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo, task *model
 			other.SetPublic("billing_state", "PENDING")
 		}
 		other.SetPublic("settlement_verified", false)
-		model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{UserId: info.UserId, LogType: model.LogTypeSystem, Content: "DFLOP task accepted with reserved quota", ChannelId: info.ChannelId, ModelName: info.OriginModelName, Quota: 0, TokenId: info.TokenId, Group: info.UsingGroup, Other: other})
+		model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{RequestId: info.CanonicalRequestId, UserId: info.UserId, LogType: model.LogTypeSystem, Content: "DFLOP task accepted with reserved quota", ChannelId: info.ChannelId, ModelName: info.OriginModelName, Quota: 0, TokenId: info.TokenId, Group: info.UsingGroup, Other: other})
 		return
 	}
 	model.RecordConsumeLog(c, info.UserId, model.RecordConsumeLogParams{
@@ -235,6 +236,28 @@ func taskDeliveredInline(c *gin.Context, task *model.Task) bool {
 	return ok && pinned.Protocol == jsplugin.ProtocolOpenAIImage
 }
 
+// taskCanonicalRequestID preserves deterministic provenance without treating
+// historical DFLOP billing operation digests as HTTP request identities.
+func taskCanonicalRequestID(task *model.Task) string {
+	if task.RequestId != "" {
+		return task.RequestId
+	}
+	if execution := task.PrivateData.Execution; execution != nil {
+		if execution.CanonicalRequestID != "" {
+			return execution.CanonicalRequestID
+		}
+		if !IsDFLOPTaskPlatform(task.Platform) {
+			if len(execution.RequestID) == 64 {
+				if _, err := hex.DecodeString(execution.RequestID); err == nil {
+					return ""
+				}
+			}
+			return execution.RequestID
+		}
+	}
+	return ""
+}
+
 func appendTaskLogInfo(task *model.Task, other *model.LogOther) {
 	if task == nil || other == nil {
 		return
@@ -242,11 +265,26 @@ func appendTaskLogInfo(task *model.Task, other *model.LogOther) {
 	if task.TaskID != "" {
 		other.SetPublic("task_id", task.TaskID)
 	}
+	if task.ID > 0 {
+		other.SetAdmin("task_record_id", task.ID)
+	}
+	if task.PrivateData.BillingSource != "" {
+		other.SetPublic("billing_source", task.PrivateData.BillingSource)
+	}
+	if task.PrivateData.SubscriptionId > 0 {
+		other.SetPublic("subscription_id", task.PrivateData.SubscriptionId)
+	}
+	if execution := task.PrivateData.Execution; execution != nil && execution.RequestPath != "" {
+		other.SetPublic("request_path", execution.RequestPath)
+	}
 	if IsDFLOPTaskPlatform(task.Platform) && TaskBillingIsPending(task.PrivateData.PluginState) {
 		other.SetPublic("billing_state", "PENDING")
 		other.SetPublic("settlement_verified", false)
 		other.SetAdmin("reserved_quota", task.Quota)
 		other.SetAdmin("billing_blocker", "MISSING_AUTHORITATIVE_FINAL_USAGE")
+	}
+	if bc := task.PrivateData.BillingContext; bc != nil && len(bc.UsageUnits) > 0 && !TaskBillingIsPending(task.PrivateData.PluginState) {
+		other.SetPublic("usage_units", bc.UsageUnits)
 	}
 	if task.PrivateData.ResultDiscarded {
 		// The result was delivered inline and the upstream snapshot was not
@@ -319,6 +357,7 @@ func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) bool 
 	other.SetPublic("task_id", task.TaskID)
 	other.SetPublic("reason", reason)
 	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
+		RequestId: taskCanonicalRequestID(task),
 		UserId:    task.UserId,
 		LogType:   model.LogTypeRefund,
 		Content:   "",
@@ -399,6 +438,7 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 		attachQuotaSaturationToOther(other, clamp)
 	}
 	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
+		RequestId: taskCanonicalRequestID(task),
 		UserId:    task.UserId,
 		LogType:   logType,
 		Content:   reason,
@@ -554,7 +594,11 @@ func settleDFLOPTaskReservation(ctx context.Context, task *model.Task, actual *i
 	if !IsDFLOPTaskPlatform(task.Platform) || task.PrivateData.Execution == nil || task.PrivateData.Execution.RequestID == "" {
 		return false, false
 	}
-	journal, err := model.FindBillingReservationLog(task.PrivateData.Execution.RequestID, task.UserId)
+	if task.TokenId > 0 && task.TokenId != task.PrivateData.TokenId {
+		logger.LogError(ctx, fmt.Sprintf("DFLOP task %s token ownership conflict", task.TaskID))
+		return true, false
+	}
+	journal, err := model.FindBillingReservationLog(task.PrivateData.Execution.RequestID, task.UserId, task.PrivateData.TokenId)
 	if err != nil {
 		logger.LogError(ctx, fmt.Sprintf("DFLOP task %s journal lookup failed: %v", task.TaskID, err))
 		return true, false
@@ -621,7 +665,7 @@ func settleDFLOPTaskReservation(ctx context.Context, task *model.Task, actual *i
 		logOther := taskBillingOther(task)
 		logOther.SetPublic("billing_state", "SETTLED")
 		logOther.SetPublic("settlement_verified", true)
-		model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{UserId: task.UserId, LogType: model.LogTypeConsume, Content: reason, ChannelId: task.ChannelId, ModelName: taskModelName(task), Quota: finalQuota, TokenId: task.PrivateData.TokenId, Group: task.Group, Other: logOther, NodeName: task.PrivateData.NodeName})
+		model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{RequestId: taskCanonicalRequestID(task), UserId: task.UserId, LogType: model.LogTypeConsume, Content: reason, ChannelId: task.ChannelId, ModelName: taskModelName(task), Quota: finalQuota, TokenId: task.PrivateData.TokenId, Group: task.Group, Other: logOther, NodeName: task.PrivateData.NodeName})
 	}
 	other.SetPublic("billing_state", finished)
 	other.SetPublic("settlement_verified", actual != nil)

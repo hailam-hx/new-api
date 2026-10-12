@@ -74,6 +74,7 @@ func TestGetOpenAIVideoRouteRendersJimengTask(t *testing.T) {
 		TaskID:    "task_jimeng_public",
 		Platform:  constant.TaskPlatform("jimeng"),
 		UserId:    91,
+		TokenId:   1,
 		Group:     "default",
 		ChannelId: 17,
 		Status:    model.TaskStatusSuccess,

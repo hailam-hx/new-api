@@ -1701,14 +1701,20 @@ func TestPassiveBindingCaptureExcludesSecretsAndPreservesMissingFacts(t *testing
 	assert.Contains(t, string(encoded), `"completion_tokens":0`)
 }
 
-func TestDFLOPTaskBillingIdentityIsUserPluginScoped(t *testing.T) {
+func TestDFLOPTaskBillingIdentityIsTokenScopedAndPreservesRequest(t *testing.T) {
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
 	ctx.Request = httptest.NewRequest("POST", "/v1/videos", nil)
 	ctx.Request.Header.Set("Idempotency-Key", "operation-1")
-	info := &relaycommon.RelayInfo{UserId: 12, ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://api.dflop.top"}}
+	ctx.Set(common.RequestIdKey, "canonical-http-request")
+	info := &relaycommon.RelayInfo{UserId: 12, TokenId: 101, ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://api.dflop.top"}}
 	require.NoError(t, PrepareDFLOPTaskBillingIdentity(ctx, info, "dflop-media"))
 	identity := info.RequestId
 	assert.Len(t, identity, 64)
+	assert.Equal(t, "canonical-http-request", ctx.GetString(common.RequestIdKey))
+	info.TokenId = 102
+	require.NoError(t, PrepareDFLOPTaskBillingIdentity(ctx, info, "dflop-media"))
+	assert.NotEqual(t, identity, info.RequestId)
+	info.TokenId = 101
 	require.NoError(t, PrepareDFLOPTaskBillingIdentity(ctx, info, "dflop-media"))
 	assert.Equal(t, identity, info.RequestId)
 	info.UserId = 13
@@ -1751,6 +1757,19 @@ func runDFLOPTaskReservationCases(t *testing.T, db, logDB *gorm.DB) {
 	journal, err := model.FindBillingReservationLog(info.RequestId, user.Id)
 	require.NoError(t, err)
 	require.NotNil(t, journal)
+	owned, err := model.FindBillingReservationLog(info.RequestId, user.Id, token.Id)
+	require.NoError(t, err)
+	require.NotNil(t, owned)
+	foreign, err := model.FindBillingReservationLog(info.RequestId, user.Id, token.Id+1000000)
+	require.ErrorContains(t, err, "TOKEN_OWNER_MISMATCH")
+	assert.Nil(t, foreign)
+	duplicate := *journal
+	duplicate.Id = 0
+	require.NoError(t, logDB.Create(&duplicate).Error)
+	ambiguous, err := model.FindBillingReservationLog(info.RequestId, user.Id, token.Id)
+	require.ErrorContains(t, err, "OWNERSHIP_AMBIGUOUS")
+	assert.Nil(t, ambiguous)
+	require.NoError(t, logDB.Delete(&duplicate).Error)
 	assert.Equal(t, "BILLING_RESERVATION_HELD", journal.Content)
 	assert.Contains(t, journal.Other, "provider-private-fixture")
 	held, err := model.GetUserQuota(user.Id, true)

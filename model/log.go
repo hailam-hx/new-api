@@ -279,7 +279,13 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 	isStream bool, group string, other *LogOther) {
 	logger.LogInfo(c, fmt.Sprintf("record error log: userId=%d, channelId=%d, modelName=%s, tokenName=%s, content=%s", userId, channelId, modelName, tokenName, common.LocalLogPreview(content)))
 	username := c.GetString("username")
-	requestId := c.GetString(common.RequestIdKey)
+	requestId := ""
+	if c.Request != nil {
+		requestId, _ = c.Request.Context().Value(common.RequestIdKey).(string)
+	}
+	if requestId == "" {
+		requestId = c.GetString(common.RequestIdKey)
+	}
 	upstreamRequestId := c.GetString(common.UpstreamRequestIdKey)
 	otherStr := other.JSONString()
 	// 判断是否需要记录 IP
@@ -342,7 +348,13 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 	}
 	logger.LogInfo(c, fmt.Sprintf("record consume log: userId=%d, params=%s", userId, common.GetJsonString(params)))
 	username := c.GetString("username")
-	requestId := c.GetString(common.RequestIdKey)
+	requestId := ""
+	if c.Request != nil {
+		requestId, _ = c.Request.Context().Value(common.RequestIdKey).(string)
+	}
+	if requestId == "" {
+		requestId = c.GetString(common.RequestIdKey)
+	}
 	upstreamRequestId := c.GetString(common.UpstreamRequestIdKey)
 	createdAt := common.GetTimestamp()
 	otherStr := params.Other.JSONString()
@@ -400,6 +412,7 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 }
 
 type RecordTaskBillingLogParams struct {
+	RequestId string
 	UserId    int
 	LogType   int
 	Content   string
@@ -426,6 +439,7 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 	createdAt := common.GetTimestamp()
 	log := &Log{
 		UserId:    params.UserId,
+		RequestId: params.RequestId,
 		Username:  username,
 		CreatedAt: createdAt,
 		Type:      params.LogType,
@@ -438,7 +452,8 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 		Group:     params.Group,
 		Other:     params.Other.JSONString(),
 	}
-	err := createLog(log)
+	// A missing historical request ID remains unknown; never invent correlation.
+	err := LOG_DB.Create(log).Error
 	if err != nil {
 		common.SysLog("failed to record task billing log: " + err.Error())
 	}

@@ -4,17 +4,33 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/gin-gonic/gin"
 )
 
 // TaskExecutionSnapshotFromContext captures immutable request and plugin
 // provenance at submission time. It never copies plugin source or payloads.
-func TaskExecutionSnapshotFromContext(ctx *gin.Context) *model.TaskExecutionSnapshot {
+func TaskExecutionSnapshotFromContext(ctx *gin.Context, relayInfo ...*relaycommon.RelayInfo) *model.TaskExecutionSnapshot {
 	if ctx == nil {
 		return nil
 	}
+	canonicalRequestID := ctx.GetString(common.RequestIdKey)
+	if ctx.Request != nil {
+		if requestID, _ := ctx.Request.Context().Value(common.RequestIdKey).(string); requestID != "" {
+			canonicalRequestID = requestID
+		}
+	}
 	snapshot := &model.TaskExecutionSnapshot{
-		RequestID: ctx.GetString(common.RequestIdKey),
+		RequestID:          canonicalRequestID,
+		CanonicalRequestID: canonicalRequestID,
+	}
+	if len(relayInfo) > 0 && relayInfo[0] != nil {
+		if relayInfo[0].RequestId != "" {
+			snapshot.RequestID = relayInfo[0].RequestId
+		}
+		if relayInfo[0].CanonicalRequestId != "" {
+			snapshot.CanonicalRequestID = relayInfo[0].CanonicalRequestId
+		}
 	}
 	if ctx.Request != nil && ctx.Request.URL != nil {
 		snapshot.RequestPath = ctx.Request.URL.Path

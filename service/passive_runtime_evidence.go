@@ -13,7 +13,25 @@ func CaptureTaskSubmission(c *gin.Context, info *relaycommon.RelayInfo, task *mo
 	if task == nil || info == nil || info.ChannelMeta == nil {
 		return
 	}
-	execution := TaskExecutionSnapshotFromContext(c)
+	pinnedValue, _ := c.Get(pluginruntime.ContextKeyPinnedPlugin)
+	pinned, _ := pinnedValue.(pluginruntime.PinnedPlugin)
+	if bc := task.PrivateData.BillingContext; bc != nil && bc.UsageUnits == nil && pinned.Plugin != nil {
+		schema, _ := pinned.Plugin.Meta.UsageForModels(info.UpstreamModelName, info.OriginModelName)
+		units := make(map[string]string)
+		for key, field := range schema {
+			if field.Type != "number" {
+				continue
+			}
+			switch field.Unit {
+			case "second", "count", "token", "credit", "character":
+				units[key] = field.Unit
+			}
+		}
+		if len(units) > 0 {
+			bc.UsageUnits = units
+		}
+	}
+	execution := TaskExecutionSnapshotFromContext(c, info)
 	if execution == nil {
 		execution = &model.TaskExecutionSnapshot{}
 	}

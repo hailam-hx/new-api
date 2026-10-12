@@ -733,6 +733,7 @@ func TestProductionPluginNativeQueryTraversesInnerRouter(t *testing.T) {
 	t.Cleanup(func() { model.DB = previousDB })
 	require.NoError(t, database.Create(&model.Task{
 		TaskID:    "task_native_router",
+		TokenId:   81,
 		Platform:  constant.TaskPlatform("kling"),
 		UserId:    91,
 		Status:    model.TaskStatusSuccess,
@@ -755,6 +756,7 @@ func TestProductionPluginNativeQueryTraversesInnerRouter(t *testing.T) {
 			production[0],
 			func(c *gin.Context) {
 				common.SetContextKey(c, constant.ContextKeyUserId, 91)
+				common.SetContextKey(c, constant.ContextKeyTokenId, 81)
 				common.SetContextKey(c, constant.ContextKeyUserGroup, "default")
 				common.SetContextKey(c, constant.ContextKeyTokenGroup, "default")
 				c.Next()

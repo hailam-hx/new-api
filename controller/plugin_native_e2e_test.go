@@ -307,6 +307,7 @@ func TestDFLOPAudioSpeechProductionTaskSubmissionAndPolling(t *testing.T) {
 					queryContext.Request = httptest.NewRequest(http.MethodGet, "/v1/audio/speech/task_speech_public", nil)
 					queryContext.Params = gin.Params{{Key: "task_id", Value: "task_speech_public"}}
 					common.SetContextKey(queryContext, constant.ContextKeyUserId, ownership.userID)
+					common.SetContextKey(queryContext, constant.ContextKeyTokenId, 27)
 					RetrieveTaskPluginAudioSpeech(queryContext)
 					assert.Equal(t, ownership.status, queryRecorder.Code)
 					assert.NotContains(t, queryRecorder.Body.String(), "fake-task-1")
@@ -358,7 +359,7 @@ func TestKlingNativeRouteSubmitPollSettleAndQuery(t *testing.T) {
 	previousRedisEnabled := common.RedisEnabled
 	database, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, database.AutoMigrate(&model.User{}, &model.Channel{}, &model.Task{}, &model.Log{}))
+	require.NoError(t, database.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Task{}, &model.Log{}))
 	model.DB = database
 	model.LOG_DB = database
 	common.MemoryCacheEnabled = false
@@ -382,6 +383,7 @@ func TestKlingNativeRouteSubmitPollSettleAndQuery(t *testing.T) {
 		Group:    "default",
 		Quota:    1_000_000,
 	}).Error)
+	require.NoError(t, database.Create(&model.Token{Id: 81, UserId: 7, Key: "native-kling-owner", RemainQuota: 1_000_000}).Error)
 
 	var submitCalls atomic.Int32
 	var queryCalls atomic.Int32
@@ -437,6 +439,7 @@ func TestKlingNativeRouteSubmitPollSettleAndQuery(t *testing.T) {
 		Route:      submitBinding.Route,
 	})
 	common.SetContextKey(submitContext, constant.ContextKeyUserId, 7)
+	common.SetContextKey(submitContext, constant.ContextKeyTokenId, 81)
 	common.SetContextKey(submitContext, constant.ContextKeyUserGroup, "default")
 	common.SetContextKey(submitContext, constant.ContextKeyUsingGroup, "default")
 	common.SetContextKey(submitContext, constant.ContextKeyTokenGroup, "default")
@@ -452,6 +455,7 @@ func TestKlingNativeRouteSubmitPollSettleAndQuery(t *testing.T) {
 	relayInfo := &relaycommon.RelayInfo{
 		UserId:          7,
 		UserGroup:       "default",
+		TokenId:         81,
 		UsingGroup:      "default",
 		UserQuota:       1_000_000,
 		TokenGroup:      "default",
@@ -515,6 +519,7 @@ func TestKlingNativeRouteSubmitPollSettleAndQuery(t *testing.T) {
 		Route:      queryBinding.Route,
 	})
 	common.SetContextKey(queryContext, constant.ContextKeyUserId, 7)
+	common.SetContextKey(queryContext, constant.ContextKeyTokenId, 81)
 
 	middleware.PrepareTaskPluginRoute()(queryContext)
 

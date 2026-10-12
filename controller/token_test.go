@@ -15,9 +15,11 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -891,4 +893,278 @@ func verifyAPITokenAudit(t *testing.T) {
 		require.NoError(t, model.DB.Model(&model.Token{}).Where("name = ?", "audit-down").Count(&count).Error)
 		assert.EqualValues(t, 1, count)
 	})
+}
+
+func TestDeveloperKeyUsageProjectsOnlyOwnedRecordedEvents(t *testing.T) {
+	runDeveloperUsageProjectionFixture(t, setupTokenControllerTestDB(t))
+}
+
+func runDeveloperUsageProjectionFixture(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	require.NoError(t, db.AutoMigrate(&model.Log{}))
+	oldQuota, oldCurrency := common.QuotaPerUnit, *operation_setting.GetGeneralSetting()
+	common.QuotaPerUnit = 500000
+	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeUSD
+	t.Cleanup(func() { common.QuotaPerUnit = oldQuota; *operation_setting.GetGeneralSetting() = oldCurrency })
+	logs := []model.Log{
+		{UserId: 7, TokenId: 41, CreatedAt: 1100, Type: model.LogTypeConsume, Quota: 500000, ModelName: "model-a", RequestId: "task-request", Other: `{"task_id":"duplicated-public-id","settlement_verified":true,"usage_facts":{"seconds":10},"usage_units":{"seconds":"second"},"admin_info":{"task_record_id":7},"group_ratio":99,"root_info":{"upstream_key":"upstream-private"}}`},
+		{UserId: 7, TokenId: 41, CreatedAt: 1200, Type: model.LogTypeConsume, Quota: 250000, ModelName: "model-a", RequestId: "task-request", Other: `{"task_id":"duplicated-public-id","actual_quota":750000,"usage_facts":{"seconds":12},"usage_units":{"seconds":"second"},"admin_info":{"task_record_id":7}}`},
+		{UserId: 7, TokenId: 41, CreatedAt: 1300, Type: model.LogTypeRefund, Quota: 100000, ModelName: "model-a", RequestId: "task-request", Other: `{"task_id":"duplicated-public-id","actual_quota":650000,"usage_facts":{"seconds":8},"usage_units":{"seconds":"second"},"admin_info":{"task_record_id":7}}`},
+		{UserId: 7, TokenId: 41, CreatedAt: 1350, Type: model.LogTypeConsume, ModelName: "model-a", RequestId: "second-task", Other: `{"task_id":"duplicated-public-id","settlement_verified":true,"usage_facts":{"seconds":3},"usage_units":{"seconds":"second"},"admin_info":{"task_record_id":8}}`},
+		{UserId: 7, TokenId: 41, CreatedAt: 1400, Type: model.LogTypeConsume, Quota: 50000, ModelName: "model-a", RequestId: "failed-with-fee", Other: `{"violation_fee":true,"status_code":400}`},
+		{UserId: 7, TokenId: 41, CreatedAt: 1500, Type: model.LogTypeConsume, ModelName: "chat", RequestId: "chat-request", PromptTokens: 40, CompletionTokens: 2, Other: `{"request_path":"/v1/chat/completions","admin_info":{"usage_billing_path":"billing-usage-openai"}}`},
+		{UserId: 7, TokenId: 41, CreatedAt: 1550, Type: model.LogTypeError, RequestId: "failed-with-fee"},
+		{UserId: 7, TokenId: 41, CreatedAt: 1600, Type: model.LogTypeConsume, Other: `{"task_id":"historical","usage_facts":{"seconds":999},"usage_units":{"seconds":"second"}}`},
+		{UserId: 7, TokenId: 41, CreatedAt: 1700, Type: model.LogTypeSystem, Content: "BILLING_RESERVATION_HELD", Other: `{"billing_state":"HELD"}`},
+		{UserId: 7, TokenId: 42, CreatedAt: 1500, Type: model.LogTypeConsume, Quota: 9000000, Other: `{"secret":"same-user-other-key"}`},
+		{UserId: 8, TokenId: 41, CreatedAt: 1500, Type: model.LogTypeConsume, Quota: 9000000, Other: `{"secret":"other-user"}`},
+		{UserId: 7, TokenId: 0, CreatedAt: 1500, Type: model.LogTypeConsume, Quota: 9000000},
+		{UserId: 7, TokenId: 41, CreatedAt: 2000, Type: model.LogTypeConsume, Quota: 9000000},
+	}
+	require.NoError(t, db.Create(&logs).Error)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/key/usage?start=1000&end=2000", nil)
+	ctx.Set("public_api_key", &model.Token{Id: 41, UserId: 7, Key: "caller-key-private"})
+	ctx.Set("id", 8)
+	ctx.Set("token_id", 42)
+	GetDeveloperKeyUsage(ctx)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response struct {
+		Object        string `json:"object"`
+		Unit          string `json:"unit"`
+		Start         int64  `json:"start_time"`
+		End           int64  `json:"end_time"`
+		Consumption   string `json:"recorded_consumption"`
+		Refunds       string `json:"recorded_refunds"`
+		Net           string `json:"recorded_net"`
+		BillingEvents int64  `json:"billing_events"`
+		ErrorEvents   int64  `json:"error_events"`
+		Status        string `json:"component_status"`
+		Components    []struct {
+			Subject  string `json:"subject"`
+			Unit     string `json:"unit"`
+			Quantity string `json:"quantity"`
+		} `json:"components"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	assert.Equal(t, "key.usage", response.Object)
+	assert.Equal(t, "USD", response.Unit)
+	assert.Equal(t, int64(1000), response.Start)
+	assert.Equal(t, int64(2000), response.End)
+	assert.Equal(t, "1.6", response.Consumption)
+	assert.Equal(t, "0.2", response.Refunds)
+	assert.Equal(t, "1.4", response.Net)
+	assert.Equal(t, int64(7), response.BillingEvents)
+	assert.Equal(t, int64(1), response.ErrorEvents)
+	assert.Equal(t, "partial", response.Status)
+	quantities := make(map[string]string)
+	for _, component := range response.Components {
+		quantities[component.Subject+":"+component.Unit] = component.Quantity
+	}
+	assert.Equal(t, map[string]string{"seconds:second": "11", "input_tokens:token": "40", "output_tokens:token": "2"}, quantities)
+	for _, forbidden := range []string{"caller-key-private", "upstream-private", "same-user-other-key", "other-user", "group_ratio", "admin_info", "request_id", "token_id", "requests"} {
+		assert.NotContains(t, recorder.Body.String(), forbidden)
+	}
+}
+
+func developerUsageTestRequest(path string, token *model.Token) *httptest.ResponseRecorder {
+	response := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(response)
+	ctx.Request = httptest.NewRequest(http.MethodGet, path, nil)
+	if token != nil {
+		ctx.Set("public_api_key", token)
+	}
+	GetDeveloperKeyUsage(ctx)
+	return response
+}
+
+func TestDeveloperKeyUsageRejectsPrivilegedAndUnprovenComponents(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.Log{}))
+	oldCurrency := *operation_setting.GetGeneralSetting()
+	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeUSD
+	t.Cleanup(func() { *operation_setting.GetGeneralSetting() = oldCurrency })
+	logs := []model.Log{
+		{UserId: 7, TokenId: 41, CreatedAt: 1100, Type: model.LogTypeConsume, RequestId: "safe-task", Other: `{"task_id":"task","settlement_verified":true,"usage_facts":{"seconds":4,"api_key":1,"user_id":7,"provider_cost":2,"group_ratio":3,"bad.subject":2,"quality":"hd"},"usage_units":{"seconds":"second","api_key":"count","user_id":"count","provider_cost":"credit","group_ratio":"credit","bad.subject":"count"},"admin_info":{"task_record_id":9}}`},
+		{UserId: 7, TokenId: 41, CreatedAt: 1200, Type: model.LogTypeConsume, RequestId: "image", PromptTokens: 1, CompletionTokens: 1000, Other: `{"request_path":"/v1/images/generations","admin_info":{"usage_billing_path":"billing-usage-openai"}}`},
+		{UserId: 7, TokenId: 41, CreatedAt: 1300, Type: model.LogTypeConsume, RequestId: "chat-estimate", PromptTokens: 999, CompletionTokens: 999, Other: `{"request_path":"/v1/chat/completions","admin_info":{"usage_billing_path":"upstream"}}`},
+		{UserId: 7, TokenId: 41, CreatedAt: 1400, Type: model.LogTypeConsume, RequestId: "missing-units", Other: `{"task_id":"old","settlement_verified":true,"usage_facts":{"seconds":10},"admin_info":{"task_record_id":10}}`},
+		{UserId: 7, TokenId: 41, CreatedAt: 1500, Type: model.LogTypeConsume, RequestId: "pending", Other: `{"task_id":"pending","billing_state":"PENDING","settlement_verified":true,"usage_facts":{"seconds":100},"usage_units":{"seconds":"second"},"admin_info":{"task_record_id":11}}`},
+	}
+	require.NoError(t, db.Create(&logs).Error)
+	response := developerUsageTestRequest("/v1/key/usage?start=1000&end=2000", &model.Token{Id: 41, UserId: 7})
+	require.Equal(t, http.StatusOK, response.Code)
+	var usage dto.DeveloperKeyUsage
+	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &usage))
+	assert.Equal(t, []dto.DeveloperUsageComponent{{Subject: "seconds", Unit: "second", Quantity: "4"}}, usage.Components)
+	assert.Equal(t, "partial", usage.ComponentStatus)
+	for _, forbidden := range []string{"api_key", "user_id", "provider_cost", "group_ratio", "bad.subject", "input_tokens", "output_tokens"} {
+		assert.NotContains(t, response.Body.String(), forbidden)
+	}
+}
+
+func TestDeveloperKeyUsageBoundsEmptyWindowAndDisplayUnits(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.Log{}))
+	oldCurrency := *operation_setting.GetGeneralSetting()
+	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeUSD
+	t.Cleanup(func() { *operation_setting.GetGeneralSetting() = oldCurrency })
+	token := &model.Token{Id: 41, UserId: 7, RemainQuota: 0}
+	for _, query := range []string{"start=oops", "end=oops", "start=-1", "end=-1", "start=1&end=1", "start=2&end=1", "start=0&end=2678401", "start=1&start=2&end=3", "start=1&end=2&end=3", "start=1&end=2&model=a&model=b"} {
+		t.Run(query, func(t *testing.T) {
+			response := developerUsageTestRequest("/v1/key/usage?"+query, token)
+			assert.Equal(t, http.StatusBadRequest, response.Code)
+		})
+	}
+	assert.Equal(t, http.StatusUnauthorized, developerUsageTestRequest("/v1/key/usage", nil).Code)
+	before := common.GetTimestamp()
+	response := developerUsageTestRequest("/v1/key/usage", token)
+	require.Equal(t, http.StatusOK, response.Code)
+	var usage dto.DeveloperKeyUsage
+	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &usage))
+	assert.Equal(t, int64(30*24*60*60), usage.EndTime-usage.StartTime)
+	assert.GreaterOrEqual(t, usage.EndTime, before+1)
+	assert.LessOrEqual(t, usage.EndTime, common.GetTimestamp()+1)
+	assert.Equal(t, "0", usage.RecordedConsumption)
+	assert.Equal(t, "0", usage.RecordedRefunds)
+	assert.Equal(t, "0", usage.RecordedNet)
+	assert.Empty(t, usage.Components)
+	assert.Contains(t, response.Body.String(), `"components":[]`)
+	assert.Equal(t, "available", usage.ComponentStatus)
+	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeTokens
+	assert.Equal(t, http.StatusInternalServerError, developerUsageTestRequest("/v1/key/usage", token).Code)
+}
+
+func TestDeveloperKeyUsageDatabaseMatrix(t *testing.T) {
+	for _, dialect := range []string{"sqlite", "mysql", "postgres"} {
+		t.Run(dialect, func(t *testing.T) {
+			var mainDriver, logDriver gorm.Dialector
+			switch dialect {
+			case "sqlite":
+				mainDriver = sqlite.Open(":memory:")
+				logDriver = sqlite.Open(":memory:")
+			case "mysql":
+				mainDSN, logDSN := os.Getenv("PHASE3_MYSQL_DSN"), os.Getenv("PHASE3_MYSQL_LOG_DSN")
+				if mainDSN == "" || logDSN == "" {
+					t.Skip("isolated PHASE3_MYSQL_DSN and PHASE3_MYSQL_LOG_DSN required")
+				}
+				mainDriver = mysql.Open(mainDSN)
+				logDriver = mysql.Open(logDSN)
+			case "postgres":
+				mainDSN, logDSN := os.Getenv("PHASE3_POSTGRES_DSN"), os.Getenv("PHASE3_POSTGRES_LOG_DSN")
+				if mainDSN == "" || logDSN == "" {
+					t.Skip("isolated PHASE3_POSTGRES_DSN and PHASE3_POSTGRES_LOG_DSN required")
+				}
+				mainDriver = postgres.New(postgres.Config{DSN: mainDSN, PreferSimpleProtocol: true})
+				logDriver = postgres.New(postgres.Config{DSN: logDSN, PreferSimpleProtocol: true})
+			}
+			mainDB, err := gorm.Open(mainDriver, &gorm.Config{})
+			require.NoError(t, err)
+			logDB, err := gorm.Open(logDriver, &gorm.Config{})
+			require.NoError(t, err)
+			oldDB, oldLogDB := model.DB, model.LOG_DB
+			oldMain, oldLog := common.MainDatabaseType(), common.LogDatabaseType()
+			model.DB, model.LOG_DB = mainDB, logDB
+			kind := common.DatabaseTypeSQLite
+			if dialect == "mysql" {
+				kind = common.DatabaseTypeMySQL
+			}
+			if dialect == "postgres" {
+				kind = common.DatabaseTypePostgreSQL
+			}
+			common.SetDatabaseTypes(kind, kind)
+			t.Cleanup(func() {
+				model.DB, model.LOG_DB = oldDB, oldLogDB
+				common.SetDatabaseTypes(oldMain, oldLog)
+				for _, db := range []*gorm.DB{mainDB, logDB} {
+					sqlDB, err := db.DB()
+					require.NoError(t, err)
+					require.NoError(t, sqlDB.Close())
+				}
+			})
+			require.False(t, logDB.Migrator().HasTable(&model.Log{}), "matrix requires an isolated empty log store")
+			t.Cleanup(func() { require.NoError(t, logDB.Migrator().DropTable(&model.Log{})) })
+			require.NoError(t, logDB.AutoMigrate(&model.Log{}))
+			runDeveloperUsageProjectionFixture(t, logDB)
+			versionQuery := "SELECT version()"
+			if dialect == "sqlite" {
+				versionQuery = "SELECT sqlite_version()"
+			}
+			var version string
+			require.NoError(t, logDB.Raw(versionQuery).Scan(&version).Error)
+			t.Logf("separate log database version: %s", version)
+			var plan []map[string]any
+			explain := "EXPLAIN "
+			if dialect == "sqlite" {
+				explain = "EXPLAIN QUERY PLAN "
+			}
+			require.NoError(t, logDB.Raw(explain+"SELECT SUM(quota) FROM logs WHERE user_id = ? AND token_id = ? AND created_at >= ? AND created_at < ?", 7, 41, 1000, 2000).Find(&plan).Error)
+			t.Logf("owned usage aggregate query plan: %v", plan)
+		})
+	}
+}
+
+func TestDeveloperKeyUsageBoundsComponentRowsWithoutTruncatingMoney(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.Log{}))
+	oldQuota, oldCurrency := common.QuotaPerUnit, *operation_setting.GetGeneralSetting()
+	common.QuotaPerUnit = 500000
+	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeUSD
+	t.Cleanup(func() { common.QuotaPerUnit = oldQuota; *operation_setting.GetGeneralSetting() = oldCurrency })
+	logs := make([]model.Log, 10001)
+	for i := range logs {
+		logs[i] = model.Log{UserId: 7, TokenId: 41, CreatedAt: 1100, Type: model.LogTypeConsume, Quota: 1, RequestId: fmt.Sprint("request_", i), Other: fmt.Sprintf(`{"task_id":"task_%d","settlement_verified":true,"usage_facts":{"image_count":1},"usage_units":{"image_count":"count"},"admin_info":{"task_record_id":%d}}`, i, i+1)}
+	}
+	require.NoError(t, db.CreateInBatches(&logs, 100).Error)
+	queries := 0
+	require.NoError(t, db.Callback().Row().Before("gorm:row").Register("usage:bounded-query-count", func(tx *gorm.DB) { queries++ }))
+	t.Cleanup(func() { require.NoError(t, db.Callback().Row().Remove("usage:bounded-query-count")) })
+	response := developerUsageTestRequest("/v1/key/usage?start=1000&end=2000", &model.Token{Id: 41, UserId: 7})
+	require.Equal(t, http.StatusOK, response.Code)
+	var usage dto.DeveloperKeyUsage
+	require.NoError(t, common.Unmarshal(response.Body.Bytes(), &usage))
+	assert.Equal(t, int64(10001), usage.BillingEvents)
+	assert.Equal(t, "0.020002", usage.RecordedConsumption)
+	assert.Equal(t, "partial", usage.ComponentStatus)
+	assert.Equal(t, []dto.DeveloperUsageComponent{{Subject: "image_count", Unit: "count", Quantity: "10000"}}, usage.Components)
+	assert.Equal(t, 2, queries, "one database aggregate and one bounded component stream")
+}
+
+func TestDeveloperKeyUsageUnitAndSettlementEvidence(t *testing.T) {
+	db := setupTokenControllerTestDB(t)
+	require.NoError(t, db.AutoMigrate(&model.Log{}))
+	oldCurrency := *operation_setting.GetGeneralSetting()
+	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeUSD
+	t.Cleanup(func() { *operation_setting.GetGeneralSetting() = oldCurrency })
+	for _, tc := range []struct {
+		name   string
+		other  []string
+		kinds  []int
+		want   []dto.DeveloperUsageComponent
+		status string
+	}{
+		{name: "premature image synchronous presentation", other: []string{`{"task_id":"image","task_sync":true,"usage_facts":{"image_count":5},"usage_units":{"image_count":"count"},"admin_info":{"task_record_id":9}}`}, kinds: []int{model.LogTypeConsume}, want: []dto.DeveloperUsageComponent{}, status: "unknown"},
+		{name: "verified actual image count", other: []string{`{"task_id":"image","settlement_verified":true,"usage_facts":{"image_count":2},"usage_units":{"image_count":"count"},"admin_info":{"task_record_id":9}}`}, kinds: []int{model.LogTypeConsume}, want: []dto.DeveloperUsageComponent{{Subject: "image_count", Unit: "count", Quantity: "2"}}, status: "available"},
+		{name: "full failure refund does not preserve estimated quantity", other: []string{`{"task_id":"image","settlement_verified":true,"usage_facts":{"image_count":2},"usage_units":{"image_count":"count"},"admin_info":{"task_record_id":9}}`, `{"task_id":"image","usage_facts":{"image_count":2},"usage_units":{"image_count":"count"},"admin_info":{"task_record_id":9}}`}, kinds: []int{model.LogTypeConsume, model.LogTypeRefund}, want: []dto.DeveloperUsageComponent{}, status: "unknown"},
+		{name: "frozen plugin dimensions preserve distinct units", other: []string{`{"task_id":"media","settlement_verified":true,"usage_facts":{"seconds":10,"image_count":2,"tokens":123,"units":1.5,"characters":6,"generate_audio":true,"mode":"hd"},"usage_units":{"seconds":"second","image_count":"count","tokens":"token","units":"credit","characters":"character"},"admin_info":{"task_record_id":9}}`}, kinds: []int{model.LogTypeConsume}, want: []dto.DeveloperUsageComponent{{Subject: "characters", Unit: "character", Quantity: "6"}, {Subject: "image_count", Unit: "count", Quantity: "2"}, {Subject: "seconds", Unit: "second", Quantity: "10"}, {Subject: "tokens", Unit: "token", Quantity: "123"}, {Subject: "units", Unit: "credit", Quantity: "1.5"}}, status: "available"},
+		{name: "explicit measured cache and modality dimensions", other: []string{`{"request_path":"/v1/chat/completions","billing_tokens":{"p":40,"c":2,"cr":10,"cc":0,"img":5,"ai":3,"ao":1},"admin_info":{"usage_billing_path":"billing-usage-openai"}}`}, kinds: []int{model.LogTypeConsume}, want: []dto.DeveloperUsageComponent{{Subject: "audio_input_tokens", Unit: "token", Quantity: "3"}, {Subject: "audio_output_tokens", Unit: "token", Quantity: "1"}, {Subject: "billable_input_tokens", Unit: "token", Quantity: "40"}, {Subject: "billable_output_tokens", Unit: "token", Quantity: "2"}, {Subject: "cache_creation_tokens", Unit: "token", Quantity: "0"}, {Subject: "cache_read_tokens", Unit: "token", Quantity: "10"}, {Subject: "image_input_tokens", Unit: "token", Quantity: "5"}}, status: "available"},
+		{name: "recorded cache total excludes duplicated TTL breakdown", other: []string{`{"request_path":"/v1/messages","cache_tokens":9,"cache_creation_tokens":17,"cache_creation_tokens_5m":10,"cache_creation_tokens_1h":7,"admin_info":{"usage_billing_path":"billing-usage-anthropic"}}`}, kinds: []int{model.LogTypeConsume}, want: []dto.DeveloperUsageComponent{{Subject: "cache_creation_tokens", Unit: "token", Quantity: "17"}, {Subject: "cache_read_tokens", Unit: "token", Quantity: "9"}, {Subject: "input_tokens", Unit: "token", Quantity: "40"}, {Subject: "output_tokens", Unit: "token", Quantity: "2"}}, status: "available"},
+		{name: "recorded TTL cache facts without invented total", other: []string{`{"request_path":"/v1/messages","cache_tokens":3,"cache_creation_tokens_5m":10,"cache_creation_tokens_1h":7,"admin_info":{"usage_billing_path":"billing-usage-anthropic"}}`}, kinds: []int{model.LogTypeConsume}, want: []dto.DeveloperUsageComponent{{Subject: "cache_creation_1h_tokens", Unit: "token", Quantity: "7"}, {Subject: "cache_creation_5m_tokens", Unit: "token", Quantity: "10"}, {Subject: "cache_read_tokens", Unit: "token", Quantity: "3"}, {Subject: "input_tokens", Unit: "token", Quantity: "40"}, {Subject: "output_tokens", Unit: "token", Quantity: "2"}}, status: "available"},
+		{name: "absent cache quantity stays absent", other: []string{`{"request_path":"/v1/chat/completions","admin_info":{"usage_billing_path":"billing-usage-openai"}}`}, kinds: []int{model.LogTypeConsume}, want: []dto.DeveloperUsageComponent{{Subject: "input_tokens", Unit: "token", Quantity: "40"}, {Subject: "output_tokens", Unit: "token", Quantity: "2"}}, status: "available"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, db.Where("user_id = ?", 7).Delete(&model.Log{}).Error)
+			for i, other := range tc.other {
+				row := model.Log{UserId: 7, TokenId: 41, CreatedAt: int64(1100 + i), Type: tc.kinds[i], RequestId: "request", PromptTokens: 40, CompletionTokens: 2, Other: other}
+				require.NoError(t, db.Create(&row).Error)
+			}
+			response := developerUsageTestRequest("/v1/key/usage?start=1000&end=2000", &model.Token{Id: 41, UserId: 7})
+			require.Equal(t, http.StatusOK, response.Code)
+			var usage dto.DeveloperKeyUsage
+			require.NoError(t, common.Unmarshal(response.Body.Bytes(), &usage))
+			assert.Equal(t, tc.want, usage.Components)
+			assert.Equal(t, tc.status, usage.ComponentStatus)
+		})
+	}
 }

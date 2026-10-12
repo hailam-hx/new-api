@@ -28,7 +28,7 @@ import (
 
 type pluginProtocolBridgeDeps struct {
 	submit             func(*gin.Context, *relaycommon.RelayInfo) (*taskSubmissionOutcome, *dto.TaskError)
-	loadTask           func(context.Context, int, constant.TaskPlatform, string) (*model.Task, bool, error)
+	loadTask           func(context.Context, int, int, constant.TaskPlatform, string) (*model.Task, bool, error)
 	now                func() time.Time
 	admissions         *pluginProtocolObservationLimiter
 	protocolLimits     relay.PluginProtocolLimits
@@ -40,7 +40,7 @@ type pluginProtocolBridgeDeps struct {
 	tickJitter         time.Duration
 	heartbeatInterval  time.Duration
 	admissionTimeout   time.Duration
-	getByTaskId        func(int, string) (*model.Task, bool, error)
+	getByTaskId        func(int, int, string) (*model.Task, bool, error)
 	resolvePlugin      func(constant.TaskPlatform) (*pluginruntime.LoadedPlugin, *pluginruntime.RoutingGeneration, bool)
 	// imagePollInterval, pollTask and downloadImage serve the synchronous
 	// OpenAI Images protocol: an asynchronous upstream image task is polled
@@ -75,7 +75,7 @@ func defaultPluginProtocolBridgeDeps() pluginProtocolBridgeDeps {
 	}
 	return pluginProtocolBridgeDeps{
 		submit:             executeTaskSubmission,
-		loadTask:           model.GetTaskForProtocolObservation,
+		loadTask:           model.GetTaskForTokenObservation,
 		now:                time.Now,
 		admissions:         pluginProtocolObservationAdmissions,
 		protocolLimits:     relay.DefaultPluginProtocolLimits(),
@@ -87,7 +87,7 @@ func defaultPluginProtocolBridgeDeps() pluginProtocolBridgeDeps {
 		tickJitter:         jitter,
 		heartbeatInterval:  heartbeat,
 		admissionTimeout:   pluginruntime.DefaultCallTimeout,
-		getByTaskId:        model.GetByTaskId,
+		getByTaskId:        model.GetTaskForToken,
 		resolvePlugin:      resolveTaskPluginForProtocolRetrieve,
 		imagePollInterval:  taskPluginImagePollInterval,
 		pollTask:           pollTaskPluginImageTask,
@@ -438,6 +438,7 @@ func streamTaskPluginProtocol(
 		task, exists, loadErr := deps.loadTask(
 			loadContext,
 			common.GetContextKeyInt(c, constant.ContextKeyUserId),
+			common.GetContextKeyInt(c, constant.ContextKeyTokenId),
 			constant.TaskPlatform(pinned.Plugin.Meta.Key),
 			taskID,
 		)
@@ -688,6 +689,7 @@ func waitTaskPluginProtocol(
 		task, exists, err := deps.loadTask(
 			loadContext,
 			common.GetContextKeyInt(c, constant.ContextKeyUserId),
+			common.GetContextKeyInt(c, constant.ContextKeyTokenId),
 			constant.TaskPlatform(pinned.Plugin.Meta.Key),
 			taskID,
 		)
@@ -960,7 +962,7 @@ func retrieveTaskPluginResponse(c *gin.Context, deps pluginProtocolBridgeDeps) {
 	userID := common.GetContextKeyInt(c, constant.ContextKeyUserId)
 	logger.LogDebug(c, "task_plugin subsystem=protocol event=retrieve_start response_id=%q public_task_id=%q", responseID, taskID)
 
-	task, exists, err := deps.getByTaskId(userID, taskID)
+	task, exists, err := deps.getByTaskId(userID, common.GetContextKeyInt(c, constant.ContextKeyTokenId), taskID)
 	if err != nil {
 		logger.LogError(c, "task protocol retrieve lookup failed")
 		logger.LogDebug(c, "task_plugin subsystem=protocol event=retrieve_failed reason=lookup_error public_task_id=%q", taskID)

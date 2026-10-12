@@ -36,36 +36,11 @@ var (
 )
 
 func GetTask(c *gin.Context) {
-	task, exists, err := model.GetByTaskId(c.GetInt("id"), c.Param("key"))
-	if err != nil {
-		videoProxyError(c, http.StatusInternalServerError, "server_error", "Failed to query task")
-		return
-	}
-	if !exists {
-		videoProxyError(c, http.StatusNotFound, "invalid_request_error", "Task not found")
-		return
-	}
-	createdAt := task.CreatedAt
-	if createdAt == 0 {
-		createdAt = task.SubmitTime
-	}
-	failReason := task.FailReason
-	if task.Status == model.TaskStatusSuccess && taskFailReasonIsLegacyResultURL(task.FailReason) {
-		failReason = ""
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"task_id":     task.TaskID,
-		"platform":    task.Platform,
-		"status":      task.Status,
-		"progress":    task.Progress,
-		"fail_reason": failReason,
-		"created_at":  createdAt,
-		"finished_at": task.FinishTime,
-	})
+	GetDeveloperTask(c)
 }
 
 func GetTaskArtifacts(c *gin.Context) {
-	task, exists, err := model.GetByTaskId(c.GetInt("id"), c.Param("key"))
+	task, exists, err := model.GetTaskForTokenWithContext(c.Request.Context(), c.GetInt("id"), c.GetInt("token_id"), c.Param("key"))
 	if err != nil {
 		writeTaskArtifactError(c, http.StatusInternalServerError, "artifact_internal_error", "Failed to query task")
 		return
@@ -278,6 +253,9 @@ func getTaskForArtifactRequest(c *gin.Context, taskID string) (*model.Task, bool
 			return nil, false, err
 		}
 		return task, true, nil
+	}
+	if tokenID := c.GetInt("token_id"); tokenID > 0 {
+		return model.GetTaskForToken(c.GetInt("id"), tokenID, taskID)
 	}
 	if c.GetInt("token_id") == 0 && c.GetInt("role") >= common.RoleAdminUser {
 		return model.GetByOnlyTaskId(taskID)

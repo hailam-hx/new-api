@@ -9,10 +9,11 @@
         "middleware.BodyStorageCleanup()",
         "middleware.StatsMiddleware()",
         "middleware.RouteTag(\"relay\")",
-        "middleware.SystemPerformanceCheck()"
+        "middleware.SystemPerformanceCheck()",
+        "middleware.MidjourneyImageAuth()"
       ],
-      "source": "router/relay-router.go:213",
-      "handler": "relay.RelayMidjourneyImage",
+      "source": "router/relay-router.go:214",
+      "handler": "middleware.MidjourneyImageAuth() | relay.RelayMidjourneyImage",
       "summary": "",
       "schemaSource": "",
       "parameters": [],
@@ -22,216 +23,6 @@
     {
       "method": "POST",
       "path": "/{mode}/mj/insight-face/swap",
-      "middleware": [
-        "middleware.CORS()",
-        "middleware.DecompressRequestMiddleware()",
-        "middleware.BodyStorageCleanup()",
-        "middleware.StatsMiddleware()",
-        "middleware.RouteTag(\"relay\")",
-        "middleware.SystemPerformanceCheck()",
-        "middleware.TokenAuth()",
-        "middleware.Distribute()"
-      ],
-      "source": "router/relay-router.go:230",
-      "handler": "controller.RelayMidjourney",
-      "summary": "",
-      "schemaSource": "",
-      "parameters": [],
-      "requestBody": null,
-      "responses": {}
-    },
-    {
-      "method": "POST",
-      "path": "/{mode}/mj/submit/action",
-      "middleware": [
-        "middleware.CORS()",
-        "middleware.DecompressRequestMiddleware()",
-        "middleware.BodyStorageCleanup()",
-        "middleware.StatsMiddleware()",
-        "middleware.RouteTag(\"relay\")",
-        "middleware.SystemPerformanceCheck()",
-        "middleware.TokenAuth()",
-        "middleware.Distribute()"
-      ],
-      "source": "router/relay-router.go:216",
-      "handler": "controller.RelayMidjourney",
-      "summary": "",
-      "schemaSource": "",
-      "parameters": [],
-      "requestBody": null,
-      "responses": {}
-    },
-    {
-      "method": "POST",
-      "path": "/{mode}/mj/submit/blend",
-      "middleware": [
-        "middleware.CORS()",
-        "middleware.DecompressRequestMiddleware()",
-        "middleware.BodyStorageCleanup()",
-        "middleware.StatsMiddleware()",
-        "middleware.RouteTag(\"relay\")",
-        "middleware.SystemPerformanceCheck()",
-        "middleware.TokenAuth()",
-        "middleware.Distribute()"
-      ],
-      "source": "router/relay-router.go:223",
-      "handler": "controller.RelayMidjourney",
-      "summary": "",
-      "schemaSource": "",
-      "parameters": [],
-      "requestBody": null,
-      "responses": {}
-    },
-    {
-      "method": "POST",
-      "path": "/{mode}/mj/submit/change",
-      "middleware": [
-        "middleware.CORS()",
-        "middleware.DecompressRequestMiddleware()",
-        "middleware.BodyStorageCleanup()",
-        "middleware.StatsMiddleware()",
-        "middleware.RouteTag(\"relay\")",
-        "middleware.SystemPerformanceCheck()",
-        "middleware.TokenAuth()",
-        "middleware.Distribute()"
-      ],
-      "source": "router/relay-router.go:220",
-      "handler": "controller.RelayMidjourney",
-      "summary": "",
-      "schemaSource": "",
-      "parameters": [],
-      "requestBody": null,
-      "responses": {}
-    },
-    {
-      "method": "POST",
-      "path": "/{mode}/mj/submit/describe",
-      "middleware": [
-        "middleware.CORS()",
-        "middleware.DecompressRequestMiddleware()",
-        "middleware.BodyStorageCleanup()",
-        "middleware.StatsMiddleware()",
-        "middleware.RouteTag(\"relay\")",
-        "middleware.SystemPerformanceCheck()",
-        "middleware.TokenAuth()",
-        "middleware.Distribute()"
-      ],
-      "source": "router/relay-router.go:222",
-      "handler": "controller.RelayMidjourney",
-      "summary": "",
-      "schemaSource": "",
-      "parameters": [],
-      "requestBody": null,
-      "responses": {}
-    },
-    {
-      "method": "POST",
-      "path": "/{mode}/mj/submit/edits",
-      "middleware": [
-        "middleware.CORS()",
-        "middleware.DecompressRequestMiddleware()",
-        "middleware.BodyStorageCleanup()",
-        "middleware.StatsMiddleware()",
-        "middleware.RouteTag(\"relay\")",
-        "middleware.SystemPerformanceCheck()",
-        "middleware.TokenAuth()",
-        "middleware.Distribute()"
-      ],
-      "source": "router/relay-router.go:224",
-      "handler": "controller.RelayMidjourney",
-      "summary": "",
-      "schemaSource": "",
-      "parameters": [],
-      "requestBody": null,
-      "responses": {}
-    },
-    {
-      "method": "POST",
-      "path": "/{mode}/mj/submit/imagine",
-      "middleware": [
-        "middleware.CORS()",
-        "middleware.DecompressRequestMiddleware()",
-        "middleware.BodyStorageCleanup()",
-        "middleware.StatsMiddleware()",
-        "middleware.RouteTag(\"relay\")",
-        "middleware.SystemPerformanceCheck()",
-        "middleware.TokenAuth()",
-        "middleware.Distribute()"
-      ],
-      "source": "router/relay-router.go:219",
-      "handler": "controller.RelayMidjourney",
-      "summary": "",
-      "schemaSource": "",
-      "parameters": [],
-      "requestBody": null,
-      "responses": {}
-    },
-    {
-      "method": "POST",
-      "path": "/{mode}/mj/submit/modal",
-      "middleware": [
-        "middleware.CORS()",
-        "middleware.DecompressRequestMiddleware()",
-        "middleware.BodyStorageCleanup()",
-        "middleware.StatsMiddleware()",
-        "middleware.RouteTag(\"relay\")",
-        "middleware.SystemPerformanceCheck()",
-        "middleware.TokenAuth()",
-        "middleware.Distribute()"
-      ],
-      "source": "router/relay-router.go:218",
-      "handler": "controller.RelayMidjourney",
-      "summary": "",
-      "schemaSource": "",
-      "parameters": [],
-      "requestBody": null,
-      "responses": {}
-    },
-    {
-      "method": "POST",
-      "path": "/{mode}/mj/submit/shorten",
-      "middleware": [
-        "middleware.CORS()",
-        "middleware.DecompressRequestMiddleware()",
-        "middleware.BodyStorageCleanup()",
-        "middleware.StatsMiddleware()",
-        "middleware.RouteTag(\"relay\")",
-        "middleware.SystemPerformanceCheck()",
-        "middleware.TokenAuth()",
-        "middleware.Distribute()"
-      ],
-      "source": "router/relay-router.go:217",
-      "handler": "controller.RelayMidjourney",
-      "summary": "",
-      "schemaSource": "",
-      "parameters": [],
-      "requestBody": null,
-      "responses": {}
-    },
-    {
-      "method": "POST",
-      "path": "/{mode}/mj/submit/simple-change",
-      "middleware": [
-        "middleware.CORS()",
-        "middleware.DecompressRequestMiddleware()",
-        "middleware.BodyStorageCleanup()",
-        "middleware.StatsMiddleware()",
-        "middleware.RouteTag(\"relay\")",
-        "middleware.SystemPerformanceCheck()",
-        "middleware.TokenAuth()",
-        "middleware.Distribute()"
-      ],
-      "source": "router/relay-router.go:221",
-      "handler": "controller.RelayMidjourney",
-      "summary": "",
-      "schemaSource": "",
-      "parameters": [],
-      "requestBody": null,
-      "responses": {}
-    },
-    {
-      "method": "POST",
-      "path": "/{mode}/mj/submit/upload-discord-images",
       "middleware": [
         "middleware.CORS()",
         "middleware.DecompressRequestMiddleware()",
@@ -252,7 +43,91 @@
     },
     {
       "method": "POST",
-      "path": "/{mode}/mj/submit/video",
+      "path": "/{mode}/mj/submit/action",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.SystemPerformanceCheck()",
+        "middleware.TokenAuth()",
+        "middleware.Distribute()"
+      ],
+      "source": "router/relay-router.go:217",
+      "handler": "controller.RelayMidjourney",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/{mode}/mj/submit/blend",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.SystemPerformanceCheck()",
+        "middleware.TokenAuth()",
+        "middleware.Distribute()"
+      ],
+      "source": "router/relay-router.go:224",
+      "handler": "controller.RelayMidjourney",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/{mode}/mj/submit/change",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.SystemPerformanceCheck()",
+        "middleware.TokenAuth()",
+        "middleware.Distribute()"
+      ],
+      "source": "router/relay-router.go:221",
+      "handler": "controller.RelayMidjourney",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/{mode}/mj/submit/describe",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.SystemPerformanceCheck()",
+        "middleware.TokenAuth()",
+        "middleware.Distribute()"
+      ],
+      "source": "router/relay-router.go:223",
+      "handler": "controller.RelayMidjourney",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/{mode}/mj/submit/edits",
       "middleware": [
         "middleware.CORS()",
         "middleware.DecompressRequestMiddleware()",
@@ -264,6 +139,132 @@
         "middleware.Distribute()"
       ],
       "source": "router/relay-router.go:225",
+      "handler": "controller.RelayMidjourney",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/{mode}/mj/submit/imagine",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.SystemPerformanceCheck()",
+        "middleware.TokenAuth()",
+        "middleware.Distribute()"
+      ],
+      "source": "router/relay-router.go:220",
+      "handler": "controller.RelayMidjourney",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/{mode}/mj/submit/modal",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.SystemPerformanceCheck()",
+        "middleware.TokenAuth()",
+        "middleware.Distribute()"
+      ],
+      "source": "router/relay-router.go:219",
+      "handler": "controller.RelayMidjourney",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/{mode}/mj/submit/shorten",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.SystemPerformanceCheck()",
+        "middleware.TokenAuth()",
+        "middleware.Distribute()"
+      ],
+      "source": "router/relay-router.go:218",
+      "handler": "controller.RelayMidjourney",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/{mode}/mj/submit/simple-change",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.SystemPerformanceCheck()",
+        "middleware.TokenAuth()",
+        "middleware.Distribute()"
+      ],
+      "source": "router/relay-router.go:222",
+      "handler": "controller.RelayMidjourney",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/{mode}/mj/submit/upload-discord-images",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.SystemPerformanceCheck()",
+        "middleware.TokenAuth()",
+        "middleware.Distribute()"
+      ],
+      "source": "router/relay-router.go:232",
+      "handler": "controller.RelayMidjourney",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/{mode}/mj/submit/video",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.SystemPerformanceCheck()",
+        "middleware.TokenAuth()",
+        "middleware.Distribute()"
+      ],
+      "source": "router/relay-router.go:226",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -284,7 +285,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:227",
+      "source": "router/relay-router.go:228",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -305,7 +306,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:228",
+      "source": "router/relay-router.go:229",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -326,7 +327,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:229",
+      "source": "router/relay-router.go:230",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -9103,10 +9104,11 @@
         "middleware.BodyStorageCleanup()",
         "middleware.StatsMiddleware()",
         "middleware.RouteTag(\"relay\")",
-        "middleware.SystemPerformanceCheck()"
+        "middleware.SystemPerformanceCheck()",
+        "middleware.MidjourneyImageAuth()"
       ],
-      "source": "router/relay-router.go:213",
-      "handler": "relay.RelayMidjourneyImage",
+      "source": "router/relay-router.go:214",
+      "handler": "middleware.MidjourneyImageAuth() | relay.RelayMidjourneyImage",
       "summary": "",
       "schemaSource": "",
       "parameters": [],
@@ -9116,216 +9118,6 @@
     {
       "method": "POST",
       "path": "/mj/insight-face/swap",
-      "middleware": [
-        "middleware.CORS()",
-        "middleware.DecompressRequestMiddleware()",
-        "middleware.BodyStorageCleanup()",
-        "middleware.StatsMiddleware()",
-        "middleware.RouteTag(\"relay\")",
-        "middleware.SystemPerformanceCheck()",
-        "middleware.TokenAuth()",
-        "middleware.Distribute()"
-      ],
-      "source": "router/relay-router.go:230",
-      "handler": "controller.RelayMidjourney",
-      "summary": "",
-      "schemaSource": "",
-      "parameters": [],
-      "requestBody": null,
-      "responses": {}
-    },
-    {
-      "method": "POST",
-      "path": "/mj/submit/action",
-      "middleware": [
-        "middleware.CORS()",
-        "middleware.DecompressRequestMiddleware()",
-        "middleware.BodyStorageCleanup()",
-        "middleware.StatsMiddleware()",
-        "middleware.RouteTag(\"relay\")",
-        "middleware.SystemPerformanceCheck()",
-        "middleware.TokenAuth()",
-        "middleware.Distribute()"
-      ],
-      "source": "router/relay-router.go:216",
-      "handler": "controller.RelayMidjourney",
-      "summary": "",
-      "schemaSource": "",
-      "parameters": [],
-      "requestBody": null,
-      "responses": {}
-    },
-    {
-      "method": "POST",
-      "path": "/mj/submit/blend",
-      "middleware": [
-        "middleware.CORS()",
-        "middleware.DecompressRequestMiddleware()",
-        "middleware.BodyStorageCleanup()",
-        "middleware.StatsMiddleware()",
-        "middleware.RouteTag(\"relay\")",
-        "middleware.SystemPerformanceCheck()",
-        "middleware.TokenAuth()",
-        "middleware.Distribute()"
-      ],
-      "source": "router/relay-router.go:223",
-      "handler": "controller.RelayMidjourney",
-      "summary": "",
-      "schemaSource": "",
-      "parameters": [],
-      "requestBody": null,
-      "responses": {}
-    },
-    {
-      "method": "POST",
-      "path": "/mj/submit/change",
-      "middleware": [
-        "middleware.CORS()",
-        "middleware.DecompressRequestMiddleware()",
-        "middleware.BodyStorageCleanup()",
-        "middleware.StatsMiddleware()",
-        "middleware.RouteTag(\"relay\")",
-        "middleware.SystemPerformanceCheck()",
-        "middleware.TokenAuth()",
-        "middleware.Distribute()"
-      ],
-      "source": "router/relay-router.go:220",
-      "handler": "controller.RelayMidjourney",
-      "summary": "",
-      "schemaSource": "",
-      "parameters": [],
-      "requestBody": null,
-      "responses": {}
-    },
-    {
-      "method": "POST",
-      "path": "/mj/submit/describe",
-      "middleware": [
-        "middleware.CORS()",
-        "middleware.DecompressRequestMiddleware()",
-        "middleware.BodyStorageCleanup()",
-        "middleware.StatsMiddleware()",
-        "middleware.RouteTag(\"relay\")",
-        "middleware.SystemPerformanceCheck()",
-        "middleware.TokenAuth()",
-        "middleware.Distribute()"
-      ],
-      "source": "router/relay-router.go:222",
-      "handler": "controller.RelayMidjourney",
-      "summary": "",
-      "schemaSource": "",
-      "parameters": [],
-      "requestBody": null,
-      "responses": {}
-    },
-    {
-      "method": "POST",
-      "path": "/mj/submit/edits",
-      "middleware": [
-        "middleware.CORS()",
-        "middleware.DecompressRequestMiddleware()",
-        "middleware.BodyStorageCleanup()",
-        "middleware.StatsMiddleware()",
-        "middleware.RouteTag(\"relay\")",
-        "middleware.SystemPerformanceCheck()",
-        "middleware.TokenAuth()",
-        "middleware.Distribute()"
-      ],
-      "source": "router/relay-router.go:224",
-      "handler": "controller.RelayMidjourney",
-      "summary": "",
-      "schemaSource": "",
-      "parameters": [],
-      "requestBody": null,
-      "responses": {}
-    },
-    {
-      "method": "POST",
-      "path": "/mj/submit/imagine",
-      "middleware": [
-        "middleware.CORS()",
-        "middleware.DecompressRequestMiddleware()",
-        "middleware.BodyStorageCleanup()",
-        "middleware.StatsMiddleware()",
-        "middleware.RouteTag(\"relay\")",
-        "middleware.SystemPerformanceCheck()",
-        "middleware.TokenAuth()",
-        "middleware.Distribute()"
-      ],
-      "source": "router/relay-router.go:219",
-      "handler": "controller.RelayMidjourney",
-      "summary": "",
-      "schemaSource": "",
-      "parameters": [],
-      "requestBody": null,
-      "responses": {}
-    },
-    {
-      "method": "POST",
-      "path": "/mj/submit/modal",
-      "middleware": [
-        "middleware.CORS()",
-        "middleware.DecompressRequestMiddleware()",
-        "middleware.BodyStorageCleanup()",
-        "middleware.StatsMiddleware()",
-        "middleware.RouteTag(\"relay\")",
-        "middleware.SystemPerformanceCheck()",
-        "middleware.TokenAuth()",
-        "middleware.Distribute()"
-      ],
-      "source": "router/relay-router.go:218",
-      "handler": "controller.RelayMidjourney",
-      "summary": "",
-      "schemaSource": "",
-      "parameters": [],
-      "requestBody": null,
-      "responses": {}
-    },
-    {
-      "method": "POST",
-      "path": "/mj/submit/shorten",
-      "middleware": [
-        "middleware.CORS()",
-        "middleware.DecompressRequestMiddleware()",
-        "middleware.BodyStorageCleanup()",
-        "middleware.StatsMiddleware()",
-        "middleware.RouteTag(\"relay\")",
-        "middleware.SystemPerformanceCheck()",
-        "middleware.TokenAuth()",
-        "middleware.Distribute()"
-      ],
-      "source": "router/relay-router.go:217",
-      "handler": "controller.RelayMidjourney",
-      "summary": "",
-      "schemaSource": "",
-      "parameters": [],
-      "requestBody": null,
-      "responses": {}
-    },
-    {
-      "method": "POST",
-      "path": "/mj/submit/simple-change",
-      "middleware": [
-        "middleware.CORS()",
-        "middleware.DecompressRequestMiddleware()",
-        "middleware.BodyStorageCleanup()",
-        "middleware.StatsMiddleware()",
-        "middleware.RouteTag(\"relay\")",
-        "middleware.SystemPerformanceCheck()",
-        "middleware.TokenAuth()",
-        "middleware.Distribute()"
-      ],
-      "source": "router/relay-router.go:221",
-      "handler": "controller.RelayMidjourney",
-      "summary": "",
-      "schemaSource": "",
-      "parameters": [],
-      "requestBody": null,
-      "responses": {}
-    },
-    {
-      "method": "POST",
-      "path": "/mj/submit/upload-discord-images",
       "middleware": [
         "middleware.CORS()",
         "middleware.DecompressRequestMiddleware()",
@@ -9346,7 +9138,91 @@
     },
     {
       "method": "POST",
-      "path": "/mj/submit/video",
+      "path": "/mj/submit/action",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.SystemPerformanceCheck()",
+        "middleware.TokenAuth()",
+        "middleware.Distribute()"
+      ],
+      "source": "router/relay-router.go:217",
+      "handler": "controller.RelayMidjourney",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/mj/submit/blend",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.SystemPerformanceCheck()",
+        "middleware.TokenAuth()",
+        "middleware.Distribute()"
+      ],
+      "source": "router/relay-router.go:224",
+      "handler": "controller.RelayMidjourney",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/mj/submit/change",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.SystemPerformanceCheck()",
+        "middleware.TokenAuth()",
+        "middleware.Distribute()"
+      ],
+      "source": "router/relay-router.go:221",
+      "handler": "controller.RelayMidjourney",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/mj/submit/describe",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.SystemPerformanceCheck()",
+        "middleware.TokenAuth()",
+        "middleware.Distribute()"
+      ],
+      "source": "router/relay-router.go:223",
+      "handler": "controller.RelayMidjourney",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/mj/submit/edits",
       "middleware": [
         "middleware.CORS()",
         "middleware.DecompressRequestMiddleware()",
@@ -9358,6 +9234,132 @@
         "middleware.Distribute()"
       ],
       "source": "router/relay-router.go:225",
+      "handler": "controller.RelayMidjourney",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/mj/submit/imagine",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.SystemPerformanceCheck()",
+        "middleware.TokenAuth()",
+        "middleware.Distribute()"
+      ],
+      "source": "router/relay-router.go:220",
+      "handler": "controller.RelayMidjourney",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/mj/submit/modal",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.SystemPerformanceCheck()",
+        "middleware.TokenAuth()",
+        "middleware.Distribute()"
+      ],
+      "source": "router/relay-router.go:219",
+      "handler": "controller.RelayMidjourney",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/mj/submit/shorten",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.SystemPerformanceCheck()",
+        "middleware.TokenAuth()",
+        "middleware.Distribute()"
+      ],
+      "source": "router/relay-router.go:218",
+      "handler": "controller.RelayMidjourney",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/mj/submit/simple-change",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.SystemPerformanceCheck()",
+        "middleware.TokenAuth()",
+        "middleware.Distribute()"
+      ],
+      "source": "router/relay-router.go:222",
+      "handler": "controller.RelayMidjourney",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/mj/submit/upload-discord-images",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.SystemPerformanceCheck()",
+        "middleware.TokenAuth()",
+        "middleware.Distribute()"
+      ],
+      "source": "router/relay-router.go:232",
+      "handler": "controller.RelayMidjourney",
+      "summary": "",
+      "schemaSource": "",
+      "parameters": [],
+      "requestBody": null,
+      "responses": {}
+    },
+    {
+      "method": "POST",
+      "path": "/mj/submit/video",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.SystemPerformanceCheck()",
+        "middleware.TokenAuth()",
+        "middleware.Distribute()"
+      ],
+      "source": "router/relay-router.go:226",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -9378,7 +9380,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:227",
+      "source": "router/relay-router.go:228",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -9399,7 +9401,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:228",
+      "source": "router/relay-router.go:229",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -9420,7 +9422,7 @@
         "middleware.TokenAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:229",
+      "source": "router/relay-router.go:230",
       "handler": "controller.RelayMidjourney",
       "summary": "",
       "schemaSource": "",
@@ -9441,7 +9443,7 @@
         "middleware.UserAuth()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:73",
+      "source": "router/relay-router.go:74",
       "handler": "controller.Playground",
       "summary": "",
       "schemaSource": "",
@@ -9463,7 +9465,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:119",
+      "source": "router/relay-router.go:120",
       "handler": "controller.Relay",
       "summary": "",
       "schemaSource": "",
@@ -9585,7 +9587,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:136",
+      "source": "router/relay-router.go:137",
       "handler": "controller.Relay",
       "summary": "音频转录",
       "schemaSource": "docs/openapi/relay.json",
@@ -9677,7 +9679,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:139",
+      "source": "router/relay-router.go:140",
       "handler": "controller.Relay",
       "summary": "音频翻译",
       "schemaSource": "docs/openapi/relay.json",
@@ -10088,7 +10090,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:109",
+      "source": "router/relay-router.go:110",
       "handler": "controller.Relay",
       "summary": "创建聊天对话",
       "schemaSource": "docs/openapi/relay.json",
@@ -10761,7 +10763,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:106",
+      "source": "router/relay-router.go:107",
       "handler": "controller.Relay",
       "summary": "创建文本补全",
       "schemaSource": "docs/openapi/relay.json",
@@ -10975,7 +10977,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:126",
+      "source": "router/relay-router.go:127",
       "handler": "controller.Relay",
       "summary": "",
       "schemaSource": "",
@@ -10997,7 +10999,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:131",
+      "source": "router/relay-router.go:132",
       "handler": "controller.Relay",
       "summary": "创建文本嵌入",
       "schemaSource": "docs/openapi/relay.json",
@@ -11113,7 +11115,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:151",
+      "source": "router/relay-router.go:152",
       "handler": "controller.Relay",
       "summary": "Gemini 嵌入(Embeddings)",
       "schemaSource": "docs/openapi/relay.json",
@@ -11689,6 +11691,319 @@
       }
     },
     {
+      "method": "GET",
+      "path": "/v1/key/usage",
+      "middleware": [
+        "middleware.CORS()",
+        "middleware.DecompressRequestMiddleware()",
+        "middleware.BodyStorageCleanup()",
+        "middleware.StatsMiddleware()",
+        "middleware.RouteTag(\"relay\")",
+        "middleware.DisableCache()",
+        "middleware.GlobalAPIRateLimit()",
+        "middleware.PublicAPIKeyReadAuth()"
+      ],
+      "source": "router/relay-router.go:24",
+      "handler": "controller.GetDeveloperKeyUsage",
+      "summary": "Read recorded usage for the current API key",
+      "schemaSource": "docs/openapi/relay.json",
+      "parameters": [
+        {
+          "name": "start",
+          "in": "query",
+          "description": "Inclusive nonnegative Unix seconds; default max(0, end minus 30 days). The nonempty window must not exceed 31 days. Duplicate start, end or model parameters are rejected.",
+          "schema": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        {
+          "name": "end",
+          "in": "query",
+          "description": "Exclusive nonnegative Unix seconds; defaults to the current Unix second plus one, including events recorded in the current second.",
+          "schema": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        {
+          "name": "model",
+          "in": "query",
+          "description": "Exact recorded model filter, at most 255 UTF-8 bytes.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "description": "Read recorded usage for the current API key",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "object",
+                  "unit",
+                  "recorded_consumption",
+                  "recorded_refunds",
+                  "recorded_net",
+                  "component_status",
+                  "start_time",
+                  "end_time",
+                  "billing_events",
+                  "error_events",
+                  "components"
+                ],
+                "properties": {
+                  "object": {
+                    "type": "string",
+                    "enum": [
+                      "key.usage"
+                    ]
+                  },
+                  "unit": {
+                    "type": "string"
+                  },
+                  "unit_symbol": {
+                    "type": "string"
+                  },
+                  "recorded_consumption": {
+                    "type": "string",
+                    "description": "Exact decimal amount in the configured customer display unit from retained recorded events; recorded_net may be negative when refunds in this window exceed consumption."
+                  },
+                  "recorded_refunds": {
+                    "type": "string",
+                    "description": "Exact decimal amount in the configured customer display unit from retained recorded events; recorded_net may be negative when refunds in this window exceed consumption."
+                  },
+                  "recorded_net": {
+                    "type": "string",
+                    "description": "Exact decimal amount in the configured customer display unit from retained recorded events; recorded_net may be negative when refunds in this window exceed consumption."
+                  },
+                  "component_status": {
+                    "type": "string",
+                    "enum": [
+                      "available",
+                      "partial",
+                      "unknown"
+                    ]
+                  },
+                  "start_time": {
+                    "type": "integer",
+                    "format": "int64"
+                  },
+                  "end_time": {
+                    "type": "integer",
+                    "format": "int64"
+                  },
+                  "billing_events": {
+                    "type": "integer",
+                    "format": "int64"
+                  },
+                  "error_events": {
+                    "type": "integer",
+                    "format": "int64"
+                  },
+                  "components": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "subject",
+                        "unit",
+                        "quantity"
+                      ],
+                      "properties": {
+                        "subject": {
+                          "type": "string"
+                        },
+                        "unit": {
+                          "type": "string"
+                        },
+                        "quantity": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "headers": {
+            "Cache-Control": {
+              "schema": {
+                "type": "string"
+              },
+              "description": "Private no-store response."
+            },
+            "X-Oneapi-Request-Id": {
+              "schema": {
+                "type": "string"
+              },
+              "description": "Server-generated request correlation identifier."
+            }
+          }
+        },
+        "400": {
+          "description": "Invalid query parameters.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "error"
+                ],
+                "properties": {
+                  "error": {
+                    "type": "object",
+                    "required": [
+                      "message",
+                      "type"
+                    ],
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "param": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "401": {
+          "description": "Missing, invalid, disabled or expired API key. Browser sessions and dashboard credentials are not accepted.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "error"
+                ],
+                "properties": {
+                  "error": {
+                    "type": "object",
+                    "required": [
+                      "message",
+                      "type"
+                    ],
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "param": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "403": {
+          "description": "Disabled account, token IP restriction or group access denied.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "error"
+                ],
+                "properties": {
+                  "error": {
+                    "type": "object",
+                    "required": [
+                      "message",
+                      "type"
+                    ],
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "param": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "429": {
+          "description": "Existing configured global API IP limiter: empty response body.",
+          "headers": {
+            "Retry-After": {
+              "schema": {
+                "type": "integer"
+              },
+              "description": "Existing limiter wait in seconds, when supplied."
+            }
+          }
+        },
+        "500": {
+          "description": "Local query or unsupported display configuration error; a limiter infrastructure failure can return an empty body.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "error"
+                ],
+                "properties": {
+                  "error": {
+                    "type": "object",
+                    "required": [
+                      "message",
+                      "type"
+                    ],
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "param": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "method": "POST",
       "path": "/v1/messages",
       "middleware": [
@@ -11702,7 +12017,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:101",
+      "source": "router/relay-router.go:102",
       "handler": "controller.Relay",
       "summary": "Claude 聊天",
       "schemaSource": "docs/openapi/relay.json",
@@ -12058,7 +12373,7 @@
         "middleware.RouteTag(\"relay\")",
         "middleware.TokenAuth()"
       ],
-      "source": "router/relay-router.go:29",
+      "source": "router/relay-router.go:30",
       "handler": "controller.ListModels, controller.ListModels, controller.ListModels",
       "summary": "获取模型列表",
       "schemaSource": "docs/openapi/relay.json",
@@ -12191,7 +12506,7 @@
         "middleware.RouteTag(\"relay\")",
         "middleware.TokenAuth()"
       ],
-      "source": "router/relay-router.go:40",
+      "source": "router/relay-router.go:41",
       "handler": "controller.RetrieveModel, controller.RetrieveModel",
       "summary": "",
       "schemaSource": "",
@@ -12213,7 +12528,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:154",
+      "source": "router/relay-router.go:155",
       "handler": "controller.Relay",
       "summary": "",
       "schemaSource": "",
@@ -12235,7 +12550,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:159",
+      "source": "router/relay-router.go:160",
       "handler": "controller.Relay",
       "summary": "内容审核",
       "schemaSource": "docs/openapi/relay.json",
@@ -12326,7 +12641,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:89",
+      "source": "router/relay-router.go:90",
       "handler": "controller.Relay",
       "summary": "实时 WebSocket 连接",
       "schemaSource": "docs/openapi/relay.json",
@@ -12399,7 +12714,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:146",
+      "source": "router/relay-router.go:147",
       "handler": "controller.Relay",
       "summary": "文档重排序",
       "schemaSource": "docs/openapi/relay.json",
@@ -12503,7 +12818,7 @@
         "middleware.SystemPerformanceCheck()",
         "middleware.TokenAuth()"
       ],
-      "source": "router/relay-router.go:82",
+      "source": "router/relay-router.go:83",
       "handler": "controller.ResponsesWebSocket",
       "summary": "",
       "schemaSource": "",
@@ -12768,7 +13083,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:114",
+      "source": "router/relay-router.go:115",
       "handler": "controller.Relay",
       "summary": "压缩对话 (OpenAI Responses API)",
       "schemaSource": "docs/openapi/relay.json",
@@ -12898,18 +13213,601 @@
     },
     {
       "method": "GET",
+      "path": "/v1/tasks",
+      "middleware": [
+        "middleware.RouteTag(\"relay\")",
+        "middleware.DisableCache()",
+        "middleware.GlobalAPIRateLimit()",
+        "middleware.PublicAPIKeyReadAuth()"
+      ],
+      "source": "router/task-router.go:24",
+      "handler": "controller.GetDeveloperTasks",
+      "summary": "List tasks created by the current API key",
+      "schemaSource": "docs/openapi/relay.json",
+      "parameters": [
+        {
+          "name": "limit",
+          "in": "query",
+          "schema": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          }
+        },
+        {
+          "name": "cursor",
+          "in": "query",
+          "description": "Opaque next_cursor returned by the preceding page.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responses": {
+        "200": {
+          "description": "List tasks created by the current API key",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "object",
+                  "data",
+                  "has_more"
+                ],
+                "properties": {
+                  "object": {
+                    "type": "string",
+                    "enum": [
+                      "list"
+                    ]
+                  },
+                  "data": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "object",
+                        "id",
+                        "type",
+                        "model",
+                        "status",
+                        "progress",
+                        "created_at"
+                      ],
+                      "properties": {
+                        "object": {
+                          "type": "string",
+                          "enum": [
+                            "task"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "queued",
+                            "in_progress",
+                            "completed",
+                            "failed",
+                            "unknown"
+                          ]
+                        },
+                        "progress": {
+                          "type": "string"
+                        },
+                        "request_id": {
+                          "type": "string"
+                        },
+                        "created_at": {
+                          "type": "integer",
+                          "format": "int64"
+                        },
+                        "started_at": {
+                          "type": "integer",
+                          "format": "int64"
+                        },
+                        "completed_at": {
+                          "type": "integer",
+                          "format": "int64"
+                        },
+                        "error": {
+                          "type": "object",
+                          "required": [
+                            "code",
+                            "message"
+                          ],
+                          "properties": {
+                            "code": {
+                              "type": "string",
+                              "enum": [
+                                "task_failed"
+                              ]
+                            },
+                            "message": {
+                              "type": "string",
+                              "enum": [
+                                "The task failed."
+                              ]
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "has_more": {
+                    "type": "boolean"
+                  },
+                  "next_cursor": {
+                    "type": "string",
+                    "description": "Opaque cursor for the next page; omitted when has_more is false."
+                  }
+                }
+              }
+            }
+          },
+          "headers": {
+            "Cache-Control": {
+              "schema": {
+                "type": "string"
+              },
+              "description": "Private no-store response."
+            },
+            "X-Oneapi-Request-Id": {
+              "schema": {
+                "type": "string"
+              },
+              "description": "Server-generated request correlation identifier."
+            }
+          }
+        },
+        "400": {
+          "description": "Invalid query parameters.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "error"
+                ],
+                "properties": {
+                  "error": {
+                    "type": "object",
+                    "required": [
+                      "message",
+                      "type"
+                    ],
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "param": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "401": {
+          "description": "Missing, invalid, disabled or expired API key. Browser sessions and dashboard credentials are not accepted.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "error"
+                ],
+                "properties": {
+                  "error": {
+                    "type": "object",
+                    "required": [
+                      "message",
+                      "type"
+                    ],
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "param": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "403": {
+          "description": "Disabled account, token IP restriction or group access denied.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "error"
+                ],
+                "properties": {
+                  "error": {
+                    "type": "object",
+                    "required": [
+                      "message",
+                      "type"
+                    ],
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "param": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "429": {
+          "description": "Existing configured global API IP limiter: empty response body.",
+          "headers": {
+            "Retry-After": {
+              "schema": {
+                "type": "integer"
+              },
+              "description": "Existing limiter wait in seconds, when supplied."
+            }
+          }
+        },
+        "500": {
+          "description": "Local query or unsupported display configuration error; a limiter infrastructure failure can return an empty body.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "error"
+                ],
+                "properties": {
+                  "error": {
+                    "type": "object",
+                    "required": [
+                      "message",
+                      "type"
+                    ],
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "param": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "method": "GET",
       "path": "/v1/tasks/{key}",
       "middleware": [
         "middleware.RouteTag(\"relay\")",
-        "middleware.TokenAuth()"
+        "middleware.DisableCache()",
+        "middleware.GlobalAPIRateLimit()",
+        "middleware.PublicAPIKeyReadAuth()"
       ],
-      "source": "router/task-router.go:24",
+      "source": "router/task-router.go:25",
       "handler": "controller.GetTask",
-      "summary": "",
-      "schemaSource": "",
-      "parameters": [],
+      "summary": "Retrieve a task created by the current API key",
+      "schemaSource": "docs/openapi/relay.json",
+      "parameters": [
+        {
+          "name": "key",
+          "in": "path",
+          "required": true,
+          "description": "Public task ID.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
       "requestBody": null,
-      "responses": {}
+      "responses": {
+        "200": {
+          "description": "Retrieve a task created by the current API key",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "object",
+                  "id",
+                  "type",
+                  "model",
+                  "status",
+                  "progress",
+                  "created_at"
+                ],
+                "properties": {
+                  "object": {
+                    "type": "string",
+                    "enum": [
+                      "task"
+                    ]
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "queued",
+                      "in_progress",
+                      "completed",
+                      "failed",
+                      "unknown"
+                    ]
+                  },
+                  "progress": {
+                    "type": "string"
+                  },
+                  "request_id": {
+                    "type": "string"
+                  },
+                  "created_at": {
+                    "type": "integer",
+                    "format": "int64"
+                  },
+                  "started_at": {
+                    "type": "integer",
+                    "format": "int64"
+                  },
+                  "completed_at": {
+                    "type": "integer",
+                    "format": "int64"
+                  },
+                  "error": {
+                    "type": "object",
+                    "required": [
+                      "code",
+                      "message"
+                    ],
+                    "properties": {
+                      "code": {
+                        "type": "string",
+                        "enum": [
+                          "task_failed"
+                        ]
+                      },
+                      "message": {
+                        "type": "string",
+                        "enum": [
+                          "The task failed."
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "headers": {
+            "Cache-Control": {
+              "schema": {
+                "type": "string"
+              },
+              "description": "Private no-store response."
+            },
+            "X-Oneapi-Request-Id": {
+              "schema": {
+                "type": "string"
+              },
+              "description": "Server-generated request correlation identifier."
+            }
+          }
+        },
+        "401": {
+          "description": "Missing, invalid, disabled or expired API key. Browser sessions and dashboard credentials are not accepted.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "error"
+                ],
+                "properties": {
+                  "error": {
+                    "type": "object",
+                    "required": [
+                      "message",
+                      "type"
+                    ],
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "param": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "403": {
+          "description": "Disabled account, token IP restriction or group access denied.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "error"
+                ],
+                "properties": {
+                  "error": {
+                    "type": "object",
+                    "required": [
+                      "message",
+                      "type"
+                    ],
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "param": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "404": {
+          "description": "Task not found, foreign or ownership unverified; indistinguishable response.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "error"
+                ],
+                "properties": {
+                  "error": {
+                    "type": "object",
+                    "required": [
+                      "message",
+                      "type"
+                    ],
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "param": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "429": {
+          "description": "Existing configured global API IP limiter: empty response body.",
+          "headers": {
+            "Retry-After": {
+              "schema": {
+                "type": "integer"
+              },
+              "description": "Existing limiter wait in seconds, when supplied."
+            }
+          }
+        },
+        "500": {
+          "description": "Local query or unsupported display configuration error; a limiter infrastructure failure can return an empty body.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "error"
+                ],
+                "properties": {
+                  "error": {
+                    "type": "object",
+                    "required": [
+                      "message",
+                      "type"
+                    ],
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "code": {
+                        "type": "string"
+                      },
+                      "param": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     },
     {
       "method": "POST",
@@ -12933,9 +13831,11 @@
       "path": "/v1/tasks/{key}/artifacts",
       "middleware": [
         "middleware.RouteTag(\"relay\")",
+        "middleware.DisableCache()",
+        "middleware.GlobalAPIRateLimit()",
         "middleware.TokenAuth()"
       ],
-      "source": "router/task-router.go:25",
+      "source": "router/task-router.go:26",
       "handler": "controller.GetTaskArtifacts",
       "summary": "",
       "schemaSource": "",
@@ -12950,7 +13850,7 @@
         "middleware.RouteTag(\"relay\")",
         "middleware.TokenOrTaskArtifactAccessAuth(\"key\", \"artifact_key\")"
       ],
-      "source": "router/task-router.go:34",
+      "source": "router/task-router.go:35",
       "handler": "controller.TaskArtifactContent",
       "summary": "",
       "schemaSource": "",
@@ -12965,7 +13865,7 @@
         "middleware.RouteTag(\"relay\")",
         "middleware.TokenOrTaskArtifactAccessAuth(\"key\", \"artifact_key\")"
       ],
-      "source": "router/task-router.go:35",
+      "source": "router/task-router.go:36",
       "handler": "controller.TaskArtifactContent",
       "summary": "",
       "schemaSource": "",
@@ -13661,7 +14561,7 @@
         "middleware.RouteTag(\"relay\")",
         "middleware.TokenAuth()"
       ],
-      "source": "router/relay-router.go:54",
+      "source": "router/relay-router.go:55",
       "handler": "controller.ListModels",
       "summary": "Gemini 格式获取",
       "schemaSource": "docs/openapi/relay.json",
@@ -13730,7 +14630,7 @@
         "middleware.ModelRequestRateLimit()",
         "middleware.Distribute()"
       ],
-      "source": "router/relay-router.go:206",
+      "source": "router/relay-router.go:207",
       "handler": "controller.Relay",
       "summary": "",
       "schemaSource": "",
@@ -13749,7 +14649,7 @@
         "middleware.RouteTag(\"relay\")",
         "middleware.TokenAuth()"
       ],
-      "source": "router/relay-router.go:63",
+      "source": "router/relay-router.go:64",
       "handler": "controller.ListModels",
       "summary": "",
       "schemaSource": "",
@@ -14073,6 +14973,20 @@
     {
       "name": "BILLING_JOURNAL_STORE_UNSUPPORTED",
       "code": "BILLING_JOURNAL_STORE_UNSUPPORTED",
+      "source": "model/billing_reservation_log.go",
+      "kind": "diagnostic",
+      "status": null
+    },
+    {
+      "name": "BILLING_RESERVATION_OWNERSHIP_AMBIGUOUS",
+      "code": "BILLING_RESERVATION_OWNERSHIP_AMBIGUOUS",
+      "source": "model/billing_reservation_log.go",
+      "kind": "diagnostic",
+      "status": null
+    },
+    {
+      "name": "BILLING_RESERVATION_TOKEN_OWNER_MISMATCH",
+      "code": "BILLING_RESERVATION_TOKEN_OWNER_MISMATCH",
       "source": "model/billing_reservation_log.go",
       "kind": "diagnostic",
       "status": null

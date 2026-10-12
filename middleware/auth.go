@@ -364,7 +364,7 @@ func TokenAuth() func(c *gin.Context) {
 
 const publicAPIKeyContextKey = "public_api_key"
 
-// PublicAPIKeyReadAuth permits exhausted quota only on the two public read routes.
+// PublicAPIKeyReadAuth permits exhausted quota only on explicitly registered public read routes.
 // Expiry, revocation, IP and current group permissions remain enforced.
 func PublicAPIKeyReadAuth() gin.HandlerFunc {
 	return tokenAuth(true)
@@ -384,7 +384,14 @@ func tokenAuth(publicRead bool) func(c *gin.Context) {
 		var token *model.Token
 		var err error
 		if publicRead {
-			if c.Request.Method != http.MethodGet || (c.Request.URL.Path != "/v1/catalog" && c.Request.URL.Path != "/v1/key/balance") {
+			readPath := c.Request.URL.Path
+			allowed := readPath == "/v1/catalog" || readPath == "/v1/key/balance" || readPath == "/v1/key/usage" || readPath == "/v1/tasks"
+			// Match the registered single-segment detail route, never a prefix.
+			if c.FullPath() == "/v1/tasks/:key" {
+				part, matched := strings.CutPrefix(readPath, "/v1/tasks/")
+				allowed = matched && part != "" && !strings.Contains(part, "/")
+			}
+			if c.Request.Method != http.MethodGet || !allowed {
 				abortWithOpenAiMessage(c, http.StatusForbidden, "Access denied", types.ErrorCodeAccessDenied)
 				return
 			}

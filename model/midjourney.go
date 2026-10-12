@@ -26,6 +26,10 @@ type Midjourney struct {
 
 	TokenId          int `json:"-" gorm:"default:0"`
 	BillingChannelId int `json:"-" gorm:"default:0"`
+	// OwnerTokenId is submitting-key ownership, independent of the mutable
+	// TokenId refund marker. RequestId is the original HTTP request identity.
+	OwnerTokenId int    `json:"-"`
+	RequestId    string `json:"-" gorm:"type:varchar(64)"`
 }
 
 // TaskQueryParams 用于包含所有搜索条件的结构体，可以根据需求添加更多字段

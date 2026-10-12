@@ -6,7 +6,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func FindBillingReservationLog(requestID string, userID int) (*Log, error) {
+func FindBillingReservationLog(requestID string, userID int, tokenID ...int) (*Log, error) {
 	if requestID == "" {
 		return nil, nil
 	}
@@ -16,12 +16,18 @@ func FindBillingReservationLog(requestID string, userID int) (*Log, error) {
 	if LOG_DB == nil {
 		return nil, errors.New("billing journal database unavailable")
 	}
-	var log Log
-	err := LOG_DB.Where("request_id = ? AND user_id = ? AND (content LIKE ? OR content = ?)", requestID, userID, "BILLING_RESERVATION_%", "UNSUPPORTED_DFLOP_CACHE_TTL_1H").First(&log).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
+	var logs []Log
+	err := LOG_DB.Where("request_id = ? AND user_id = ? AND (content LIKE ? OR content = ?)", requestID, userID, "BILLING_RESERVATION_%", "UNSUPPORTED_DFLOP_CACHE_TTL_1H").Order("id").Limit(2).Find(&logs).Error
+	if err != nil || len(logs) == 0 {
+		return nil, err
 	}
-	return &log, err
+	if len(logs) != 1 {
+		return nil, errors.New("BILLING_RESERVATION_OWNERSHIP_AMBIGUOUS")
+	}
+	if len(tokenID) > 0 && logs[0].TokenId != tokenID[0] {
+		return nil, errors.New("BILLING_RESERVATION_TOKEN_OWNER_MISMATCH")
+	}
+	return &logs[0], nil
 }
 
 // CreateBillingReservationLog serializes duplicate request identities on the

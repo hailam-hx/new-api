@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -310,8 +311,10 @@ func TestTaskBillingOtherIncludesTieredSnapshotAndKeepsUsageFactsNested(t *testi
 		},
 	}
 
+	task.PrivateData.BillingContext.UsageUnits = map[string]string{"seconds": "second"}
 	other := taskBillingOther(task).Snapshot()
 
+	assert.Equal(t, map[string]string{"seconds": "second"}, other["usage_units"])
 	assert.Equal(t, "tiered_expr", other["billing_mode"])
 	assert.Equal(t, base64.StdEncoding.EncodeToString([]byte(expression)), other["expr_b64"])
 	assert.Equal(t, "720P", other["matched_tier"])
@@ -870,7 +873,7 @@ func TestSettleMidjourneyTaskBillingTokenFailureKeepsFundingRefundable(t *testin
 	assert.Zero(t, getChannelUsedQuota(t, channelID))
 	log := getLastLog(t)
 	require.NotNil(t, log)
-	assert.Zero(t, log.TokenId)
+	assert.Equal(t, tokenID, log.TokenId, "log ownership remains the caller even when token funding was not applied")
 }
 
 func TestPrepareMidjourneyTaskBillingRejectsSubscriptionBeforeCharge(t *testing.T) {
@@ -940,6 +943,7 @@ func TestRefundTaskQuota_Wallet(t *testing.T) {
 	seedChargedAccounting(t, userID, channelID, tokenID, preConsumed, 1)
 
 	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+	task.PrivateData.Execution = &model.TaskExecutionSnapshot{RequestID: "original-http-request"}
 	require.NoError(t, model.DB.Create(task).Error)
 
 	assert.True(t, RefundTaskQuota(ctx, task, "task failed: upstream error"))
@@ -958,6 +962,13 @@ func TestRefundTaskQuota_Wallet(t *testing.T) {
 	// A refund log should be created
 	log := getLastLog(t)
 	require.NotNil(t, log)
+	assert.Equal(t, "original-http-request", log.RequestId)
+	assert.Equal(t, tokenID, log.TokenId)
+	var correlation map[string]any
+	require.NoError(t, common.UnmarshalJsonStr(log.Other, &correlation))
+	admin, ok := correlation["admin_info"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, float64(task.ID), admin["task_record_id"])
 	assert.Equal(t, model.LogTypeRefund, log.Type)
 	assert.Equal(t, preConsumed, log.Quota)
 	assert.Equal(t, "test-model", log.ModelName)
@@ -1895,4 +1906,65 @@ func TestDFLOPCompletionRequiresActualExpressionFacts(t *testing.T) {
 	require.NoError(t, common.Unmarshal(state, &parsed))
 	assert.Equal(t, float64(2), parsed["input_image_count"])
 	assert.Equal(t, true, parsed["billingPending"])
+}
+
+func TestTaskSubmissionFreezesExecutingModelUsageUnits(t *testing.T) {
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
+	plugin := &jsplugin.LoadedPlugin{Meta: jsplugin.Meta{
+		Key:         "unit-provenance",
+		UsageSchema: map[string]jsplugin.UsageFieldSchema{"quantity": {Type: "number", Unit: "count"}},
+		UsageProfiles: []jsplugin.UsageProfile{{Models: []string{"mapped-model"}, Schema: map[string]jsplugin.UsageFieldSchema{
+			"quantity": {Type: "number", Unit: "second"},
+			"tokens":   {Type: "number", Unit: "token"},
+			"quality":  {Enum: []string{"high"}},
+		}}},
+	}}
+	ctx.Set(jsplugin.ContextKeyPinnedPlugin, jsplugin.PinnedPlugin{Plugin: plugin})
+	info := &relaycommon.RelayInfo{RequestId: "billing-operation", CanonicalRequestId: "http-operation", OriginModelName: "alias", ChannelMeta: &relaycommon.ChannelMeta{UpstreamModelName: "mapped-model"}}
+	task := makeTask(1, 1, 100, 1, BillingSourceWallet, 0)
+	CaptureTaskSubmission(ctx, info, task)
+	assert.Equal(t, map[string]string{"quantity": "second", "tokens": "token"}, task.PrivateData.BillingContext.UsageUnits)
+	plugin.Meta.UsageProfiles[0].Schema["quantity"] = jsplugin.UsageFieldSchema{Type: "number", Unit: "credit"}
+	assert.Equal(t, "second", task.PrivateData.BillingContext.UsageUnits["quantity"])
+	require.NotNil(t, task.PrivateData.Execution)
+	assert.Equal(t, "billing-operation", task.PrivateData.Execution.RequestID)
+	assert.Equal(t, "http-operation", task.PrivateData.Execution.CanonicalRequestID)
+}
+
+func TestDFLOPLegacyJournalFailsClosedBeforeFunding(t *testing.T) {
+	for _, ambiguous := range []bool{false, true} {
+		t.Run(fmt.Sprint("ambiguous_", ambiguous), func(t *testing.T) {
+			truncate(t)
+			seedUser(t, 88, 10000)
+			seedToken(t, 88, 88, "legacy-journal-owner", 10000)
+			seedChannel(t, 88)
+			const legacyID = "d27e9995d8695f259b493f4ac42d29c73162e88db652861f81a8da088b896b91"
+			journal := model.Log{UserId: 88, TokenId: 89, RequestId: legacyID, Type: model.LogTypeSystem, Content: "BILLING_RESERVATION_HELD"}
+			require.NoError(t, model.DB.Create(&journal).Error)
+			if ambiguous {
+				duplicate := journal
+				duplicate.Id = 0
+				duplicate.TokenId = 88
+				require.NoError(t, model.DB.Create(&duplicate).Error)
+			}
+			task := makeTask(88, 88, 1000, 88, BillingSourceWallet, 0)
+			task.Platform = "dflop-media"
+			task.PrivateData.Execution = &model.TaskExecutionSnapshot{RequestID: legacyID}
+			assert.False(t, RefundTaskQuota(t.Context(), task, "foreign journal must not refund"))
+			assert.Equal(t, 1000, task.Quota)
+			assert.Equal(t, 10000, getUserQuota(t, 88))
+			assert.Equal(t, 10000, getTokenRemainQuota(t, 88))
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
+			ctx.Set(common.RequestIdKey, "legacy-retry-http")
+			ctx.Request.Header.Set("Idempotency-Key", "operation-1")
+			info := &relaycommon.RelayInfo{UserId: 88, TokenId: 88, TokenKey: "legacy-journal-owner", UserQuota: 10000, ChannelMeta: &relaycommon.ChannelMeta{ChannelBaseUrl: "https://api.dflop.top", ChannelId: 88}}
+			info.UserSetting.BillingPreference = "wallet_only"
+			require.NoError(t, PrepareDFLOPTaskBillingIdentity(ctx, info, "dflop-media"))
+			assert.NotNil(t, PreConsumeBilling(ctx, 1000, info), "legacy operation cannot be re-billed under a token-scoped digest")
+			assert.Equal(t, 10000, getUserQuota(t, 88))
+			assert.Equal(t, 10000, getTokenRemainQuota(t, 88))
+		})
+	}
 }

@@ -48,10 +48,14 @@ const (
 const TaskRefundLegacyCutoff int64 = 1771718400 // 2026-02-22 00:00:00 UTC
 
 type Task struct {
-	ID         int64                 `json:"id" gorm:"primary_key;AUTO_INCREMENT"`
-	CreatedAt  int64                 `json:"created_at" gorm:"index"`
-	UpdatedAt  int64                 `json:"updated_at"`
-	TaskID     string                `json:"task_id" gorm:"type:varchar(191);index"` // 第三方id，不一定有/ song id\ Task id
+	ID        int64  `json:"id" gorm:"primary_key;AUTO_INCREMENT;index:idx_tasks_token_id_id,priority:2"`
+	CreatedAt int64  `json:"created_at" gorm:"index"`
+	UpdatedAt int64  `json:"updated_at"`
+	TaskID    string `json:"task_id" gorm:"type:varchar(191);index;index:idx_tasks_token_id_task_id,priority:2"` // 第三方id，不一定有/ song id\ Task id
+	// TokenId and RequestId are immutable submitting-key and HTTP-request
+	// identity. PrivateData.TokenId remains the legacy billing identity.
+	TokenId    int                   `json:"-" gorm:"index:idx_tasks_token_id_id,priority:1;index:idx_tasks_token_id_task_id,priority:1"`
+	RequestId  string                `json:"-" gorm:"type:varchar(64)"`
 	Platform   constant.TaskPlatform `json:"platform" gorm:"type:varchar(30);index"` // 平台
 	UserId     int                   `json:"user_id" gorm:"index"`
 	Group      string                `json:"group" gorm:"type:varchar(50)"` // 修正计费用
@@ -147,6 +151,7 @@ type TaskExecutionSnapshot struct {
 	RuntimeVerificationItemID int64               `json:"runtime_verification_item_id,omitempty"`
 	Passive                   *RuntimeEvidence    `json:"passive_runtime_binding,omitempty"`
 	RequestID                 string              `json:"request_id,omitempty"`
+	CanonicalRequestID        string              `json:"canonical_request_id,omitempty"`
 	RequestPath               string              `json:"request_path,omitempty"`
 	TaskPlugin                *TaskPluginSnapshot `json:"task_plugin,omitempty"`
 }
@@ -176,12 +181,27 @@ type TaskBillingContext struct {
 	OriginModelName string                       `json:"origin_model_name,omitempty"` // 模型名称，必须为OriginModelName
 	PerCallBilling  bool                         `json:"per_call_billing,omitempty"`  // 按次计费：跳过轮询阶段的差额结算
 	TieredSnapshot  *billingexpr.BillingSnapshot `json:"tiered_snapshot,omitempty"`
+	UsageUnits      map[string]string            `json:"usage_units,omitempty"`
 }
 
 // ResultRetrievable reports whether retrieval surfaces (native query routes,
 // protocol retrieve endpoints, artifact projection) may serve this task.
 func (t *Task) ResultRetrievable() bool {
 	return !t.PrivateData.ResultDiscarded
+}
+
+// HasCanonicalOwnership fails closed on contradictory provenance and internal
+// verification tasks. Public reads still have to query the current token first.
+func (t *Task) HasCanonicalOwnership() bool {
+	if t == nil || t.TokenId <= 0 || (t.PrivateData.TokenId > 0 && t.PrivateData.TokenId != t.TokenId) {
+		return false
+	}
+	if execution := t.PrivateData.Execution; execution != nil {
+		if execution.RuntimeVerificationItemID != 0 || (execution.CanonicalRequestID != "" && execution.CanonicalRequestID != t.RequestId) {
+			return false
+		}
+	}
+	return true
 }
 
 // GetUpstreamTaskID 获取上游真实 task ID（用于与 provider 通信）
@@ -249,6 +269,7 @@ func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) 
 	properties := Properties{}
 	privateData := TaskPrivateData{}
 	if relayInfo != nil && relayInfo.ChannelMeta != nil {
+		privateData.TokenId = relayInfo.TokenId
 		// A New API channel may rotate between several gateway tokens, so the
 		// task keeps the key that submitted it and polls with the same identity.
 		if relayInfo.ChannelMeta.ChannelType == constant.ChannelTypeGemini ||
@@ -275,6 +296,8 @@ func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) 
 	t := &Task{
 		TaskID:      taskID,
 		UserId:      relayInfo.UserId,
+		TokenId:     relayInfo.TokenId,
+		RequestId:   relayInfo.CanonicalRequestId,
 		Group:       relayInfo.UsingGroup,
 		SubmitTime:  time.Now().Unix(),
 		Status:      TaskStatusNotStart,

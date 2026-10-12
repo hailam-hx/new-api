@@ -1,15 +1,21 @@
 package relay
 
 import (
+	"bytes"
+	"image"
+	"image/png"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	pluginruntime "github.com/QuantumNous/new-api/pkg/jsplugin"
@@ -17,6 +23,7 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/billing_setting"
 	"github.com/QuantumNous/new-api/setting/config"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -45,6 +52,149 @@ func setupRelayChannelDB(t *testing.T) *gorm.DB {
 		require.NoError(t, sqlDB.Close())
 	})
 	return database
+}
+
+func TestMidjourneyImageRejectsSameUserOtherKeyBeforeFetching(t *testing.T) {
+	database := setupRelayChannelDB(t)
+	require.NoError(t, database.AutoMigrate(&model.Midjourney{}))
+	require.NoError(t, database.Create(&model.Midjourney{MjId: "private-image", UserId: 7, OwnerTokenId: 82}).Error)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodGet, "/mj/image/private-image", nil)
+	c.Params = gin.Params{{Key: "id", Value: "private-image"}}
+	c.Set("id", 7)
+	c.Set("token_id", 81)
+	RelayMidjourneyImage(c)
+	assert.Equal(t, http.StatusNotFound, recorder.Code)
+}
+
+func TestMidjourneyImagePreservesAuthorizedPreviewAndSanitizesFailure(t *testing.T) {
+	previousDB, previousDatabase := model.DB, common.MainDatabaseType()
+	previousLogDatabase, previousSQLite, previousMaster := common.LogDatabaseType(), common.SQLitePath, common.IsMasterNode
+	common.SQLitePath, common.IsMasterNode = t.TempDir()+"/mj-image.db", false
+	t.Setenv("SQL_DSN", "")
+	require.NoError(t, model.InitDB())
+	database := model.DB
+	require.NoError(t, database.AutoMigrate(&model.User{}, &model.Token{}, &model.Midjourney{}, &model.Channel{}))
+	t.Cleanup(func() {
+		sqlDB, err := database.DB()
+		require.NoError(t, err)
+		require.NoError(t, sqlDB.Close())
+		model.DB = previousDB
+		common.SQLitePath, common.IsMasterNode = previousSQLite, previousMaster
+		common.SetDatabaseTypes(previousDatabase, previousLogDatabase)
+	})
+	previousRedis, previousSecret, previousAddress := common.RedisEnabled, common.CryptoSecret, system_setting.ServerAddress
+	previousFetch := *system_setting.GetFetchSetting()
+	common.RedisEnabled = false
+	common.CryptoSecret = "midjourney-image-local-fixture"
+	system_setting.ServerAddress = "https://gateway.example"
+	system_setting.GetFetchSetting().AllowPrivateIp = true
+	system_setting.GetFetchSetting().EnableSSRFProtection = true
+	system_setting.GetFetchSetting().AllowedPorts = []string{"1-65535"}
+	t.Cleanup(func() {
+		common.RedisEnabled, common.CryptoSecret, system_setting.ServerAddress = previousRedis, previousSecret, previousAddress
+		*system_setting.GetFetchSetting() = previousFetch
+		service.InitHttpClient()
+	})
+	service.InitHttpClient()
+	require.NoError(t, database.Create(&model.User{Id: 7, Username: "mj-image-owner", Status: common.UserStatusEnabled, Role: common.RoleCommonUser, Group: "default", Quota: 1000}).Error)
+	require.NoError(t, database.Create(&model.Token{Id: 81, UserId: 7, Key: "mjimageowner", Status: common.TokenStatusEnabled, ExpiredTime: -1, UnlimitedQuota: true}).Error)
+	require.NoError(t, database.Create(&model.Token{Id: 82, UserId: 7, Key: "mjimageother", Status: common.TokenStatusEnabled, ExpiredTime: -1, UnlimitedQuota: true}).Error)
+	var pngBody bytes.Buffer
+	require.NoError(t, png.Encode(&pngBody, image.NewRGBA(image.Rect(0, 0, 1, 1))))
+	var requests atomic.Int32
+	media := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		if r.URL.Path == "/failure" {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte("provider_api_key=private-secret"))
+			return
+		}
+		switch r.URL.Path {
+		case "/html", "/forged-png":
+			contentType := "text/html"
+			if r.URL.Path == "/forged-png" {
+				contentType = "image/png"
+			}
+			w.Header().Set("Content-Type", contentType)
+			_, _ = w.Write([]byte("<!doctype html><script>private-secret</script>"))
+			return
+		case "/svg":
+			w.Header().Set("Content-Type", "image/svg+xml")
+			_, _ = w.Write([]byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>private-secret</script></svg>`))
+			return
+		case "/json":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"error":{"api_key":"private-secret"}}`))
+			return
+		}
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(pngBody.Bytes())
+	}))
+	t.Cleanup(media.Close)
+	own := model.Midjourney{MjId: "mj-owned", UserId: 7, OwnerTokenId: 81, ImageUrl: media.URL + "/image"}
+	historical := model.Midjourney{MjId: "mj-historical", UserId: 7, ImageUrl: media.URL + "/image"}
+	require.NoError(t, database.Create(&own).Error)
+	require.NoError(t, database.Create(&historical).Error)
+	preview, err := service.BuildMidjourneyImageURL(historical.MjId)
+	require.NoError(t, err)
+	parsed, err := url.Parse(preview)
+	require.NoError(t, err)
+	router := gin.New()
+	router.GET("/mj/image/:id", middleware.MidjourneyImageAuth(), RelayMidjourneyImage)
+	for _, tc := range []struct {
+		name, path, key string
+		status          int
+	}{
+		{"own bearer", "/mj/image/mj-owned", "mjimageowner", http.StatusOK},
+		{"same user foreign key", "/mj/image/mj-owned", "mjimageother", http.StatusNotFound},
+		{"unknown owner bearer", "/mj/image/mj-historical", "mjimageowner", http.StatusNotFound},
+		{"missing record", "/mj/image/missing", "mjimageowner", http.StatusNotFound},
+		{"historical console capability", parsed.RequestURI(), "", http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, tc.path, nil)
+			if tc.key != "" {
+				request.Header.Set("Authorization", "Bearer sk-"+tc.key)
+			}
+			router.ServeHTTP(recorder, request)
+			assert.Equal(t, tc.status, recorder.Code, recorder.Body.String())
+			if tc.status == http.StatusOK {
+				assert.Equal(t, pngBody.Bytes(), recorder.Body.Bytes())
+				assert.Equal(t, "image/png", recorder.Header().Get("Content-Type"))
+				assert.Equal(t, "nosniff", recorder.Header().Get("X-Content-Type-Options"))
+			}
+		})
+	}
+	assert.Equal(t, int32(2), requests.Load(), "foreign/unowned/missing reads must never fetch media")
+	duplicate := model.Midjourney{MjId: historical.MjId, UserId: 7}
+	require.NoError(t, database.Create(&duplicate).Error)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, parsed.RequestURI(), nil))
+	assert.Equal(t, http.StatusNotFound, recorder.Code)
+	assert.Equal(t, int32(2), requests.Load())
+	require.NoError(t, database.Model(&own).Update("image_url", media.URL+"/failure").Error)
+	recorder = httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/mj/image/mj-owned", nil)
+	request.Header.Set("Authorization", "Bearer sk-mjimageowner")
+	router.ServeHTTP(recorder, request)
+	assert.Equal(t, http.StatusBadGateway, recorder.Code)
+	assert.NotContains(t, recorder.Body.String(), "private-secret")
+	assert.NotContains(t, recorder.Body.String(), media.URL)
+	for _, path := range []string{"/html", "/svg", "/json", "/forged-png"} {
+		t.Run(path, func(t *testing.T) {
+			require.NoError(t, database.Model(&own).Update("image_url", media.URL+path).Error)
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "/mj/image/mj-owned", nil)
+			request.Header.Set("Authorization", "Bearer sk-mjimageowner")
+			router.ServeHTTP(recorder, request)
+			assert.Equal(t, http.StatusBadGateway, recorder.Code)
+			assert.JSONEq(t, `{"error":"image_retrieval_failed"}`, recorder.Body.String())
+			assert.NotContains(t, recorder.Body.String(), "private-secret")
+		})
+	}
 }
 
 func TestApplyChannelPinPreservesOriginTasksAndRetryMode(t *testing.T) {

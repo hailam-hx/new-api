@@ -1486,6 +1486,40 @@ assert(
     'https://hotx-api.com/v1/key/balance'
   )
 )
+for (const [group, operation, description] of [
+  [
+    'billing',
+    'get--v1-key-usage',
+    'Read recorded usage for the current API key',
+  ],
+  ['tasks', 'get--v1-tasks', 'List tasks created by the current API key'],
+  [
+    'tasks',
+    'get--v1-tasks--key-',
+    'Retrieve a task created by the current API key',
+  ],
+]) {
+  await page.goto(`${baseUrl}/docs/api-reference-${group}#${operation}`)
+  const section = page.locator(`#${operation}`)
+  await section.waitFor()
+  assert.equal(
+    await section
+      .getByText(referenceLabels[description], { exact: true })
+      .count(),
+    1
+  )
+  await section
+    .getByRole('button', {
+      name: referenceLabels['Copy to clipboard'],
+      exact: true,
+    })
+    .nth(operation === 'get--v1-tasks--key-' ? 1 : 2)
+    .click()
+  const request = await page.evaluate(() => navigator.clipboard.readText())
+  assert(request.includes('Authorization: Bearer YOUR_API_KEY'))
+  assert(!request.includes(' -d '))
+  assert((await section.textContent()).includes(referenceLabels[description]))
+}
 await page.goto(`${baseUrl}/docs/api-reference-chat`)
 const chatSection = page.locator('#post--v1-chat-completions')
 await chatSection.waitFor()
@@ -1560,6 +1594,66 @@ for (const [locale, languageLabel] of [
     1
   )
   assert.equal(await page.locator('#post--v1-chat-completions').count(), 0)
+  for (const [group, operation, description] of [
+    [
+      'billing',
+      'get--v1-key-usage',
+      'Read recorded usage for the current API key',
+    ],
+    ['tasks', 'get--v1-tasks', 'List tasks created by the current API key'],
+    [
+      'tasks',
+      'get--v1-tasks--key-',
+      'Retrieve a task created by the current API key',
+    ],
+  ]) {
+    await page.goto(`${baseUrl}/docs/api-reference-${group}#${operation}`)
+    const section = page.locator(`#${operation}`)
+    await section.waitFor()
+    assert.equal(
+      await section.getByText(labels[description], { exact: true }).count(),
+      1
+    )
+    assert(await section.evaluate((element) => element.closest('details').open))
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 1000 })
+      assert(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth
+        ),
+        `phase3 overflow ${locale}/${group}/${width}`
+      )
+    }
+  }
+  await page.goto(`${baseUrl}/docs/api-reference-midjourney#get--mj-image--id-`)
+  const midjourneyImage = page.locator('#get--mj-image--id-')
+  await midjourneyImage.waitFor()
+  assert(
+    (await midjourneyImage.textContent()).includes(
+      labels[
+        'Authenticate with the API key that created this Midjourney task or use its signed Console preview URL. Unsigned anonymous reads return 401; invalid signatures or unknown ownership return 404. The signature is bound to this image route and cannot authorize task artifact routes. Signing-secret rotation invalidates existing signed URLs.'
+      ]
+    )
+  )
+  assert(
+    (await midjourneyImage.textContent()).includes(
+      labels[
+        'Signed Midjourney Console preview URLs expire after 15 minutes. The access signature and expires Unix-seconds parameter are required together; refresh the Console to obtain a new URL. Expired or invalid links return 404.'
+      ]
+    )
+  )
+  await page.setViewportSize({ width: 390, height: 1000 })
+  assert(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth
+    ),
+    `midjourney auth overflow ${locale}`
+  )
+  await page.goto(`${baseUrl}/docs/api-reference-images`)
+  await page
+    .getByRole('heading', { name: labels['Image API'], level: 1, exact: true })
+    .waitFor()
+
   for (const mode of locale === 'vi' ? ['light', 'dark'] : ['light']) {
     if (locale === 'vi') {
       await page.evaluate(
@@ -1638,6 +1732,6 @@ for (const [locale, languageLabel] of [
 }
 assert.deepEqual(errors, [])
 console.log(
-  'PASS: 21 developer pages; 14 domains; one global sidebar entry; operation search expands target; cURL clipboard; seven locales; 320/375/390/430/768/1440px; light/dark; no page errors.'
+  'PASS: 21 developer pages; 14 domains; key usage and key-owned task reads; one global sidebar entry; operation search expands target; cURL clipboard; seven locales; 320/375/390/430/768/1440px; light/dark; no page errors.'
 )
 await browser.close()

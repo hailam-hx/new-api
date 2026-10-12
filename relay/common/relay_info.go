@@ -1,6 +1,7 @@
 package common
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -111,6 +112,7 @@ type RelayInfo struct {
 	DFLOPTaskUpstreamTaskID    string
 	DFLOPTaskAccepted          bool
 	DFLOPTaskHTTPStatus        int
+	DFLOPTaskLegacyRequestID   string
 	DFLOPTaskReservationLogID  int
 	EndpointBillingUsageSeen   bool
 	EndpointBillingActualUsage *dto.Usage
@@ -165,6 +167,8 @@ type RelayInfo struct {
 	// SubscriptionPlanId / SubscriptionPlanTitle are used for logging/UI display.
 	SubscriptionPlanId    int
 	SubscriptionPlanTitle string
+	// CanonicalRequestId is the immutable HTTP identity used for ownership and logs.
+	CanonicalRequestId string
 	// RequestId is used for idempotent pre-consume/refund
 	RequestId string
 	// SubscriptionAmountTotal / SubscriptionAmountUsedAfterPreConsume are used to compute remaining in logs.
@@ -601,22 +605,29 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 
 	// firstResponseTime = time.Now() - 1 second
 
-	reqId := common.GetContextKeyString(c, common.RequestIdKey)
+	reqId, _ := c.Request.Context().Value(common.RequestIdKey).(string)
+	if reqId == "" {
+		reqId = common.GetContextKeyString(c, common.RequestIdKey)
+	}
 	if reqId == "" {
 		reqId = common.NewRequestId()
 	}
+	c.Set(common.RequestIdKey, reqId)
+	c.Request = c.Request.WithContext(context.WithValue(c.Request.Context(), common.RequestIdKey, reqId))
+	c.Header(common.RequestIdKey, reqId)
 	reasoningEffort := reasoningEffortFromRequest(request)
 	originModelName := common.GetContextKeyString(c, constant.ContextKeyOriginalModel)
 	info := &RelayInfo{
 		Request:         request,
 		ReasoningEffort: reasoningEffort,
 
-		RequestId:  reqId,
-		UserId:     common.GetContextKeyInt(c, constant.ContextKeyUserId),
-		UsingGroup: common.GetContextKeyString(c, constant.ContextKeyUsingGroup),
-		UserGroup:  common.GetContextKeyString(c, constant.ContextKeyUserGroup),
-		UserQuota:  common.GetContextKeyInt(c, constant.ContextKeyUserQuota),
-		UserEmail:  common.GetContextKeyString(c, constant.ContextKeyUserEmail),
+		RequestId:          reqId,
+		CanonicalRequestId: reqId,
+		UserId:             common.GetContextKeyInt(c, constant.ContextKeyUserId),
+		UsingGroup:         common.GetContextKeyString(c, constant.ContextKeyUsingGroup),
+		UserGroup:          common.GetContextKeyString(c, constant.ContextKeyUserGroup),
+		UserQuota:          common.GetContextKeyInt(c, constant.ContextKeyUserQuota),
+		UserEmail:          common.GetContextKeyString(c, constant.ContextKeyUserEmail),
 
 		OriginModelName: originModelName,
 

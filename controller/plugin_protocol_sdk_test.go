@@ -48,10 +48,10 @@ func TestTaskPluginResponsesNonStreamDecodesWithOfficialGoSDK(t *testing.T) {
 	deps.submit = func(_ *gin.Context, info *relaycommon.RelayInfo) (*taskSubmissionOutcome, *dto.TaskError) {
 		return pluginProtocolTestOutcome(info, pinned.Plugin.Meta.Key, "task_sdk_final", nil), nil
 	}
-	deps.loadTask = func(context.Context, int, constant.TaskPlatform, string) (*model.Task, bool, error) {
+	deps.loadTask = func(context.Context, int, int, constant.TaskPlatform, string) (*model.Task, bool, error) {
 		return &model.Task{
-			TaskID:   "task_sdk_final",
-			UserId:   71,
+			TaskID: "task_sdk_final",
+			UserId: 71, TokenId: 81,
 			Platform: constant.TaskPlatform(pinned.Plugin.Meta.Key),
 			Status:   model.TaskStatusSuccess,
 		}, true, nil
@@ -94,10 +94,10 @@ func TestTaskPluginResponsesStreamDecodesWithOfficialGoSDK(t *testing.T) {
 	deps.submit = func(_ *gin.Context, info *relaycommon.RelayInfo) (*taskSubmissionOutcome, *dto.TaskError) {
 		return pluginProtocolTestOutcome(info, pinned.Plugin.Meta.Key, "task_sdk_stream", nil), nil
 	}
-	deps.loadTask = func(context.Context, int, constant.TaskPlatform, string) (*model.Task, bool, error) {
+	deps.loadTask = func(context.Context, int, int, constant.TaskPlatform, string) (*model.Task, bool, error) {
 		return &model.Task{
-			TaskID:   "task_sdk_stream",
-			UserId:   71,
+			TaskID: "task_sdk_stream",
+			UserId: 71, TokenId: 81,
 			Platform: constant.TaskPlatform(pinned.Plugin.Meta.Key),
 			Status:   model.TaskStatusSuccess,
 		}, true, nil
@@ -242,9 +242,9 @@ func builtInKlingProtocolSDKFixture(t *testing.T, taskID string) (pluginruntime.
 	deps.submit = func(_ *gin.Context, info *relaycommon.RelayInfo) (*taskSubmissionOutcome, *dto.TaskError) {
 		return pluginProtocolTestOutcome(info, plugin.Meta.Key, taskID, nil), nil
 	}
-	deps.loadTask = func(context.Context, int, constant.TaskPlatform, string) (*model.Task, bool, error) {
+	deps.loadTask = func(context.Context, int, int, constant.TaskPlatform, string) (*model.Task, bool, error) {
 		task := &model.Task{
-			TaskID: taskID, Platform: constant.TaskPlatform(plugin.Meta.Key), UserId: 71,
+			TaskID: taskID, Platform: constant.TaskPlatform(plugin.Meta.Key), UserId: 71, TokenId: 81,
 			Status: model.TaskStatusSuccess, Progress: "100%", CreatedAt: 1_710_000_000,
 		}
 		task.SetData(map[string]any{
