@@ -78,8 +78,29 @@ jobs:
         with:
           bun-version: '1.4.0'
 
+      - name: Set up Node for frontend tooling
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '24'
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Set up Go for documentation route coverage
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+
+      - name: Verify generated documentation and public contract
+        run: |
+          bun run docs:check
+          bun run docs:contract
+
+      - name: Validate complete public OpenAPI
+        run: |
+          python3 -m venv /tmp/hotx-openapi-validator
+          /tmp/hotx-openapi-validator/bin/pip install 'openapi-spec-validator==0.9.0'
+          /tmp/hotx-openapi-validator/bin/python -m openapi_spec_validator ../docs/openapi/public.json
 
       - name: Typecheck
         run: bun run typecheck

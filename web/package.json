@@ -24,7 +24,9 @@
     "knip": "knip",
     "docs:generate": "node scripts/generate-documentation.mjs",
     "docs:check": "node scripts/generate-documentation.mjs --check",
-    "docs:prerender": "bun scripts/prerender-documentation.mjs"
+    "docs:prerender": "bun scripts/prerender-documentation.mjs",
+    "docs:contract": "bun scripts/public-openapi-contract.mjs",
+    "docs:sdk:smoke": "node scripts/verify-public-sdk.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

@@ -142,3 +142,27 @@ it.each(INTERFACE_LANGUAGE_OPTIONS)(
     expect(convertDetectedLanguage(code)).toBe(code)
   }
 )
+
+it('finds developer lifecycle, recipes and public error guidance in the rendered search dialog', async () => {
+  const user = userEvent.setup()
+  await renderNavigation(<DocsSearch models={[]} />)
+  await user.click(screen.getByRole('button', { name: 'Search documentation' }))
+  const input = screen.getByRole('textbox', { name: 'Search documentation' })
+  for (const [query, destination] of [
+    ['versioning', '/docs/developer-versioning'],
+    ['deprecation', '/docs/developer-versioning'],
+    ['recipes', '/docs/developer-recipes'],
+    ['artifact_not_ready', '/docs/developer-errors-retries'],
+  ]) {
+    await user.clear(input)
+    await user.type(input, query)
+    expect(
+      screen
+        .getAllByRole('link')
+        .some((link) => link.getAttribute('href')?.startsWith(destination))
+    ).toBe(true)
+  }
+  await user.clear(input)
+  await user.type(input, '/api/channel')
+  expect(screen.getByText('No results found')).toBeVisible()
+})

@@ -348,7 +348,7 @@ for (const width of [1440, 1091, 768, 390]) {
   if (width >= 1091) {
     assert(
       await page
-        .locator('#quick-example pre')
+        .locator('#quick-example pre:not([inert] *)')
         .evaluate(
           (element) => element.scrollWidth <= element.parentElement.clientWidth
         )
@@ -598,7 +598,7 @@ for (const width of [1440, 1091, 768, 390]) {
   if (width >= 1091) {
     assert(
       await page
-        .locator('#quick-example pre')
+        .locator('#quick-example pre:not([inert] *)')
         .evaluate(
           (element) => element.scrollWidth <= element.parentElement.clientWidth
         )
@@ -995,7 +995,7 @@ for (const [locale, label] of [
     .getByRole('heading', { name: currentLocale['Chat API'], exact: true })
     .waitFor()
   assert(
-    (await page.locator('#quick-example pre').textContent()).includes(
+    (await page.locator('#quick-example pre:not([inert] *)').textContent()).includes(
       currentLocale['Hello!']
     )
   )
@@ -1018,7 +1018,7 @@ for (const [locale, label] of [
     .getByRole('heading', { name: currentLocale['Image API'], exact: true })
     .waitFor()
   assert(
-    (await page.locator('#quick-example pre').textContent()).includes(
+    (await page.locator('#quick-example pre:not([inert] *)').textContent()).includes(
       currentLocale['A small red house beside a lake']
     )
   )
@@ -1139,7 +1139,7 @@ for (const [locale, label] of [
     await taskPanel.getByRole('tab', { name: 'cURL', exact: true }).click()
     if (task === 'speech') {
       assert(
-        (await taskPanel.locator('#quick-example pre').textContent()).includes(
+        (await taskPanel.locator('#quick-example pre:not([inert] *)').textContent()).includes(
           currentLocale['Hello! Welcome to New API.']
         )
       )
@@ -1397,7 +1397,7 @@ const developerPaths = await page
   })
   .locator('a')
   .evaluateAll((links) => links.map((link) => link.getAttribute('href')))
-assert.equal(developerPaths.length, 21)
+assert.equal(developerPaths.length, 24)
 for (const path of developerPaths.slice(1)) {
   await page.goto(`${baseUrl}${path}`)
   await page.locator('main h1').waitFor()
@@ -1557,6 +1557,38 @@ assert(
     .locator('#get--v1-videos--task-id--content')
     .evaluate((element) => element.closest('details').open)
 )
+const contractReference = JSON.parse(
+  await fs.readFile(
+    'src/features/documentation/generated/reference.json',
+    'utf8'
+  )
+)
+const catalogOperationId = contractReference.publicOperations.find(
+  (operation) => operation.method === 'GET' && operation.path === '/v1/catalog'
+).operationId
+for (const [query, destination] of [
+  [catalogOperationId, '/docs/api-reference-models#get--v1-catalog'],
+  ['artifact_not_ready', '/docs/developer-errors-retries'],
+]) {
+  await page
+    .getByRole('button', {
+      name: referenceLabels['Search documentation'],
+      exact: true,
+    })
+    .click()
+  await page
+    .getByRole('textbox', {
+      name: referenceLabels['Search documentation'],
+      exact: true,
+    })
+    .fill(query)
+  await page
+    .getByRole('dialog')
+    .locator(`a[href^="${destination}"]`)
+    .first()
+    .click()
+  assert(new URL(page.url()).pathname === destination.split('#')[0])
+}
 await page.goto(`${baseUrl}/docs/api-reference-images`)
 for (const [locale, languageLabel] of [
   ['en', 'English'],
@@ -1649,6 +1681,48 @@ for (const [locale, languageLabel] of [
     ),
     `midjourney auth overflow ${locale}`
   )
+  for (const [slug, title] of [
+    ['api-reference', 'API Reference'],
+    ['developer-versioning', 'API Versioning'],
+    ['developer-changelog', 'API Changelog'],
+    ['developer-recipes', 'Recipes'],
+    ['developer-errors-retries', 'Errors and Retries'],
+  ]) {
+    await page.goto(`${baseUrl}/docs/${slug}`)
+    await page
+      .getByRole('heading', { name: labels[title], level: 1, exact: true })
+      .waitFor()
+    for (const mode of ['light', 'dark']) {
+      await page.evaluate(
+        (mode) => localStorage.setItem('newapi:theme:v1:mode', mode),
+        mode
+      )
+      await page.reload()
+      await page
+        .getByRole('heading', { name: labels[title], level: 1, exact: true })
+        .waitFor()
+      for (const width of [320, 375, 390, 430, 1440]) {
+        await page.setViewportSize({ width, height: 1000 })
+        assert(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth
+          ),
+          `phase4 overflow ${locale}/${slug}/${mode}/${width}`
+        )
+      }
+    }
+  }
+  await page.goto(`${baseUrl}/docs/developer-recipes`)
+  const recipe = page.locator('#discover')
+  await recipe
+    .getByRole('button', { name: labels['Copy to clipboard'], exact: true })
+    .click()
+  const copiedRecipe = await page.evaluate(() => navigator.clipboard.readText())
+  assert(
+    copiedRecipe.includes('/v1/catalog') &&
+      copiedRecipe.includes('/v1/chat/completions')
+  )
+  assert(!copiedRecipe.includes('/api/') && !copiedRecipe.includes('--retry'))
   await page.goto(`${baseUrl}/docs/api-reference-images`)
   await page
     .getByRole('heading', { name: labels['Image API'], level: 1, exact: true })
@@ -1732,6 +1806,6 @@ for (const [locale, languageLabel] of [
 }
 assert.deepEqual(errors, [])
 console.log(
-  'PASS: 21 developer pages; 14 domains; key usage and key-owned task reads; one global sidebar entry; operation search expands target; cURL clipboard; seven locales; 320/375/390/430/768/1440px; light/dark; no page errors.'
+  'PASS: 24 developer pages; Phase 4 lifecycle and recipes in seven locales, light/dark at 320/375/390/430/1440px; 14 domains; key usage and key-owned task reads; one global sidebar entry; operation search expands target; cURL clipboard; seven locales; 320/375/390/430/768/1440px; light/dark; no page errors.'
 )
 await browser.close()

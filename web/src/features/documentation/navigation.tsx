@@ -27,9 +27,11 @@ import { Input } from '@/components/ui/input'
 import type { PricingModel } from '@/features/pricing/types'
 import { cn } from '@/lib/utils'
 
-import { beginnerArticles, groups } from './content'
+import { beginnerArticles, developerArticles, groups } from './content'
 import reference from './generated/reference.json'
 import { searchDocumentation } from './lib'
+
+const searchableArticles = [...beginnerArticles, ...developerArticles]
 
 export function DocsNavigation(props: { slug: string; mobile?: boolean }) {
   const { t } = useTranslation()
@@ -113,7 +115,13 @@ export function DocsSearch(props: {
   const [query, setQuery] = useState('')
   const results = useMemo(
     () =>
-      searchDocumentation(query, beginnerArticles, reference, props.models, t),
+      searchDocumentation(
+        query,
+        searchableArticles,
+        reference,
+        props.models,
+        t
+      ),
     [query, props.models, t]
   )
   useEffect(() => {

@@ -51,6 +51,7 @@ import {
   getArticle,
   translateDocSection,
 } from './content'
+import { DeveloperRecipeCode } from './developer-recipes'
 import { buildAPIKeyExample } from './lib'
 import { DocumentationMetadata } from './metadata'
 import { DocsNavigation, DocsSearch } from './navigation'
@@ -449,6 +450,12 @@ export function Documentation(props: { slug?: string; modelId?: string }) {
                       <Markdown className='text-sm leading-7 [&_table]:block [&_table]:overflow-x-auto'>
                         {translateDocSection(section, t)}
                       </Markdown>
+                      {article.slug === 'developer-recipes' && (
+                        <DeveloperRecipeCode
+                          section={section.id}
+                          origin={apiOrigin}
+                        />
+                      )}
                       {article.slug === 'api-key' &&
                         section.id === 'step-2' && (
                           <div className='mt-4 min-w-0 space-y-4'>

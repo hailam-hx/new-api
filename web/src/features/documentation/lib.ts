@@ -23,7 +23,18 @@ import { translateDocSection, type DocArticle } from './content'
 import type reference from './generated/reference.json'
 
 export type SearchResult = { title: string; detail: string; href: string }
-export type DocReference = typeof reference
+export type DocReference = Omit<
+  typeof reference,
+  'endpoints' | 'publicOperations'
+> & {
+  endpoints: {
+    method: string
+    path: string
+    summary: string
+    operationId?: string
+  }[]
+  publicOperations?: { method: string; path: string; operationId: string }[]
+}
 
 export function filterCatalog(
   models: PricingModel[],
@@ -113,10 +124,24 @@ export function searchDocumentation(
   const searchEndpoints = includeReference
     ? data.endpoints
     : publicApiEndpoints.filter(() => customerReference)
+  const operationMetadata = [
+    ...(data.publicOperations ?? []),
+    ...data.endpoints,
+  ]
   for (const endpoint of searchEndpoints) {
     const summary =
       'description' in endpoint ? endpoint.description : endpoint.summary
-    if (matches(`${endpoint.method} ${endpoint.path} ${summary}`)) {
+    const metadata = operationMetadata.find(
+      (candidate) =>
+        candidate.method === endpoint.method &&
+        candidate.path.replaceAll(/\{[^}]+\}/g, '{}') ===
+          endpoint.path.replaceAll(/\{[^}]+\}/g, '{}')
+    )
+    if (
+      matches(
+        `${endpoint.method} ${endpoint.path} ${metadata?.operationId ?? ''} ${summary}`
+      )
+    ) {
       const contract = publicApiEndpoints.find(
         (candidate) =>
           candidate.method === endpoint.method &&

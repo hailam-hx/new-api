@@ -24,12 +24,22 @@ const root = path.resolve('..')
 const normalize = (value) =>
   value.replaceAll(/:[^/]+|\*[^/]+|\{[^}]+\}/g, '{}').replace(/\/$/, '')
 const specs = await Promise.all(
-  ['relay', 'api'].map(async (name) => ({
+  ['relay', 'api', 'public'].map(async (name) => ({
     name,
     spec: JSON.parse(
       await fs.readFile(path.join(root, 'docs/openapi', `${name}.json`), 'utf8')
     ),
   }))
+)
+const publicSpec = specs.find((entry) => entry.name === 'public').spec
+const conditionalPublicKeys = new Set(
+  Object.entries(publicSpec.paths).flatMap(([url, item]) =>
+    Object.entries(item)
+      .filter(([, operation]) =>
+        operation['x-implementation']?.startsWith('plugins/tasks/')
+      )
+      .map(([method]) => `${method.toUpperCase()} ${normalize(url)}`)
+  )
 )
 const operations = new Map()
 for (const { name, spec } of specs) {
@@ -99,6 +109,7 @@ for (const line of raw.trim().split('\n')) {
     handler:
       handler.match(/controller\.\w+/g)?.join(', ') || handler.slice(0, 180),
     summary: found?.operation.summary || '',
+    operationId: found?.operation.operationId || '',
     schemaSource: found ? `docs/openapi/${found.name}.json` : '',
     parameters: found
       ? resolve(
@@ -182,6 +193,7 @@ for (const source of [
 const excludedOpenApi = [...operations.keys()]
   .filter(
     (key) =>
+      !conditionalPublicKeys.has(key) &&
       !endpoints.some(
         (item) => key === `${item.method} ${normalize(item.path)}`
       )
@@ -204,7 +216,21 @@ for (const directory of (
   }
   taskPlugins.push({ key, name, version, source })
 }
-const result = `${JSON.stringify({ endpoints, errors, excludedOpenApi, taskPlugins }, null, 2)}\n`
+const publicOperations = Object.entries(publicSpec.paths).flatMap(
+  ([url, item]) =>
+    Object.entries(item)
+      .filter(([method]) =>
+        ['get', 'post', 'head', 'put', 'patch', 'delete', 'options'].includes(
+          method
+        )
+      )
+      .map(([method, operation]) => ({
+        method: method.toUpperCase(),
+        path: url,
+        operationId: operation.operationId,
+      }))
+)
+const result = `${JSON.stringify({ endpoints, errors, excludedOpenApi, taskPlugins, publicOperations }, null, 2)}\n`
 const destination = 'src/features/documentation/generated/reference.json'
 await fs.mkdir(path.dirname(destination), { recursive: true })
 if (process.argv.includes('--check')) {

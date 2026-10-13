@@ -208,6 +208,16 @@ export const developerSemantics = [
         body: 'Honor Retry-After when supplied. Otherwise apply exponential backoff with jitter, a maximum delay and a small attempt budget. Do not loop on validation, model pricing or quota errors. General relay and task submission endpoints do not establish a universal Idempotency-Key contract. Asynchronous speech specifically requires that header; follow its endpoint contract instead of assuming the same behavior elsewhere.',
       },
       {
+        id: 'retry-matrix',
+        title: 'Retry Matrix',
+        body: '| Error class | Next action |\n| --- | --- |\n| Validation 4xx | Correct the request; do not retry unchanged. |\n| 401 / 403 authentication or access | Fix credentials or permissions first. |\n| Balance or quota exhausted | Restore allowance before submitting again. |\n| 404 | Verify the route or owned resource; do not retry blindly. |\n| 409 artifact_not_ready | Poll the existing task; do not create another. |\n| 429 | Back off with jitter; honor Retry-After only when present. |\n| Transient 5xx or transport failure | Bounded retries for reads; mutation acceptance may be unknown. |\n| Async timeout / task_timeout | Check the saved task first. |',
+      },
+      {
+        id: 'request-correlation',
+        title: 'Request Correlation',
+        body: 'Keep X-Oneapi-Request-Id for troubleshooting and save task IDs separately. A request ID is not an idempotency key. Error codes such as api_not_implemented, artifact_not_ready and task_timeout describe different recovery paths. Do not automatically retry paid mutations after ambiguous acceptance; no public request-correlated final-usage endpoint is available.',
+      },
+      {
         id: 'async-recovery',
         title: 'Recovering an Async Request',
         body: 'Save the public task or response ID as soon as submission succeeds. After a timeout or disconnect, retrieve that resource and check its status before creating another request. Plugin-backed image requests can return 504 task_timeout while the durable task continues. Artifact content can return 409 artifact_not_ready until the task succeeds. If no ID was received, keep the request ID and consult Usage Logs or the administrator before repeating costly work.',
@@ -281,6 +291,104 @@ export const developerSemantics = [
         id: 'versions',
         title: 'Versions and Upgrade Notes',
         body: 'The /v1 and /v1beta prefixes identify protocol route families; they do not establish a repository-wide compatibility or deprecation schedule. Task Plugin API version 1 and billing expression versions are separate contracts. Pin your deployment version and review its release notes before upgrading. The repository README links to https://github.com/QuantumNous/new-api/releases. Existing OpenAPI files are partial references and should be checked against the implemented endpoint inventory.',
+      },
+    ],
+  },
+  {
+    slug: 'developer-versioning',
+    title: 'API Versioning',
+    description:
+      'Plan compatible integrations and understand API lifecycle labels.',
+    sources: [
+      'dto/developer_catalog.go',
+      'dto/developer_tasks.go',
+      'model/task.go',
+      'docs/openapi/public.json',
+    ],
+    sections: [
+      {
+        id: 'namespace',
+        title: 'Namespace and Stability',
+        body: '/v1 is the current public API namespace. It does not imply a global stability commitment or SLA. The initial published contract uses a conservative experimental default pending explicit promotion. Lifecycle labels are stable, beta, experimental or deprecated; changes to classification require an explicit announcement. Plugin availability also depends on deployment and model configuration.',
+      },
+      {
+        id: 'compatibility',
+        title: 'Forward Compatibility',
+        body: 'Ignore unknown response fields, especially catalog, capabilities and task metadata. Removing a required response field, adding a required request field, changing field semantics or removing an endpoint is a breaking change candidate. Treat response enum additions as compatibility events: handle unknown values safely instead of failing exhaustive parsing. An unknown task status must not be treated as success.',
+      },
+      {
+        id: 'catalog-version',
+        title: 'Catalog Schema Version',
+        body: 'Catalog schema_version "1.0" is separate from the HTTP path version. Additive catalog fields can remain within 1.x; breaking catalog structure requires a new schema major. Beta and experimental contracts can change; review the API Changelog and deployment release notes before upgrading.',
+      },
+      {
+        id: 'deprecation',
+        title: 'Deprecation Lifecycle',
+        body: 'Legacy means available but discouraged for new integrations; deprecated means a retirement plan has been announced; removed means unavailable. Deprecation notices should include announcement date, affected API or model, reason, replacement, migration guidance and shutdown date. If undecided, the date must be marked not scheduled. Deprecation alone does not remove an endpoint. No universal notice period is promised; OpenAPI deprecated is set only after an announcement.',
+      },
+    ],
+  },
+  {
+    slug: 'developer-changelog',
+    title: 'API Changelog',
+    description: 'Developer-facing contract changes from the current baseline.',
+    sources: [
+      'docs/openapi/public.json',
+      'controller/developer_catalog.go',
+      'controller/developer_balance.go',
+      'controller/developer_usage.go',
+      'controller/developer_tasks.go',
+    ],
+    sections: [
+      {
+        id: 'unreleased',
+        title: 'Unreleased',
+        body: 'Current baseline: public catalog and key balance, retained key usage, and key-owned task list and detail. Contract documentation now includes versioning, deprecation guidance and recipes. This entry has no release date and does not reconstruct older release history.',
+      },
+      {
+        id: 'change-categories',
+        title: 'Change Categories',
+        body: 'Future entries distinguish Added, Changed, Deprecated, Removed and Fixed contract behavior. Breaking and potentially breaking changes should include migration guidance. No endpoint deprecation or shutdown date is announced by this baseline.',
+      },
+    ],
+  },
+  {
+    slug: 'developer-recipes',
+    title: 'Recipes',
+    description:
+      'Five public API workflows for discovery, allowance, reporting and tasks.',
+    sources: [
+      'dto/developer_catalog.go',
+      'dto/developer_balance.go',
+      'controller/developer_usage.go',
+      'controller/developer_tasks.go',
+      'controller/video_proxy.go',
+    ],
+    sections: [
+      {
+        id: 'discover',
+        title: 'Discover and Call a Model',
+        body: 'Read the catalog with the same key used for inference. Select a model that lists POST /v1/chat/completions, then submit once. Catalog routing is configuration metadata, not a guarantee of upstream availability. These cURL examples use environment variables and jq; set NEW_API_KEY securely.',
+      },
+      {
+        id: 'balance',
+        title: 'Check Balance Before a Job',
+        body: 'Check allowance before a costly batch, rather than polling before every request. Compare remaining with your estimated cost using decimal arithmetic in the returned unit. Only unlimited=true permits null total and remaining; null is not zero. If allowance is sufficient, submit the selected job once. This check does not reserve funds or guarantee acceptance.',
+      },
+      {
+        id: 'usage',
+        title: 'Report Recorded Usage',
+        body: 'Without filters, usage covers approximately the last 30 days. Optional start and end are Unix seconds for a nonempty window of at most 31 days; end is exclusive. An optional model filter is an exact model ID. Recorded events can be partial, delayed or refunded later; this is not request-correlated final usage or a complete request count.',
+      },
+      {
+        id: 'video',
+        title: 'Create and Recover a Video Task',
+        body: 'Choose a configured video model, submit once and save the returned id. Poll public task metadata with a bounded wait. On completed, fetch video content through its video artifact endpoint; task metadata contains no artifact URL. On failed, inspect the error. Unknown status is not completion. A timeout does not prove failure: check the saved task before considering resubmission.',
+      },
+      {
+        id: 'tasks',
+        title: 'List Key-Owned Tasks',
+        body: 'The list contains only tasks owned by the authenticating key, including across pages; another key of the same user does not share this history. limit accepts 1–100 and defaults to 20. When has_more is true, pass the opaque next_cursor unchanged. Missing, foreign and unverified task detail returns indistinguishable 404 responses.',
       },
     ],
   },

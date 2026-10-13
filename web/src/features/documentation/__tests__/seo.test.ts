@@ -357,3 +357,29 @@ it('publishes retained key usage and task ownership semantics before JavaScript 
   expect(semantics).toContain('Recorded Key Usage')
   expect(semantics).toContain('not a complete request count')
 })
+
+it('publishes all five public recipe code workflows before JavaScript runs', () => {
+  const html = fs.readFileSync(
+    path.join(directory, 'docs/developer-recipes/index.html'),
+    'utf8'
+  )
+  const document = new DOMParser().parseFromString(html, 'text/html')
+  for (const [section, requiredCode] of [
+    ['discover', '/v1/catalog'],
+    ['balance', 'Decimal'],
+    ['usage', 'start=$START_UNIX_SECONDS'],
+    ['video', '/v1/tasks/$task_id'],
+    ['tasks', 'next_cursor'],
+  ]) {
+    expect(
+      [...document.querySelectorAll(`#${section} pre code`)]
+        .map((block) => block.textContent)
+        .join('\n')
+    ).toContain(requiredCode)
+  }
+  const code = [...document.querySelectorAll('pre code')]
+    .map((block) => block.textContent)
+    .join('\n')
+  expect(code).not.toContain('/api/')
+  expect(code).not.toContain('--retry')
+})

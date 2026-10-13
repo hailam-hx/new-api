@@ -21,6 +21,7 @@ import { describe, expect, it } from 'vitest'
 import type { PricingModel } from '@/features/pricing/types'
 
 import { articles, beginnerArticles, groups, getArticle } from '../content'
+import { buildDeveloperRecipe } from '../developer-recipe-code'
 import reference from '../generated/reference.json'
 import { searchDocumentation, filterCatalog, buildQuickstart } from '../lib'
 
@@ -135,6 +136,124 @@ it('finds shipped DFLOP task plugins without asserting deployment availability o
   expect(
     reference.taskPlugins.every((plugin) =>
       plugin.source.startsWith('plugins/tasks/')
+    )
+  ).toBe(true)
+})
+
+it('finds a public operation by operationId without including management operations', () => {
+  const data = {
+    ...reference,
+    publicOperations: [],
+    endpoints: reference.endpoints.map((endpoint) => ({
+      ...endpoint,
+      operationId: endpoint.path === '/v1/catalog' ? 'getCatalog' : undefined,
+    })),
+  }
+  expect(
+    searchDocumentation('getCatalog', articles, data, [], (key) => key)
+  ).toContainEqual({
+    title: 'GET /v1/catalog',
+    detail: 'API Reference',
+    href: '/docs/api-reference-models#get--v1-catalog',
+  })
+  const management = {
+    ...reference,
+    publicOperations: [],
+    endpoints: reference.endpoints.map((endpoint) => ({
+      ...endpoint,
+      operationId: endpoint.path.startsWith('/api/')
+        ? 'managementOnly'
+        : undefined,
+    })),
+  }
+  expect(
+    searchDocumentation(
+      'managementOnly',
+      articles,
+      management,
+      [],
+      (key) => key
+    )
+  ).toEqual([])
+})
+
+it('finds lifecycle policies, recipes and public error guidance in ordinary docs search', () => {
+  for (const [query, path] of [
+    ['API Versioning', '/docs/developer-versioning'],
+    ['API Changelog', '/docs/developer-changelog'],
+    ['Recipes', '/docs/developer-recipes'],
+    ['artifact_not_ready', '/docs/developer-errors-retries'],
+  ]) {
+    expect(
+      searchDocumentation(query, articles, reference, [], (key) => key).some(
+        (result) => result.href.startsWith(path)
+      )
+    ).toBe(true)
+  }
+})
+
+it('builds public workflows with a configured base URL and no automatic mutation retries', () => {
+  const discovery = buildDeveloperRecipe(
+    'discover',
+    'https://gateway.example/prefix/'
+  ).code
+  expect(discovery).toContain('https://gateway.example/prefix')
+  expect(discovery).toContain('/v1/catalog')
+  expect(discovery).toContain('.endpoints[]')
+  expect(discovery).toContain('/v1/chat/completions')
+  const video = buildDeveloperRecipe('video', 'https://gateway.example').code
+  expect(video).toContain('/v1/tasks/$task_id')
+  expect(video).toContain('/v1/videos/$task_id/content')
+  expect(video).toContain('completed')
+  expect(video).toContain('failed')
+  for (const section of ['discover', 'balance', 'usage', 'video', 'tasks']) {
+    const code = buildDeveloperRecipe(section, 'https://gateway.example').code
+    expect(code).not.toMatch(/--retry|\/api\/|Idempotency-Key/)
+    expect(code).toContain('NEW_API_KEY')
+  }
+  expect(
+    buildDeveloperRecipe('balance', 'https://gateway.example').code
+  ).toContain('Decimal')
+  expect(
+    buildDeveloperRecipe('balance', 'https://gateway.example').code
+  ).toContain('unlimited')
+  expect(
+    buildDeveloperRecipe('tasks', 'https://gateway.example').code
+  ).toContain('next_cursor')
+})
+
+it('finds native operationIds from the public contract and normalizes task parameter names', () => {
+  const data = {
+    ...reference,
+    publicOperations: [
+      {
+        method: 'GET',
+        path: '/v1/tasks/{task_id}',
+        operationId: 'readOwnedTask',
+      },
+      {
+        method: 'POST',
+        path: '/v1/videos',
+        operationId: 'submitConfiguredVideo',
+      },
+    ],
+  }
+  expect(
+    searchDocumentation('readOwnedTask', articles, data, [], (key) => key)
+  ).toContainEqual({
+    title: 'GET /v1/tasks/{key}',
+    detail: 'API Reference',
+    href: '/docs/api-reference-tasks#get--v1-tasks--key-',
+  })
+  expect(
+    searchDocumentation(
+      'submitConfiguredVideo',
+      articles,
+      data,
+      [],
+      (key) => key
+    ).some((result) =>
+      result.href.startsWith('/docs/api-reference-video#post--v1-videos')
     )
   ).toBe(true)
 })

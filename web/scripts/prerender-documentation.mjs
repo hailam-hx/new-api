@@ -33,6 +33,7 @@ import {
   groups,
   translateDocSection,
 } from '../src/features/documentation/content.ts'
+import { buildDeveloperRecipe } from '../src/features/documentation/developer-recipe-code.ts'
 import {
   buildAPIKeyExample,
   buildChatExample,
@@ -295,6 +296,19 @@ for (const article of data.articles) {
             .join('')}</div>`
         }
         return `<section id="${section.id}" class="mt-8 scroll-mt-40"><h2 class="mb-4 text-xl font-semibold">${escape(translations.t(section.title))}</h2>${body}</section>`
+      }
+      if (article.slug === 'developer-recipes') {
+        const example = buildDeveloperRecipe(section.id, 'YOUR_API_BASE_URL')
+        const blocks = [example.curl, example.code].filter(Boolean)
+        const body =
+          paragraph +
+          blocks
+            .map(
+              (code) =>
+                `<pre class="overflow-x-auto"><code>${escape(code)}</code></pre>`
+            )
+            .join('')
+        return `<section id="${section.id}" class="mt-8 scroll-mt-40"><h2 class="mb-4 text-xl font-semibold"><a href="#${section.id}">${escape(translations.t(section.title))}</a></h2>${body}</section>`
       }
       if (article.slug === 'api-key') {
         let body = paragraph
