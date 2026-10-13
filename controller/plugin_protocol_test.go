@@ -1867,3 +1867,76 @@ func TestServeTaskPluginImageProtocolDisconnectDuringSubmissionKeepsDurableSettl
 	assert.False(t, c.Writer.Written())
 	assert.Empty(t, recorder.Body.String())
 }
+
+func TestRespondPluginProtocolSubmissionErrorKeepsHostIdempotencyCodes(t *testing.T) {
+	for _, code := range []string{"invalid_idempotency_key", "idempotency_request_unsupported", "idempotency_key_conflict", "idempotency_in_progress", "idempotency_indeterminate", "idempotency_replay_unavailable", "idempotency_storage_unavailable"} {
+		t.Run(code, func(t *testing.T) {
+			c, recorder := newPluginProtocolTestContext(false, false)
+			status := http.StatusConflict
+			if code == "invalid_idempotency_key" || code == "idempotency_request_unsupported" {
+				status = http.StatusBadRequest
+			}
+			if code == "idempotency_storage_unavailable" {
+				status = http.StatusServiceUnavailable
+			}
+			respondPluginProtocolSubmissionError(c, &dto.TaskError{Code: code, StatusCode: status, Message: "host-owned explanation", LocalError: true})
+			assert.Equal(t, status, recorder.Code)
+			assert.Contains(t, recorder.Body.String(), `"code":"`+code+`"`)
+		})
+	}
+}
+
+func TestBackgroundResponseIdempotencyReplaysReadOnlyAndConflicts(t *testing.T) {
+	previousConsume := common.LogConsumeEnabled
+	common.LogConsumeEnabled = false
+	t.Cleanup(func() { common.LogConsumeEnabled = previousConsume })
+	events := []string{}
+	db := setupTaskSubmissionDatabase(t, true, &events)
+	require.NoError(t, db.AutoMigrate(&model.TaskIdempotency{}, &model.User{}, &model.Channel{}))
+	t.Cleanup(func() {
+		require.NoError(t, db.Migrator().DropTable(&model.TaskIdempotency{}, &model.User{}, &model.Channel{}))
+	})
+	require.NoError(t, db.Create(&model.User{Id: 71, Username: "response-owner", AffCode: "response-owner"}).Error)
+	require.NoError(t, db.Create(&model.Channel{Id: 1}).Error)
+	pinned := compilePluginProtocolTestEndpoint(t, "background-idempotency", `export const protocols={openai_responses:{renderEvents:function(){throw new Error("background must not render events")},renderFinal:function(){throw new Error("pending background must not render final")}}};`)
+	deps := pluginProtocolTestDeps()
+	submits := 0
+	deps.submit = func(c *gin.Context, info *relaycommon.RelayInfo) (*taskSubmissionOutcome, *dto.TaskError) {
+		info.LockedChannel = &model.Channel{Id: 1}
+		info.ChannelMeta = &relaycommon.ChannelMeta{ChannelId: 1}
+		info.Billing = &taskSubmissionTestBilling{events: &events}
+		return executeTaskSubmissionWith(c, info, func(c *gin.Context, info *relaycommon.RelayInfo) (*relay.TaskSubmitResult, *dto.TaskError) {
+			submits++
+			if err := service.MarkTaskIdempotencyOutbound(c, info); err != nil {
+				return nil, service.TaskErrorWrapperLocal(err, "barrier", 503)
+			}
+			return &relay.TaskSubmitResult{Platform: constant.TaskPlatform(pinned.Plugin.Meta.Key), UpstreamTaskID: "one-task"}, nil
+		})
+	}
+	call := func(body string) *httptest.ResponseRecorder {
+		c, recorder := newPluginProtocolTestContext(false, false)
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
+		c.Request.Header.Set("Idempotency-Key", "background-operation")
+		setProtocolRequestBackground(c, true)
+		serveTaskPluginProtocol(c, pinned, deps)
+		return recorder
+	}
+	first := call(`{"model":"video-model","background":true}`)
+	require.Equal(t, http.StatusOK, first.Code, first.Body.String())
+	var stored model.Task
+	require.NoError(t, db.First(&stored).Error)
+	assert.True(t, stored.PrivateData.ResponsesBackground)
+	stored.PrivateData.PluginState = []byte(`{"poll_revision":7}`)
+	require.NoError(t, db.Model(&stored).Update("private_data", stored.PrivateData).Error)
+	writes := 0
+	require.NoError(t, db.Callback().Update().Before("gorm:update").Register("test:reject_replay_writes", func(tx *gorm.DB) { writes++; tx.AddError(errors.New("replay attempted a durable write")) }))
+	replayed := call(`{"background":true,"model":"video-model"}`)
+	require.Equal(t, http.StatusOK, replayed.Code, replayed.Body.String())
+	assert.JSONEq(t, first.Body.String(), replayed.Body.String())
+	assert.Equal(t, 1, submits)
+	assert.Zero(t, writes)
+	conflict := call(`{"background":true,"model":"video-model","input":"different"}`)
+	assert.Equal(t, http.StatusConflict, conflict.Code)
+	assert.Contains(t, conflict.Body.String(), `"code":"idempotency_key_conflict"`)
+	assert.Equal(t, 1, submits)
+}

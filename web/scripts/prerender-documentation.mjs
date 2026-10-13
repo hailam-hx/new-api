@@ -523,6 +523,12 @@ for (const article of data.articles) {
   await fs.mkdir(path.dirname(target), { recursive: true })
   await fs.writeFile(target, html)
 }
+// Publish the validated source contract beside the docs, without a new API route.
+await fs.mkdir(path.join(directory, 'docs-contracts'), { recursive: true })
+await fs.copyFile(
+  '../docs/asyncapi/public.yaml',
+  path.join(directory, 'docs-contracts/responses-websocket.yaml')
+)
 // Sitemap needs absolute URLs. Do not publish a fake deployment hostname.
 if (origin) {
   await fs.writeFile(

@@ -442,6 +442,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "requestBody": {
@@ -457,7 +463,20 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency."
+          }
+        ]
       },
       "get": {
         "operationId": "getV1Responses",
@@ -628,6 +647,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "requestBody": {
@@ -649,7 +674,7 @@
             "name": "Idempotency-Key",
             "in": "header",
             "required": false,
-            "description": "Required when the selected task plugin is DFLOP. A request ID is not a substitute. This header does not provide a universal idempotency/replay guarantee.",
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency.",
             "schema": {
               "type": "string",
               "minLength": 1,
@@ -708,6 +733,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "requestBody": {
@@ -730,7 +761,7 @@
             "name": "Idempotency-Key",
             "in": "header",
             "required": false,
-            "description": "Required when the selected task plugin is DFLOP. A request ID is not a substitute. This header does not provide a universal idempotency/replay guarantee.",
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency.",
             "schema": {
               "type": "string",
               "minLength": 1,
@@ -789,6 +820,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "requestBody": {
@@ -815,7 +852,7 @@
             "name": "Idempotency-Key",
             "in": "header",
             "required": false,
-            "description": "Required when the selected task plugin is DFLOP. A request ID is not a substitute. This header does not provide a universal idempotency/replay guarantee.",
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency.",
             "schema": {
               "type": "string",
               "minLength": 1,
@@ -1065,6 +1102,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "parameters": [
@@ -1077,7 +1120,7 @@
               "minLength": 1,
               "maxLength": 200
             },
-            "description": "Required for claimed asynchronous speech: 1–200 printable ASCII characters without spaces. This is not a general same-result replay guarantee."
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency."
           }
         ],
         "requestBody": {
@@ -2325,6 +2368,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "parameters": [
@@ -2341,7 +2390,7 @@
             "name": "Idempotency-Key",
             "in": "header",
             "required": false,
-            "description": "Required when the selected task plugin is DFLOP. A request ID is not a substitute. This header does not provide a universal idempotency/replay guarantee.",
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency.",
             "schema": {
               "type": "string",
               "minLength": 1,
@@ -5513,6 +5562,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "requestBody": {
@@ -5539,7 +5594,7 @@
             "name": "Idempotency-Key",
             "in": "header",
             "required": false,
-            "description": "Required when the selected task plugin is DFLOP. A request ID is not a substitute. This header does not provide a universal idempotency/replay guarantee.",
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency.",
             "schema": {
               "type": "string",
               "minLength": 1,
@@ -5598,6 +5653,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "requestBody": {
@@ -5624,7 +5685,7 @@
             "name": "Idempotency-Key",
             "in": "header",
             "required": false,
-            "description": "Required when the selected task plugin is DFLOP. A request ID is not a substitute. This header does not provide a universal idempotency/replay guarantee.",
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency.",
             "schema": {
               "type": "string",
               "minLength": 1,
@@ -5749,6 +5810,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "parameters": [
@@ -5764,7 +5831,7 @@
             "name": "Idempotency-Key",
             "in": "header",
             "required": false,
-            "description": "Required when the selected task plugin is DFLOP. A request ID is not a substitute. This header does not provide a universal idempotency/replay guarantee.",
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency.",
             "schema": {
               "type": "string",
               "minLength": 1,
@@ -5896,6 +5963,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "requestBody": {
@@ -5914,7 +5987,20 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency."
+          }
+        ]
       }
     },
     "/ali/api/v1/services/aigc/image-generation/generation": {
@@ -5965,6 +6051,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "requestBody": {
@@ -5983,7 +6075,20 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency."
+          }
+        ]
       }
     },
     "/ali/api/v1/services/aigc/text2image/image-synthesis": {
@@ -6034,6 +6139,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "requestBody": {
@@ -6052,7 +6163,20 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency."
+          }
+        ]
       }
     },
     "/ali/api/v1/services/aigc/image2image/image-synthesis": {
@@ -6103,6 +6227,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "requestBody": {
@@ -6121,7 +6251,20 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency."
+          }
+        ]
       }
     },
     "/ali/api/v1/services/aigc/video-generation/video-synthesis": {
@@ -6172,6 +6315,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "requestBody": {
@@ -6190,7 +6339,20 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency."
+          }
+        ]
       }
     },
     "/ali/api/v1/services/aigc/image2video/video-synthesis": {
@@ -6241,6 +6403,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "requestBody": {
@@ -6259,7 +6427,20 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency."
+          }
+        ]
       }
     },
     "/ali/api/v1/tasks/{task_id}": {
@@ -6372,6 +6553,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "requestBody": {
@@ -6393,7 +6580,7 @@
             "name": "Idempotency-Key",
             "in": "header",
             "required": true,
-            "description": "Required DFLOP billing replay identity: 1–200 printable ASCII characters with no surrounding whitespace. Claimed asynchronous speech separately forbids internal spaces. Duplicate use fails closed with a manual-resolution billing error; no same-result replay contract or public replay TTL is promised.",
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency.",
             "schema": {
               "type": "string",
               "minLength": 1,
@@ -6449,6 +6636,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "requestBody": {
@@ -6471,7 +6664,7 @@
             "name": "Idempotency-Key",
             "in": "header",
             "required": true,
-            "description": "Required DFLOP billing replay identity: 1–200 printable ASCII characters with no surrounding whitespace. Claimed asynchronous speech separately forbids internal spaces. Duplicate use fails closed with a manual-resolution billing error; no same-result replay contract or public replay TTL is promised.",
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency.",
             "schema": {
               "type": "string",
               "minLength": 1,
@@ -6586,6 +6779,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "requestBody": {
@@ -6607,7 +6806,7 @@
             "name": "Idempotency-Key",
             "in": "header",
             "required": true,
-            "description": "Required DFLOP billing replay identity: 1–200 printable ASCII characters with no surrounding whitespace. Claimed asynchronous speech separately forbids internal spaces. Duplicate use fails closed with a manual-resolution billing error; no same-result replay contract or public replay TTL is promised.",
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency.",
             "schema": {
               "type": "string",
               "minLength": 1,
@@ -6718,6 +6917,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "requestBody": {
@@ -6739,7 +6944,7 @@
             "name": "Idempotency-Key",
             "in": "header",
             "required": true,
-            "description": "Required DFLOP billing replay identity: 1–200 printable ASCII characters with no surrounding whitespace. Claimed asynchronous speech separately forbids internal spaces. Duplicate use fails closed with a manual-resolution billing error; no same-result replay contract or public replay TTL is promised.",
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency.",
             "schema": {
               "type": "string",
               "minLength": 1,
@@ -6850,6 +7055,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "requestBody": {
@@ -6871,7 +7082,7 @@
             "name": "Idempotency-Key",
             "in": "header",
             "required": true,
-            "description": "Required DFLOP billing replay identity: 1–200 printable ASCII characters with no surrounding whitespace. Claimed asynchronous speech separately forbids internal spaces. Duplicate use fails closed with a manual-resolution billing error; no same-result replay contract or public replay TTL is promised.",
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency.",
             "schema": {
               "type": "string",
               "minLength": 1,
@@ -6982,6 +7193,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "requestBody": {
@@ -7003,7 +7220,7 @@
             "name": "Idempotency-Key",
             "in": "header",
             "required": true,
-            "description": "Required DFLOP billing replay identity: 1–200 printable ASCII characters with no surrounding whitespace. Claimed asynchronous speech separately forbids internal spaces. Duplicate use fails closed with a manual-resolution billing error; no same-result replay contract or public replay TTL is promised.",
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency.",
             "schema": {
               "type": "string",
               "minLength": 1,
@@ -7116,6 +7333,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "requestBody": {
@@ -7136,7 +7359,20 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency."
+          }
+        ]
       }
     },
     "/doubao/api/v3/contents/generations/tasks/{task_id}": {
@@ -7255,6 +7491,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "requestBody": {
@@ -7270,7 +7512,20 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency."
+          }
+        ]
       }
     },
     "/jimeng/": {
@@ -7315,6 +7570,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "parameters": [
@@ -7339,6 +7600,17 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency."
           }
         ],
         "requestBody": {
@@ -7405,6 +7677,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "requestBody": {
@@ -7420,7 +7698,20 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency."
+          }
+        ]
       }
     },
     "/kling/v1/videos/image2video": {
@@ -7471,6 +7762,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "requestBody": {
@@ -7486,7 +7783,20 @@
               }
             }
           }
-        }
+        },
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency."
+          }
+        ]
       }
     },
     "/kling/v1/videos/text2video/{task_id}": {
@@ -7665,6 +7975,12 @@
           },
           "500": {
             "description": "Server or upstream failure; a failed HTTP response does not guarantee a paid job was not submitted."
+          },
+          "409": {
+            "description": "Task-backed idempotency conflict, in-progress claim, uncertain acceptance or unavailable retained result. Do not change the key to bypass uncertainty. Native plugin error envelopes may differ; HTTP status is authoritative."
+          },
+          "503": {
+            "description": "Idempotency storage unavailable; no new upstream submission is admitted when the claim cannot be established. Inspect the existing task before retrying an ambiguous paid operation."
           }
         },
         "parameters": [
@@ -7675,6 +7991,17 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "Optional for task-backed submissions; required by DFLOP and asynchronous speech contracts. Use 1–200 printable ASCII characters without surrounding whitespace; do not put secrets here. Scope: authenticated API key, method and concrete operation path. Same key and equivalent JSON/multipart payload replay the same retained, owned task without another submission or charge. Changed payload returns 409 idempotency_key_conflict; concurrent/uncertain attempts return 409 idempotency_in_progress/idempotency_indeterminate. Discarded immediate results return idempotency_replay_unavailable without resubmitting. Minimum retention is 72 hours and 48 hours after task completion; active/uncertain records are not automatically removed. A funding attempt that cannot be reconciled keeps the key blocked for operator recovery; do not bypass it with a new key. Normal authentication and allowance still apply. Only the task submission pipeline supports this guarantee; synchronous relay fallback and WebSocket do not. JSON is limited to 16 MiB, depth 32 and 65536 nodes; multipart to 128 MiB, 128 parts and 1 MiB per field. See /docs/developer-idempotency."
           }
         ],
         "requestBody": {

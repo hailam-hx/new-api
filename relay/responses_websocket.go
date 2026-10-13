@@ -96,6 +96,7 @@ type responsesWSSession struct {
 	requestID      string
 	nextEventIndex int
 	workers        sync.WaitGroup
+	activity       chan struct{}
 
 	clientWriteMu sync.Mutex
 	targetWriteMu sync.Mutex
@@ -119,7 +120,7 @@ type responsesWSSession struct {
 
 func ResponsesWebSocketHelper(c *gin.Context, client *websocket.Conn, runner ResponsesWSRequestRunner) *types.NewAPIError {
 	ctx, cancel := context.WithCancel(c.Request.Context())
-	s := &responsesWSSession{ctx: ctx, cancel: cancel, client: client, runner: runner,
+	s := &responsesWSSession{ctx: ctx, cancel: cancel, client: client, runner: runner, activity: make(chan struct{}, 1),
 		request: c.Request.Clone(ctx), requestID: c.GetString(common.RequestIdKey)}
 	if s.requestID == "" {
 		s.requestID = common.NewRequestId()
@@ -133,12 +134,37 @@ func ResponsesWebSocketHelper(c *gin.Context, client *websocket.Conn, runner Res
 		s.shutdown()
 		s.workers.Wait()
 	}()
+	// Bound connections waiting for their first or next request. Active calls
+	// own their upstream idle timeout and billing finalization separately.
+	idleTimeout := time.Duration(appconstant.StreamingTimeout) * time.Second
+	if idleTimeout <= 0 {
+		idleTimeout = 300 * time.Second
+	}
+	s.workers.Go(func() {
+		idle := time.NewTimer(idleTimeout)
+		defer idle.Stop()
+		for {
+			select {
+			case <-s.activity:
+				idle.Reset(idleTimeout)
+			case <-idle.C:
+				if s.getCurrent() == nil {
+					s.shutdown()
+					return
+				}
+				idle.Reset(idleTimeout)
+			case <-s.ctx.Done():
+				return
+			}
+		}
+	})
 
 	for {
 		_, message, err := client.ReadMessage()
 		if err != nil {
 			return nil
 		}
+		s.recordActivity()
 		envelope, streamID, err := parseResponsesWSEnvelope(message)
 		eventType := envelope.Type
 		if err != nil {
@@ -204,6 +230,7 @@ func (s *responsesWSSession) runRequest(state *responsesWSCallState, message []b
 		close(state.done)
 		s.stateMu.Unlock()
 		s.clientWriteMu.Unlock()
+		s.recordActivity()
 		if state.closeAfter {
 			s.shutdown()
 		}
@@ -735,7 +762,18 @@ func (s *responsesWSSession) writeClient(kind int, message []byte) error {
 	if err := s.client.SetWriteDeadline(time.Now().Add(responsesWSWriteTimeout)); err != nil {
 		return err
 	}
-	return s.client.WriteMessage(kind, message)
+	err := s.client.WriteMessage(kind, message)
+	if err == nil {
+		s.recordActivity()
+	}
+	return err
+}
+
+func (s *responsesWSSession) recordActivity() {
+	select {
+	case s.activity <- struct{}{}:
+	default:
+	}
 }
 
 func (s *responsesWSSession) sendError(eventID, streamID string, apiErr *types.NewAPIError) {

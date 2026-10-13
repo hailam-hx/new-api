@@ -270,3 +270,563 @@ Tracked-file diff (untracked new files are listed above, not included by git dif
  web/src/i18n/locales/zh.json                       |    32 +
  21 files changed, 9057 insertions(+), 4938 deletions(-)
 ```
+
+
+---
+
+# HOTX PRODUCTION API HARDENING — PHASE 5 REPORT
+
+Candidate: unstaged working tree on `main`, based on committed Phase 4
+`1fee3b56d8f012ef35b38324ca33ebeb284a1781`. This section supersedes Phase 4
+readiness counts above without replacing its historical audit. Verification uses
+local fixtures, loopback servers and disposable databases. No real provider
+credentials, paid requests, provider network requests, staging, commit or push.
+
+## 1. Git baseline
+
+Preflight `git status`, `git log -1 --oneline`, `git diff --stat`, and `git diff`
+showed a clean Phase 4 baseline before Phase 5 backend work. No stash/reset/discard
+was used. HEAD remains the Phase 4 commit; all changes listed below are uncommitted.
+
+## 2. Retry/idempotency audit
+
+Client resubmission, gateway channel retry and polling are distinct. Existing
+Request Policy, affinity and unkeyed retry behavior remain. A claimed keyed task
+cannot be resubmitted after possible paid outbound or uncertain funding. Polling
+continues the durable task and never acts as a create retry. Accepted plugin SSE
+read/parse/hook errors preserve `NoRetry`. Detailed boundaries and sources:
+[IDEMPOTENCY_IMPLEMENTATION_REPORT.md](IDEMPOTENCY_IMPLEMENTATION_REPORT.md).
+
+## 3. Paid async operations discovered
+
+The shared pipeline serves generic plugin tasks, video aliases/remix, native
+Ali/Doubao/Jimeng/Kling/Suno routes, DFLOP media routes and task-claimed
+Responses/image/speech bridges. The report lists all 27 public POST slots.
+Ordinary built-in image/audio/Responses fallbacks, unclaimed built-in background
+Responses and legacy Midjourney submission are additional mutation branches
+outside this protection. SSE observation/WS creates are not silently treated as
+idempotent task submissions.
+
+## 4. Idempotency scope selected
+
+**PARTIAL overall; 27/27 selected task-backed operation slots protected when
+routed through the shared task pipeline.** This denominator is not all paid
+mutations in every deployment. Optional `Idempotency-Key` is documented with that
+condition. Unsupported fallback branches retain their prior behavior and may
+ignore the header. No new catalog capability, public operation, universal cancel,
+webhook backend or status backend was added. Native APIs remain conditional and
+conservatively beta/experimental.
+
+## 5. Storage/schema decision
+
+Existing task rows cannot atomically claim an operation before they exist, so a
+small primary-database `TaskIdempotency` table stores user/token IDs, operation/key/
+fingerprint hashes, random owner nonce, state, exact resource-row reference and
+timestamps. Unique `(token_id, operation_hash, key_hash)` uses bounded 64-character
+columns and fits MySQL 5.7 utf8mb4 index limits. No raw credential, caller key,
+body, upload or arbitrary provider response is stored. Insert-on-conflict and
+nonce readback establish ownership even with `clientFoundRows=true`.
+
+## 6. Request fingerprint design
+
+Identity binds token, HTTP method, concrete path and SHA-256 key. Fingerprint
+binds method/path/query, `Accept`, supported Content-Type/options and semantic
+body. JSON key order/whitespace and equivalent exact decimal forms normalize
+without float64 loss. Default JSON UTF-8 charset normalizes; other media options
+remain significant. JSON bounds: 16 MiB, depth 32, 65,536 nodes, numeric lexeme
+128 characters and exponent ±4,096; duplicate object members reject. Depth is
+checked iteratively before recursive validation. Multipart binds form fields,
+filename/type and streamed file-byte digests, ignoring transport boundary;
+128 MiB/128 parts/1 MiB field bounds. Unsafe representations return explicit 400,
+never a weak raw/filename-only fingerprint.
+
+## 7. Durable acceptance semantics
+
+`claimed → indeterminate` commits before adaptor outbound; failed marker storage
+prevents outbound. Task insertion plus exact-row binding commits atomically.
+Replay uses current task presentation, not stale serialized provider output.
+Missing, contradictory or discarded resources fail closed. Background metadata is
+persisted initially; replay never rewrites newer poll/private state.
+
+Funding is attempted before outbound marking. Its in-memory flag is set before
+pre-consume, including partial funding failures returning a nil session. Any
+non-durable error after funding/outbound returns a safe 409 indeterminate warning
+and suppresses blind retry. Async refund invocation does not prove completed
+refund. Abandoned claimed/indeterminate/funding-attempted records remain blocked
+for operator reconciliation; they are not automatically reacquired.
+
+## 8. Concurrent duplicate handling
+
+Database unique claim plus nonce CAS permits one owner. Same-key/different-body
+returns 409 conflict; an active claim returns 409 in-progress. Different tokens,
+including two keys for one user, have independent namespaces. Eight simultaneous
+fixture callers produce one claim/submit/reservation/durable task. Exact resource
+ownership is rechecked on replay; no cross-principal existence is disclosed.
+
+## 9. Billing duplicate protection
+
+Durable replay bypasses creation of BillingSession, reservation, settlement,
+consume log and refund. Existing lifecycle owns all refunds. A known unfunded
+preflight error can release its claim; funding-attempted errors retain it and
+cannot run another pre-consume internally. DFLOP provider/journal identity derives
+from claim ID/nonce via the existing request-header injection. Legacy own-token or
+unknown token-zero journals fail closed; proven foreign positive-token journals
+cannot deny another token's independent namespace. No billing formula changed.
+
+## 10. Idempotency test results
+
+Consolidated model/fingerprint/database tests and existing controller/native
+fixtures cover sequential/concurrent replay, conflict, cross-user/token/same-user
+isolation, completed/failed/refunded tasks, terminal expiry, active/abandoned
+retention, unfunded versus uncertain funded failure, JSON/multipart,
+video/plugin/background routes, atomic bind rollback, marker failure and real
+TokenAuth invalid/expired/revoked/exhausted keys. Real local BillingSession
+fixtures count provider posts, wallet/consume logs and reservations. SQLite core
+race suite passes. Broad real-billing race run exposes an existing async cache
+fixture-cleanup race, recorded under limitations rather than hidden.
+
+## 11. SSE endpoints audited
+
+Chat/completions, Responses built-in and task bridge, Gemini native/conversions,
+built-in image and audio SSE, and internal plugin submit SSE. Source-specific
+framing, terminal/error, heartbeat/idle, cancellation, accounting and retry
+matrix: [STREAMING_CONTRACT_REPORT.md](STREAMING_CONTRACT_REPORT.md).
+
+## 12. SSE contract/test results
+
+**PARTIAL.** Fixed exact `[DONE]` matching, fatal callback versus queued EOF
+classification, Responses flush-error handling while preserving observed usage,
+nonpositive idle interval panic and failed-heartbeat reader cleanup. Local
+fixtures cover LF/CRLF, limits, comments/event/id, multiline plugin frames,
+malformed JSON, EOF, slow/idle/cancel and accepted submission no-retry.
+
+The shared provider scanner remains line-oriented; it does not join legal
+multiline SSE or resume by event ID. Its default physical-line cap is 128 MiB.
+Plugin reader is framed, bounded to 1 MiB normalized event/snapshot, with 64 KiB
+delta control and existing structural bounds. A universal parser migration was
+not imposed on provider compatibility. Parallel helper race detects the existing
+global `logger.logCount++` race; serialized helper race passes but does not fix it.
+
+## 13. WebSocket audit
+
+Existing `GET /v1/responses` uses explicit Bearer or browser API-key subprotocol,
+per-create TokenAuth/permission/rate rechecks, one active generation and conditional
+native channel/model/config support. No cookie/query authentication or universal
+model support. Flat/wrapped create, stream identity, cancel/error/terminal frames,
+limits, write bounds and close behavior are source-documented in
+[WEBSOCKET_CONTRACT_REPORT.md](WEBSOCKET_CONTRACT_REPORT.md).
+
+## 14. WebSocket tests
+
+**PASS for the audited local contract.** Added inactive first/next-create timeout
+using existing operator timeout. Local socket peers verify handshake/auth,
+invalid/unknown messages without charge, size, model/channel eligibility,
+revocation, create reuse, correlated errors/cancel, normal/abrupt close, observed
+usage settlement/refund and cleanup with no stale policy callback. Idle regression
+was reproduced before its fix; race-enabled targeted lifecycle tests pass.
+No new WS idempotency/resumption or universal cancellation guarantee.
+
+## 15. AsyncAPI decision
+
+Adopted complementary `docs/asyncapi/public.yaml`, AsyncAPI 3.0.0/WebSocket binding
+0.1.0, for the existing Responses connection only. HTTP stays in OpenAPI. Provider
+server frames remain open where this fork forwards them. No fake webhook/status
+channels. Exact validated YAML is copied to `/docs-contracts/responses-websocket.yaml`
+by prerendering and linked from developer documentation.
+
+## 16. AsyncAPI validation
+
+**PASS:** pinned parser 3.4.0, complete schema/local refs/operations and five
+AJV-validated examples. Four mutations reject unresolved ref, invalid action,
+invalid example and remote ref. External refs reject before resolver use. Parser
+emits an informational 3.1.0 recommendation; no validation errors. Tools live in
+temporary verification directories, with no new application dependency.
+
+## 17. Public OpenAPI changes
+
+**107 callable operations preserved**, zero duplicate IDs, unresolved refs,
+missing operations, backendless operations or internal leaks. Selected 27
+conditional task POST entries describe header/error behavior; 14 existing header
+entries updated, 13 optional headers added. Committed diff: **13 ADDITIVE, zero
+BREAKING/POTENTIALLY_BREAKING**. Error status/prose reviewed separately because
+structural diff is not exhaustive semantic verification. Full validator passes.
+
+## 18. Breaking-change CI
+
+Compatibility baseline now comes from `git show` at committed PR merge base,
+with full history fetched, rather than mutable working-tree snapshot. BREAKING
+fails; ADDITIVE passes; uncertain semantic/schema changes warn for review.
+Deletion, required additions, auth changes, enum/bounds/type/nullability breaks
+have regression mutations. No bypass variable. SDK/AsyncAPI workflow is required
+on pull requests as well as manual dispatch. **Local checks PASS; GitHub-hosted
+workflow was not dispatched** because no commit/push is authorized.
+
+## 19. SDK streaming readiness
+
+| Target | REST | SSE | WebSocket |
+| --- | --- | --- | --- |
+| Python | PASS | MANUAL_RECIPE | MANUAL_RECIPE |
+| TypeScript | PASS | MANUAL_RECIPE | MANUAL_RECIPE |
+
+Both clients generate 107/107 operations; 14 injected REST transport calls prove
+auth/query/path/decimal/null/pagination/binary behavior. TypeScript raw streaming
+transport is verified; Python generator buffers. No generated vendor code is
+handpatched, committed or published. Exact evidence and generator pins:
+[SDK_READINESS_REPORT.md](SDK_READINESS_REPORT.md).
+
+## 20. Python SSE/WebSocket status
+
+**MANUAL_RECIPE:** executable incremental UTF-8/SSE decoder and loopback WS
+create/cancel/close recipe pass. These are reference fixtures, not native generated
+client APIs. Strict whole-package mypy still has exactly 12 generator-template
+`arg-type` errors in `client.py` lines 105/136/246/280 across 428 checked files.
+Byte compilation and minimal typed sample pass; no suppression/handpatch.
+
+## 21. TypeScript SSE/WebSocket status
+
+**MANUAL_RECIPE:** raw generated stream transport plus manual decoder and Node
+`ws` fixture verify split UTF-8/frame boundaries, cancellation and local socket
+lifecycle. Browser recipe uses actual credential subprotocol. Production callers
+must add bounds/timeouts and protocol-specific terminals; do not auto-reconnect or
+resubmit ambiguous paid work. No native generated WS API is claimed.
+
+## 22. Recipe validation
+
+All five actual displayed builders execute against injected local transports:
+model discovery/chat, Decimal balance guard, usage time window, saved video task
+and binary download, task pagination. A jq shim exits 99, proving critical flows
+use Python stdlib JSON/Decimal rather than jq. Failure/unknown status, malformed
+JSON, insufficient balance and quotes/backticks/dollar-sign model IDs are tested.
+Public contract/recipe test file: 26 PASS. No displayed mutation reaches a provider.
+
+## 23. Webhook audit/design
+
+**DESIGN_ONLY.** Existing user-notification webhooks and inbound payment callbacks
+exist; they are not a durable public task-event service. Proposal v1 only includes
+`task.completed`/`task.failed`, token-owned registrations, stable event and delivery
+IDs, version/timestamp, durable outbox, bounded retry/dead-letter/replay/logs and
+minimal payloads. No new backend, OpenAPI webhooks or AsyncAPI event channels.
+See [WEBHOOK_DESIGN_REPORT.md](WEBHOOK_DESIGN_REPORT.md).
+
+## 24. Webhook security design
+
+Separate rotated signing secret, timestamp plus raw-body HMAC/replay window,
+receiver challenge/ownership checks, delivery deduplication and protected
+management. Mandatory future HTTPS/DNS/IP/redirect/metadata/private-network SSRF
+controls, pinned protected egress, size/time/concurrency limits. Existing sender
+optional signing lacks durable IDs/replay window; worker path sends secret as
+Bearer and delegates URL safety. These gaps are reported, not declared fixed.
+
+## 25. Public status audit/design
+
+**DESIGN_ONLY.** `/api/status` is UI bootstrap, protected status/performance probes
+are internal, and configured Uptime Kuma proxy/dashboard exists but can return
+empty success on missing/failing remote sources. Unregistered `/health`/`live`
+may be SPA 200, not health. Future customer page first, machine API only if needed:
+sanitized component/incident/freshness/stale projection; no internal topology,
+raw errors or invented domain. See
+[PUBLIC_STATUS_DESIGN_REPORT.md](PUBLIC_STATUS_DESIGN_REPORT.md).
+
+## 26. Release gate
+
+[PRODUCTION_API_RELEASE_CHECKLIST.md](PRODUCTION_API_RELEASE_CHECKLIST.md) records
+config, contracts, fixtures/security/DB, SDK, links/locales/prerender and deployment
+checks. `.env.example` marks **DOCS_SITE_URL: REQUIRED_FOR_PRODUCTION_DOCS** at build
+time. It remains unset here: relative canonical output and missing absolute
+sitemap origin mean production docs release is not approved. Actual deployment
+TLS/origin/limits/provider capability checks remain operator work.
+
+## 27. Security findings
+
+Token/path-scoped claim, hashed identity, bounded parser/input, auth before
+mutation, exact ownership and safe static error messages are regression-tested.
+No new-key suggestion after ambiguous funding/outbound; retained claims require
+reconciliation. Legacy unknown provenance fails closed. Authentication/session/
+authorization/WebSocket OWASP guidance and ASVS 5.0.0 were reviewed for focused
+controls, not blanket conformance. Existing WS unrestricted Origin with explicit
+API-key policy, credential subprotocol exposure and deployment TLS/connection
+controls remain considerations. No credentials/private bodies are included in
+new diagnostic decisions, source examples or public projections.
+
+## 28. Performance
+
+Claim lookup uses its unique index; replay reads exact primary task ID. JSON
+normalization is bounded; multipart streams digests without persisting uploads.
+Eight-way deterministic concurrency verifies correctness, not throughput/SLA.
+No provider benchmark or production load test was run. A standalone first/replay/
+concurrent performance benchmark remains a follow-up; no fabricated timing claim.
+
+## 29. DB matrix
+
+**PASS on real SQLite 3.50.4, MySQL 5.7.44 and PostgreSQL 15.19.** Disposable local
+MySQL uses `clientFoundRows=true`; PostgreSQL uses loopback SSL-disabled test
+connection. Each verifies fresh migration twice, representative Phase 4 task
+schema upgrade twice preserving existing records, portable unique constraints,
+eight-way atomic claim, token/path isolation, retention/expiry, marker-write
+failure and atomic task bind rollback. Separate configured log handles/prefixes
+are exercised; SQLite also uses a separate physical log file. Existing user dev
+DB/Redis containers are untouched. No ORM/driver upgrade.
+
+Final full command (DSNs supplied only through local fixture environment):
+
+```sh
+GOTOOLCHAIN=go1.25.1 \
+PHASE5_MYSQL_DSN='<loopback MySQL 5.7 DSN; clientFoundRows=true>' \
+PHASE5_POSTGRES_DSN='<loopback PostgreSQL 15 DSN>' \
+CGO_ENABLED=0 go test -p 1 -gcflags=all=-dwarf=false \
+  -ldflags='-s -w' -count=1 -json ./...
+```
+
+The compiler/linker flags avoid macOS debugger metadata limits; tests are not
+filtered. No simultaneous frontend build mutates the embedded `web/dist` during
+this final Go run. Real DB targeted evidence: `/tmp/phase5-idempotency-db.log`;
+final full evidence: `/tmp/hotx-phase5-go125-verified.jsonl`.
+
+## 30. Documentation changes
+
+Added developer Idempotency and WebSocket articles, expanded existing Streaming
+and Errors & Retry, updated Unreleased and five recipes, linked AsyncAPI source
+and SDK fixtures. Existing data-driven renderer/shared Markdown/DocsCode/copy
+components reused; no duplicate generic UI. Beginner sidebar stays unchanged.
+29 new locale entries synchronized in all seven languages through sanctioned
+script; source-generation references updated. 26 developer pages plus protocol/
+reference pages prerender to 163 pages. No historical project attribution removed.
+
+## 31. Files created
+
+- `docs/asyncapi/public.yaml`
+- `docs/internal/IDEMPOTENCY_IMPLEMENTATION_REPORT.md`
+- `docs/internal/PRODUCTION_API_RELEASE_CHECKLIST.md`
+- `docs/internal/PUBLIC_STATUS_DESIGN_REPORT.md`
+- `docs/internal/STREAMING_CONTRACT_REPORT.md`
+- `docs/internal/WEBHOOK_DESIGN_REPORT.md`
+- `docs/internal/WEBSOCKET_CONTRACT_REPORT.md`
+- `model/task_idempotency.go`
+- `model/task_idempotency_test.go`
+- `service/task_idempotency.go`
+- `web/scripts/sdk-streaming-fixtures.mjs`
+- `web/scripts/verify-public-asyncapi.mjs`
+
+## 32. Files modified
+
+- `.env.example`
+- `.github/workflows/ci.yml`
+- `.github/workflows/public-sdk.yml`
+- `controller/plugin_native_e2e_test.go`
+- `controller/plugin_protocol.go`
+- `controller/plugin_protocol_image.go`
+- `controller/plugin_protocol_test.go`
+- `controller/relay.go`
+- `controller/relay_task_plugin_test.go`
+- `controller/responses_websocket_test.go`
+- `docs/internal/OPENAPI_COVERAGE_REPORT.md`
+- `docs/internal/SDK_READINESS_REPORT.md`
+- `docs/openapi/public.json`
+- `main.go`
+- `model/main.go`
+- `relay/channel/openai/helper.go`
+- `relay/channel/openai/relay_responses.go`
+- `relay/channel/openai/relay_responses_billing_test.go`
+- `relay/channel/task/jsplugin/adaptor_test.go`
+- `relay/common/relay_info.go`
+- `relay/helper/stream_scanner.go`
+- `relay/helper/stream_scanner_test.go`
+- `relay/relay_task.go`
+- `relay/responses_websocket.go`
+- `relay/responses_websocket_test.go`
+- `service/billing.go`
+- `service/billing_reservation.go`
+- `web/scripts/prerender-documentation.mjs`
+- `web/scripts/public-openapi-contract.d.mts`
+- `web/scripts/public-openapi-contract.mjs`
+- `web/scripts/verify-documentation-browser.mjs`
+- `web/scripts/verify-public-sdk.mjs`
+- `web/src/features/documentation/__tests__/public-openapi.test.ts`
+- `web/src/features/documentation/__tests__/reference.test.ts`
+- `web/src/features/documentation/__tests__/seo.test.ts`
+- `web/src/features/documentation/developer-recipe-code.ts`
+- `web/src/features/documentation/developer-semantics-data.ts`
+- `web/src/features/documentation/generated/reference.json`
+- `web/src/i18n/locales/en.json`
+- `web/src/i18n/locales/fr.json`
+- `web/src/i18n/locales/ja.json`
+- `web/src/i18n/locales/ru.json`
+- `web/src/i18n/locales/vi.json`
+- `web/src/i18n/locales/zh-TW.json`
+- `web/src/i18n/locales/zh.json`
+
+## 33. Tests
+
+Final observed verification is recorded below after all source changes:
+
+| Verification | Observed result |
+| --- | --- |
+| Full root Go, Go 1.25.1, final source and real three-DB DSNs | **5,494 PASS / 0 FAIL / 76 SKIP**, 46 passing test packages; 41 packages have no tests; exit 0 |
+| Full frontend, bundled Node 24.19 via Bun/Vitest, `bun run test --maxWorkers=2` | **185 files / 2,380 PASS / 0 FAIL**, exit 0; 212.75s |
+| Core SQLite idempotency race | PASS model/controller; broader cache/logger races explicitly fail below |
+| Responses WebSocket targeted race/lifecycle | PASS |
+| `bun run docs:check` | PASS, 405 registered operations / 46 error constants / 16 stale historical entries excluded |
+| `bun run docs:contract` | PASS, 107 callable ops; 13 additive; zero breaking/potential |
+| Full `openapi_spec_validator` | PASS |
+| `node web/scripts/verify-public-asyncapi.mjs --tool-root /tmp/hotx-phase5-asyncapi` | PASS, 3.0.0; five examples |
+| `node web/scripts/verify-public-sdk.mjs --tool-root /tmp/hotx-sdk-smoke.hdo1lH` | PASS generation/REST/manual stream and socket fixtures; known 12 strict template errors retained |
+| Scoped oxlint on every changed/new TS/TSX/MJS/MTS source | PASS, zero new errors |
+| `bun run typecheck` | PASS, exit 0 |
+| `bun run build` | PASS, exit 0, 163 prerender pages; unset-origin warning retained |
+| Final browser harness against localhost:5175 | PASS, responsive/locales/light-dark/links/search/copy; no page errors |
+| Modified Go `gofmt -l`, `git diff --check` | PASS |
+
+Go skips are actual fixture/capability skips, not hidden failures. In particular
+SQLite/MySQL/PostgreSQL idempotency matrix subtests all PASS in the final JSON
+log, with no database-matrix skip. Final logs:
+`/tmp/hotx-phase5-go125-verified.jsonl` (stderr empty),
+`/tmp/hotx-phase5-frontend-verified.log`,
+`/tmp/hotx-phase5-browser-final.log`,
+`/tmp/hotx-phase5-contract-verified.log`,
+`/tmp/hotx-phase5-doccheck-verified.log`,
+`/tmp/hotx-phase5-typecheck-verified.log`,
+`/tmp/hotx-phase5-build-final.log`,
+`/tmp/hotx-phase5-changed-lint-verified.log`,
+`/tmp/hotx-phase5-sdk-final.log`,
+`/tmp/hotx-phase5-asyncapi-verified.log`.
+
+SDK smoke: 107/107 each target, 14 REST fixture calls; Python/TypeScript manual
+SSE/WS fixtures PASS. AsyncAPI: five valid examples/four rejected mutations.
+Changed-file lint: zero errors. Historical full lint remains 182 errors/66 warnings;
+unrelated lint is not cleaned. Docs generated-source check and public-contract
+coverage PASS. Typecheck/build PASS; 163 prerendered pages. Browser tests exercise
+26 developer pages/seven locales, 14 reference domains, responsive widths
+320/375/390/430/768/1440, light/dark, search/sidebar/copy and exact source links.
+Local preview direct GETs return 200 for `/docs`, `/docs/`, quickstart, both
+new developer articles and the AsyncAPI artifact. `/dashboard/overview` returns
+404 on this static preview; dashboard SPA fallback is owned by the Gin production
+server and was not demonstrated by this preview. This is preview/artifact
+validation, not a launched production backend or operator deployment verification.
+Existing dashboard/frontend and API regression suites pass; no dashboard-serving
+production source was changed.
+
+## 34. Known limitations
+
+- Phase 5A conditional scope; unsupported fallbacks/legacy mutations may ignore
+  the header. No universal paid-mutation denominator or universal replay promise.
+- Abandoned/funding-attempted/indeterminate claims do not autoexpire. This can
+  require manual reconciliation and leave retained records; canonical recovery
+  needs verified settlement/refund history. Terminal cleanup is bounded by at
+  least 72h (configured task lifetime plus 48h), and 48h since terminal finish.
+- Phase 3D remains **BLOCKED_BY_OWNERSHIP_MODEL**; universal cancel **DESIGN_ONLY**.
+- Shared SSE multiline framing gap, no universal resume, provider-specific terminal/
+  disconnect accounting; Python/TypeScript streaming/socket use manual recipes.
+- Parallel SSE race fails on unchanged `logger/logger.go:115–116` global counter.
+  Broad billing race fails on fixture cache-flag cleanup versus existing async
+  quota cache worker (`controller/relay_task_plugin_test.go:527`,
+  `model/user.go:1353`, `model/user_cache.go:144`). Core idempotency and targeted
+  WS races pass; no full race-clean claim.
+- Strict generated-package mypy 12 template errors; no official published SDK.
+- DOCS_SITE_URL unset; actual deployment checks and hosted CI not run.
+- No new webhook/status service and no production throughput benchmark.
+
+Earlier full Go attempts exposed concurrent frontend-build embed mutation and a
+new fixture reusing a nonzero GORM destination primary key. Those were corrected
+by serialized build/test and fixture reset, then rerun. Unresolved races above
+are explicitly separate from successful non-race regression suites.
+
+## 35. Recommended Phase 6
+
+1. Canonical funding/reservation/refund ledger and proven operator recovery before
+   releasing uncertain claims or reconsidering Phase 3D.
+2. Explicit unsupported-header/capability policy for remaining mutation branches;
+   maintain compatibility rather than assuming every `/v1` route is protected.
+3. Provider-compatible framed SSE migration plus logger/cache synchronization,
+   validated under parallel race; real controlled performance characterization.
+4. Official SDK template/helper ownership, strict typing and bounded transports.
+5. Only after ownership/SSRF/signature/operational decisions, durable task-event
+   delivery and sanitized customer status projection. Configure production docs
+   origin and verify actual deployed artifacts before release.
+
+## 36. git diff --stat
+
+```text
+ .env.example                                       |   2 +-
+ .github/workflows/ci.yml                           |   7 +-
+ .github/workflows/public-sdk.yml                   |   8 +-
+ controller/plugin_native_e2e_test.go               |  84 +++-
+ controller/plugin_protocol.go                      |  16 +-
+ controller/plugin_protocol_image.go                |   5 +
+ controller/plugin_protocol_test.go                 |  73 +++
+ controller/relay.go                                |  49 +-
+ controller/relay_task_plugin_test.go               | 269 ++++++++++-
+ controller/responses_websocket_test.go             |  99 +++-
+ docs/internal/OPENAPI_COVERAGE_REPORT.md           | 508 +++++++++++++++++++++
+ docs/internal/SDK_READINESS_REPORT.md              |  55 ++-
+ docs/openapi/public.json                           | 377 ++++++++++++++-
+ main.go                                            |   1 +
+ model/main.go                                      |   1 +
+ relay/channel/openai/helper.go                     |   7 -
+ relay/channel/openai/relay_responses.go            |   4 +-
+ .../channel/openai/relay_responses_billing_test.go |  29 ++
+ relay/channel/task/jsplugin/adaptor_test.go        |  34 ++
+ relay/common/relay_info.go                         |   5 +
+ relay/helper/stream_scanner.go                     |  25 +-
+ relay/helper/stream_scanner_test.go                |  77 ++++
+ relay/relay_task.go                                |  13 +
+ relay/responses_websocket.go                       |  42 +-
+ relay/responses_websocket_test.go                  |  40 ++
+ service/billing.go                                 |   2 +-
+ service/billing_reservation.go                     |   6 +
+ web/scripts/prerender-documentation.mjs            |   6 +
+ web/scripts/public-openapi-contract.d.mts          |   5 +
+ web/scripts/public-openapi-contract.mjs            | 187 +++++++-
+ web/scripts/verify-documentation-browser.mjs       |  26 +-
+ web/scripts/verify-public-sdk.mjs                  |  50 +-
+ .../documentation/__tests__/public-openapi.test.ts | 357 ++++++++++++++-
+ .../documentation/__tests__/reference.test.ts      |   4 +-
+ .../features/documentation/__tests__/seo.test.ts   |  27 +-
+ .../documentation/developer-recipe-code.ts         |  43 +-
+ .../documentation/developer-semantics-data.ts      |  97 +++-
+ .../documentation/generated/reference.json         |  84 +++-
+ web/src/i18n/locales/en.json                       |  29 ++
+ web/src/i18n/locales/fr.json                       |  29 ++
+ web/src/i18n/locales/ja.json                       |  29 ++
+ web/src/i18n/locales/ru.json                       |  29 ++
+ web/src/i18n/locales/vi.json                       |  29 ++
+ web/src/i18n/locales/zh-TW.json                    |  29 ++
+ web/src/i18n/locales/zh.json                       |  29 ++
+ 45 files changed, 2795 insertions(+), 132 deletions(-)
+```
+
+The stat snapshot was captured before embedding its own block into this report.
+`git diff --stat` describes tracked files; the created-file list above additionally
+contains untracked source artifacts. No staging, commit or push occurred.
+
+## Requested summary
+
+| Item | Result |
+| --- | --- |
+| Phase 5A Idempotency | PARTIAL |
+| Paid async endpoints protected | 27/27 selected **task-backed slots**, conditional; not universal gateway coverage |
+| Sequential duplicate prevention | PASS within selected scope |
+| Concurrent duplicate prevention | PASS within selected scope |
+| Duplicate billing prevention | PASS within selected scope |
+| Cross-key isolation | PASS |
+| Post-acceptance blind retry prevented | PASS within selected scope |
+| SSE contract | PARTIAL |
+| SSE SDK Python / TypeScript | MANUAL_RECIPE / MANUAL_RECIPE |
+| Responses WebSocket | PASS audited local contract, conditional availability |
+| AsyncAPI | PASS |
+| Python / TypeScript WebSocket | MANUAL_RECIPE / MANUAL_RECIPE |
+| Public OpenAPI valid | PASS, 107 operations |
+| Breaking-change CI | PASS local gate/tests; hosted execution not dispatched |
+| SDK generation | PASS both targets; strict Python whole-package typing template-blocked |
+| Webhook / Public status | DESIGN_ONLY / DESIGN_ONLY |
+| Phase 3D | BLOCKED_BY_OWNERSHIP_MODEL |
+| Paid upstream / provider network requests | 0 / 0 |
+| Existing API regressions | PASS full non-race Go/frontend suites; race limitations explicit |
+| SQLite / MySQL 5.7 / PostgreSQL 15 | PASS / PASS / PASS |
+| Changed-files lint / Typecheck / Build | PASS / PASS / PASS |
+| Prerender | 163 pages |
+| Tests | Go 5,494 PASS / 0 FAIL / 76 SKIP; frontend 2,380 PASS / 0 FAIL; optional broader races FAIL as recorded |
+| No commit / No push / Scope respected | YES / YES / YES |
+
+Tool registries/downloads and local HTTP/WebSocket/DB fixtures are distinct from
+provider network calls. Passing focused gates does not approve production release
+while the listed deployment configuration and readiness limitations remain.

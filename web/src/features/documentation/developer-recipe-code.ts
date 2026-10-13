@@ -34,14 +34,41 @@ export function buildDeveloperRecipe(
     }
   }
   const examples: Record<string, string> = {
-    discover:
-      'catalog=$(curl --fail-with-body "$NEW_API_BASE_URL/v1/catalog" -H "Authorization: Bearer $NEW_API_KEY")\nmodel=$(printf \'%s\' "$catalog" | jq -er \'[.models[] | select(any(.endpoints[]; .method == "POST" and .path == "/v1/chat/completions"))][0].id // error("No compatible model")\')\njq -n --arg model "$model" \'{model: $model, messages: [{role: "user", content: "Hello"}]}\' |\n  curl --fail-with-body "$NEW_API_BASE_URL/v1/chat/completions" -H "Authorization: Bearer $NEW_API_KEY" -H \'Content-Type: application/json\' --data-binary @-',
-    usage:
-      'curl --fail-with-body --get "$NEW_API_BASE_URL/v1/key/usage" \\\n  -H "Authorization: Bearer $NEW_API_KEY" \\\n  --data-urlencode "start=$START_UNIX_SECONDS" \\\n  --data-urlencode "end=$END_UNIX_SECONDS"',
-    video:
-      ' : "${NEW_API_MODEL:?Select a catalog model supporting POST /v1/videos}"\nsubmission=$(jq -n --arg model "$NEW_API_MODEL" \'{model: $model, prompt: "A calm ocean"}\' |\n  curl --fail-with-body "$NEW_API_BASE_URL/v1/videos" -H "Authorization: Bearer $NEW_API_KEY" -H \'Content-Type: application/json\' --data-binary @-)\ntask_id=$(printf \'%s\' "$submission" | jq -er \'.id\')\nprintf \'%s\\n\' "$task_id" > video-task-id.txt\nfor attempt in {1..60}; do\n  task=$(curl --fail-with-body "$NEW_API_BASE_URL/v1/tasks/$task_id" -H "Authorization: Bearer $NEW_API_KEY")\n  status=$(printf \'%s\' "$task" | jq -er \'.status\')\n  case "$status" in\n    completed)\n      curl --fail-with-body "$NEW_API_BASE_URL/v1/videos/$task_id/content" -H "Authorization: Bearer $NEW_API_KEY" --output video.mp4\n      exit 0 ;;\n    failed) printf \'%s\\n\' "$task"; exit 1 ;;\n    queued|in_progress) sleep 5 ;;\n    *) printf \'Unknown status: %s\\n\' "$status"; exit 1 ;;\n  esac\ndone\nprintf \'Polling stopped; retrieve saved task %s before resubmitting.\\n\' "$task_id"',
-    tasks:
-      'cursor=\'\'\nfor page in {1..100}; do\n  args=(--data-urlencode \'limit=20\')\n  if [ -n "$cursor" ]; then args+=(--data-urlencode "cursor=$cursor"); fi\n  tasks=$(curl --fail-with-body --get "$NEW_API_BASE_URL/v1/tasks" -H "Authorization: Bearer $NEW_API_KEY" "${args[@]}")\n  printf \'%s\' "$tasks" | jq \'.data\'\n  if [ "$(printf \'%s\' "$tasks" | jq -r \'.has_more\')" != true ]; then break; fi\n  cursor=$(printf \'%s\' "$tasks" | jq -er \'.next_cursor\')\ndone',
+    discover: `catalog=$(curl --fail-with-body "$NEW_API_BASE_URL/v1/catalog" -H "Authorization: Bearer $NEW_API_KEY")
+model=$(printf '%s' "$catalog" | python3 -c 'import json,sys; models=json.load(sys.stdin)["models"]; print(next(m["id"] for m in models if any(e["method"] == "POST" and e["path"] == "/v1/chat/completions" for e in m["endpoints"])))')
+python3 -c 'import json,sys; print(json.dumps({"model":sys.argv[1],"messages":[{"role":"user","content":"Hello"}]}))' "$model" |
+  curl --fail-with-body "$NEW_API_BASE_URL/v1/chat/completions" -H "Authorization: Bearer $NEW_API_KEY" -H 'Content-Type: application/json' --data-binary @-`,
+    usage: `curl --fail-with-body --get "$NEW_API_BASE_URL/v1/key/usage" \\
+  -H "Authorization: Bearer $NEW_API_KEY" \\
+  --data-urlencode "start=$START_UNIX_SECONDS" \\
+  --data-urlencode "end=$END_UNIX_SECONDS"`,
+    video: `: "\${NEW_API_MODEL:?Select a catalog model supporting POST /v1/videos}"
+submission=$(python3 -c 'import json,sys; print(json.dumps({"model":sys.argv[1],"prompt":"A calm ocean"}))' "$NEW_API_MODEL" |
+  curl --fail-with-body "$NEW_API_BASE_URL/v1/videos" -H "Authorization: Bearer $NEW_API_KEY" -H 'Content-Type: application/json' --data-binary @-)
+task_id=$(printf '%s' "$submission" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+printf '%s\\n' "$task_id" > video-task-id.txt
+for attempt in {1..60}; do
+  task=$(curl --fail-with-body "$NEW_API_BASE_URL/v1/tasks/$task_id" -H "Authorization: Bearer $NEW_API_KEY")
+  status=$(printf '%s' "$task" | python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])')
+  case "$status" in
+    completed)
+      curl --fail-with-body "$NEW_API_BASE_URL/v1/videos/$task_id/content" -H "Authorization: Bearer $NEW_API_KEY" --output video.mp4
+      exit 0 ;;
+    failed) printf '%s\\n' "$task"; exit 1 ;;
+    queued|in_progress) sleep 5 ;;
+    *) printf 'Unknown status: %s\\n' "$status"; exit 1 ;;
+  esac
+done
+printf 'Polling stopped; retrieve saved task %s before resubmitting.\\n' "$task_id"`,
+    tasks: `cursor=''
+for page in {1..100}; do
+  args=(--data-urlencode 'limit=20')
+  if [ -n "$cursor" ]; then args+=(--data-urlencode "cursor=$cursor"); fi
+  tasks=$(curl --fail-with-body --get "$NEW_API_BASE_URL/v1/tasks" -H "Authorization: Bearer $NEW_API_KEY" "\${args[@]}")
+  printf '%s' "$tasks" | python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)["data"]))'
+  if [ "$(printf '%s' "$tasks" | python3 -c 'import json,sys; print("true" if json.load(sys.stdin)["has_more"] else "false")')" != true ]; then break; fi
+  cursor=$(printf '%s' "$tasks" | python3 -c 'import json,sys; cursor=json.load(sys.stdin)["next_cursor"]; assert isinstance(cursor,str) and cursor; print(cursor)')
+done`,
   }
   return { language: 'bash', code: preamble + (examples[section] ?? '') }
 }

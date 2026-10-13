@@ -67,7 +67,7 @@ func PreConsumeBilling(c *gin.Context, preConsumedQuota int, relayInfo *relaycom
 		if relayInfo.RequestId == "" {
 			return types.NewError(errors.New("task billing identity missing"), types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
 		}
-		if relayInfo.DFLOPTaskLegacyRequestID != "" {
+		if relayInfo.DFLOPTaskLegacyRequestID != "" && relayInfo.TaskIdempotencyID == 0 {
 			legacy, err := model.FindBillingReservationLog(relayInfo.DFLOPTaskLegacyRequestID, relayInfo.UserId, relayInfo.TokenId)
 			if err != nil {
 				return types.NewError(err, types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())

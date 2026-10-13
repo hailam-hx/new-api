@@ -235,6 +235,11 @@ func respondTaskPluginImageError(c *gin.Context, taskErr *dto.TaskError) {
 	}
 	code := taskErr.Code
 	message := taskErr.Message
+	if taskErr.LocalError {
+		if safeMessage, ok := service.TaskIdempotencyErrorMessage(code); ok {
+			message = safeMessage
+		}
+	}
 	var upstream struct {
 		Code    string `json:"code"`
 		Message string `json:"message"`

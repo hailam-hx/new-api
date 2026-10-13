@@ -362,10 +362,12 @@ func serveTaskPluginProtocol(
 		}
 	}
 	if background {
-		outcome.Task.PrivateData.ResponsesBackground = true
-		if outcome.Task.ID != 0 {
-			if err := model.DB.Model(outcome.Task).Update("private_data", outcome.Task.PrivateData).Error; err != nil {
-				logger.LogError(c, "persist task background flag failed: "+err.Error())
+		if !outcome.Replay && !outcome.Task.PrivateData.ResponsesBackground {
+			outcome.Task.PrivateData.ResponsesBackground = true
+			if outcome.Task.ID != 0 {
+				if err := model.DB.Model(outcome.Task).Update("private_data", outcome.Task.PrivateData).Error; err != nil {
+					logger.LogError(c, "persist task background flag failed: "+err.Error())
+				}
 			}
 		}
 		machine.SetBackground(true)
@@ -1272,6 +1274,12 @@ func writeTaskPluginProtocolEvent(c *gin.Context, event dto.PluginResponsesStrea
 }
 
 func respondPluginProtocolSubmissionError(c *gin.Context, taskErr *dto.TaskError) {
+	if taskErr != nil && taskErr.LocalError {
+		if message, ok := service.TaskIdempotencyErrorMessage(taskErr.Code); ok {
+			respondPluginProtocolError(c, taskErr.StatusCode, taskErr.Code, message)
+			return
+		}
+	}
 	status := http.StatusInternalServerError
 	if taskErr != nil && taskErr.StatusCode >= 400 && taskErr.StatusCode <= 599 {
 		status = taskErr.StatusCode

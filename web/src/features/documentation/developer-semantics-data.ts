@@ -64,10 +64,86 @@ export const developerSemantics = [
     ],
   },
   {
+    slug: 'developer-idempotency',
+    title: 'Idempotency',
+    description:
+      'Prevent duplicate task submissions after an uncertain response.',
+    sources: [
+      'service/task_idempotency.go',
+      'model/task_idempotency.go',
+      'controller/relay.go',
+      'relay/relay_task.go',
+    ],
+    sections: [
+      {
+        id: 'supported-submissions',
+        title: 'Supported Submissions',
+        body: 'Use Idempotency-Key only on task-backed submissions: configured video, generic and native task plugins, and plugin-backed image, speech or Responses creation. Ordinary synchronous relay and Responses WebSocket do not gain this guarantee. Availability depends on the selected model and plugin.',
+      },
+      {
+        id: 'key-and-payload',
+        title: 'Key and Request',
+        body: 'Choose a non-secret key of 1–200 printable ASCII characters, without surrounding whitespace. Scope is the authenticated API key, HTTP method and concrete operation path. Reuse the same key and equivalent JSON or multipart content. Changed content returns 409 idempotency_key_conflict. Different API keys have independent namespaces.',
+      },
+      {
+        id: 'replay-and-ambiguity',
+        title: 'Replay and Uncertain Outcomes',
+        body: 'A durable replay returns the same owned task without submitting or charging again. Concurrent claims return 409 idempotency_in_progress. A possible upstream acceptance without a durable task returns 409 idempotency_indeterminate; do not submit with a new key. Definite failures before funding release the claim. Once funding is attempted, an incomplete refund or interrupted reservation requires operator recovery; the key stays blocked. Keep the original key, request ID and task ID for recovery.',
+      },
+      {
+        id: 'request-limits',
+        title: 'Limits',
+        body: 'Idempotency accepts JSON up to 16 MiB, depth 32 and 65536 nodes; multipart up to 128 MiB, 128 parts and 1 MiB per field. Unsupported formats return 400 idempotency_request_unsupported. Discarded immediate results return 409 idempotency_replay_unavailable without a new submission.',
+      },
+      {
+        id: 'retention',
+        title: 'Retention and Access',
+        body: 'Records are retained for at least 72 hours and at least 48 hours after task completion. Active or uncertain records are not automatically removed. After terminal expiry, a key may create new work. Replay still requires valid authentication and allowance; expired, revoked or exhausted keys do not bypass access controls. Idempotency handles client resubmission; Request Policy separately controls gateway retries.',
+      },
+    ],
+  },
+  {
+    slug: 'developer-websocket',
+    title: 'Responses WebSocket',
+    description: 'Use the verified, conditional Responses WebSocket contract.',
+    sources: [
+      'web/scripts/sdk-streaming-fixtures.mjs',
+      'docs/internal/SDK_READINESS_REPORT.md',
+      'controller/responses_websocket.go',
+      'relay/responses_websocket.go',
+      'middleware/auth.go',
+      'docs/asyncapi/public.yaml',
+    ],
+    sections: [
+      {
+        id: 'handshake',
+        title: 'WebSocket Handshake',
+        body: 'Connect to GET /v1/responses using wss and Authorization: Bearer YOUR_API_KEY. Browser clients can use responses or realtime together with openai-insecure-api-key.YOUR_API_KEY subprotocols; protect that credential from logs. Cookies and key query parameters do not authenticate this route. Availability requires a compatible channel and model.',
+      },
+      {
+        id: 'messages',
+        title: 'Messages and Lifecycle',
+        body: 'Send response.create with model and input at top level or inside response. Only one response can run at a time. response.cancel affects the active response only and is not a universal task cancellation API. Read protocol events through response.completed, response.failed or response.incomplete; error frames are not successful output. On disconnect, active work is canceled and recorded usage follows the existing billing lifecycle.',
+      },
+      {
+        id: 'idle-and-sdk',
+        title: 'Timeout and Client Support',
+        body: 'Idle sessions close after the configured STREAMING_TIMEOUT, default 300 seconds. This session timer does not interrupt an active response. Python and TypeScript generated REST SDKs do not provide a WebSocket client; use a WebSocket library and the validated AsyncAPI contract. Reconnecting does not resume an old response or safely repeat paid work.',
+      },
+      {
+        id: 'asyncapi',
+        title: 'AsyncAPI Contract',
+        body: '[Download the validated AsyncAPI 3.0 contract](/docs-contracts/responses-websocket.yaml). It describes the existing Responses socket; no webhook or new endpoint is added.',
+      },
+    ],
+  },
+  {
     slug: 'developer-streaming',
     title: 'Streaming Responses',
     description: 'Parse each protocol stream and recognize partial results.',
     sources: [
+      'web/scripts/sdk-streaming-fixtures.mjs',
+      'docs/internal/SDK_READINESS_REPORT.md',
       'relay/helper/common.go',
       'relay/helper/stream_scanner.go',
       'relay/channel/openai/relay_responses.go',
@@ -91,6 +167,16 @@ export const developerSemantics = [
         id: 'provider-events',
         title: 'Messages and Gemini Events',
         body: 'Anthropic Messages streams use named lifecycle events including message_start, content_block_delta, message_delta and message_stop. Track content block indices and finish state. Native Gemini generateContent returns JSON; streamGenerateContent or alt=sse selects streaming and the gateway emits SSE data containing Gemini response objects. This does not promise an unframed JSON-array stream. Parse candidates, parts and finish reasons using the endpoint protocol.',
+      },
+      {
+        id: 'stream-limits',
+        title: 'Stream Limits and Timeouts',
+        body: 'Plugin submission SSE supports LF, CRLF, multiline data, comments, event and id fields with a 1 MiB event limit. The shared provider scanner remains line-oriented; multiline JSON provider events are not universally supported. Upstream idle timeout defaults to 300 seconds, plugin heartbeat to 15 seconds and submission observation to 600 seconds. Deployment settings can differ.',
+      },
+      {
+        id: 'sdk-streams',
+        title: 'Streaming Client Support',
+        body: 'Generated REST clients do not assemble SSE events. TypeScript can expose a raw stream; Python and TypeScript need an incremental SSE parser or a compatible protocol client. Local manual recipes verify fragmented UTF-8, event boundaries, missing terminal events and cancellation. A parser failure or disconnect after paid acceptance is not permission to submit again.',
       },
       {
         id: 'partial-output',
@@ -205,12 +291,17 @@ export const developerSemantics = [
       {
         id: 'bounded-retry',
         title: 'Bounded Backoff',
-        body: 'Honor Retry-After when supplied. Otherwise apply exponential backoff with jitter, a maximum delay and a small attempt budget. Do not loop on validation, model pricing or quota errors. General relay and task submission endpoints do not establish a universal Idempotency-Key contract. Asynchronous speech specifically requires that header; follow its endpoint contract instead of assuming the same behavior elsewhere.',
+        body: 'Honor Retry-After when supplied. Otherwise apply exponential backoff with jitter, a maximum delay and a small attempt budget. Do not loop on validation, model pricing or quota errors. Idempotency is limited to supported task-backed submissions; reuse the original key and payload. Ordinary synchronous relay has no universal duplicate-submission guarantee. Asynchronous speech requires the header. See Idempotency for conflicts, concurrent claims and uncertain acceptance.',
       },
       {
         id: 'retry-matrix',
         title: 'Retry Matrix',
         body: '| Error class | Next action |\n| --- | --- |\n| Validation 4xx | Correct the request; do not retry unchanged. |\n| 401 / 403 authentication or access | Fix credentials or permissions first. |\n| Balance or quota exhausted | Restore allowance before submitting again. |\n| 404 | Verify the route or owned resource; do not retry blindly. |\n| 409 artifact_not_ready | Poll the existing task; do not create another. |\n| 429 | Back off with jitter; honor Retry-After only when present. |\n| Transient 5xx or transport failure | Bounded retries for reads; mutation acceptance may be unknown. |\n| Async timeout / task_timeout | Check the saved task first. |',
+      },
+      {
+        id: 'paid-retry-safety',
+        title: 'Replay and Uncertain Outcomes',
+        body: 'A durable replay returns the same owned task without submitting or charging again. Concurrent claims return 409 idempotency_in_progress. A possible upstream acceptance without a durable task returns 409 idempotency_indeterminate; do not submit with a new key. Definite failures before funding release the claim. Once funding is attempted, an incomplete refund or interrupted reservation requires operator recovery; the key stays blocked. Keep the original key, request ID and task ID for recovery.',
       },
       {
         id: 'request-correlation',
@@ -343,7 +434,7 @@ export const developerSemantics = [
       {
         id: 'unreleased',
         title: 'Unreleased',
-        body: 'Current baseline: public catalog and key balance, retained key usage, and key-owned task list and detail. Contract documentation now includes versioning, deprecation guidance and recipes. This entry has no release date and does not reconstruct older release history.',
+        body: 'Current baseline: public catalog and key balance, retained key usage, and key-owned task list and detail. Added: task-backed idempotency, streaming contract tests, Responses WebSocket validation and AsyncAPI, committed-baseline contract CI, and locally verified SDK recipes. Fixed: stream terminal and disconnect handling, and idle WebSocket cleanup. Contract documentation includes versioning, deprecation guidance and recipes. This entry has no release date and does not reconstruct older release history.',
       },
       {
         id: 'change-categories',
@@ -368,7 +459,7 @@ export const developerSemantics = [
       {
         id: 'discover',
         title: 'Discover and Call a Model',
-        body: 'Read the catalog with the same key used for inference. Select a model that lists POST /v1/chat/completions, then submit once. Catalog routing is configuration metadata, not a guarantee of upstream availability. These cURL examples use environment variables and jq; set NEW_API_KEY securely.',
+        body: 'Read the catalog with the same key used for inference. Select a model that lists POST /v1/chat/completions, then submit once. Catalog routing is configuration metadata, not a guarantee of upstream availability. These cURL examples use environment variables and Python 3 standard-library JSON parsing; jq is optional. Set NEW_API_KEY securely.',
       },
       {
         id: 'balance',

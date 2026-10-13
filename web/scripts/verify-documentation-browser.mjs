@@ -995,9 +995,9 @@ for (const [locale, label] of [
     .getByRole('heading', { name: currentLocale['Chat API'], exact: true })
     .waitFor()
   assert(
-    (await page.locator('#quick-example pre:not([inert] *)').textContent()).includes(
-      currentLocale['Hello!']
-    )
+    (
+      await page.locator('#quick-example pre:not([inert] *)').textContent()
+    ).includes(currentLocale['Hello!'])
   )
   await page
     .getByRole('button', {
@@ -1018,9 +1018,9 @@ for (const [locale, label] of [
     .getByRole('heading', { name: currentLocale['Image API'], exact: true })
     .waitFor()
   assert(
-    (await page.locator('#quick-example pre:not([inert] *)').textContent()).includes(
-      currentLocale['A small red house beside a lake']
-    )
+    (
+      await page.locator('#quick-example pre:not([inert] *)').textContent()
+    ).includes(currentLocale['A small red house beside a lake'])
   )
   assert(
     await page
@@ -1139,9 +1139,11 @@ for (const [locale, label] of [
     await taskPanel.getByRole('tab', { name: 'cURL', exact: true }).click()
     if (task === 'speech') {
       assert(
-        (await taskPanel.locator('#quick-example pre:not([inert] *)').textContent()).includes(
-          currentLocale['Hello! Welcome to New API.']
-        )
+        (
+          await taskPanel
+            .locator('#quick-example pre:not([inert] *)')
+            .textContent()
+        ).includes(currentLocale['Hello! Welcome to New API.'])
       )
     } else {
       assert(
@@ -1397,7 +1399,7 @@ const developerPaths = await page
   })
   .locator('a')
   .evaluateAll((links) => links.map((link) => link.getAttribute('href')))
-assert.equal(developerPaths.length, 24)
+assert.equal(developerPaths.length, 26)
 for (const path of developerPaths.slice(1)) {
   await page.goto(`${baseUrl}${path}`)
   await page.locator('main h1').waitFor()
@@ -1686,6 +1688,8 @@ for (const [locale, languageLabel] of [
     ['developer-versioning', 'API Versioning'],
     ['developer-changelog', 'API Changelog'],
     ['developer-recipes', 'Recipes'],
+    ['developer-idempotency', 'Idempotency'],
+    ['developer-websocket', 'Responses WebSocket'],
     ['developer-errors-retries', 'Errors and Retries'],
   ]) {
     await page.goto(`${baseUrl}/docs/${slug}`)
@@ -1806,6 +1810,6 @@ for (const [locale, languageLabel] of [
 }
 assert.deepEqual(errors, [])
 console.log(
-  'PASS: 24 developer pages; Phase 4 lifecycle and recipes in seven locales, light/dark at 320/375/390/430/1440px; 14 domains; key usage and key-owned task reads; one global sidebar entry; operation search expands target; cURL clipboard; seven locales; 320/375/390/430/768/1440px; light/dark; no page errors.'
+  'PASS: 26 developer pages; Phase 5 idempotency, streaming, WebSocket, lifecycle and recipes in seven locales, light/dark at 320/375/390/430/1440px; 14 domains; key usage and key-owned task reads; one global sidebar entry; operation search expands target; cURL clipboard; seven locales; 320/375/390/430/768/1440px; light/dark; no page errors.'
 )
 await browser.close()

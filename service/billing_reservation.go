@@ -163,6 +163,12 @@ func PrepareDFLOPTaskBillingIdentity(c *gin.Context, info *relaycommon.RelayInfo
 	legacyIdentity := sha256.Sum256([]byte(fmt.Sprintf("%d\x00%s\x00%s", info.UserId, plugin, key)))
 	info.DFLOPTaskLegacyRequestID = fmt.Sprintf("%x", legacyIdentity)
 	identity := sha256.Sum256([]byte(fmt.Sprintf("%d\x00%d\x00%s\x00%s", info.UserId, info.TokenId, plugin, key)))
+	if info.TaskIdempotencyID > 0 {
+		if err := GuardLegacyDFLOPTaskIdempotency(info, info.DFLOPTaskLegacyRequestID, fmt.Sprintf("%x", identity)); err != nil {
+			return err
+		}
+		identity = sha256.Sum256([]byte(fmt.Sprintf("task-idempotency:%d:%s", info.TaskIdempotencyID, info.TaskIdempotencyNonce)))
+	}
 	info.RequestId = fmt.Sprintf("%x", identity)
 	if info.CanonicalRequestId == "" {
 		info.CanonicalRequestId = c.GetString(common.RequestIdKey)

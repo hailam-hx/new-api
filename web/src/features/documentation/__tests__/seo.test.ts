@@ -316,7 +316,9 @@ it('resolves every developer page navigation and operation anchor in prerendered
         link.getAttribute('href') ?? '',
         `https://gateway.example/docs/${article.slug}`
       )
-      if (!url.pathname.startsWith('/docs')) continue
+      if (url.pathname !== '/docs' && !url.pathname.startsWith('/docs/')) {
+        continue
+      }
       const file = path.join(directory, url.pathname, 'index.html')
       expect(fs.existsSync(file), `${article.slug}: ${url.pathname}`).toBe(true)
       if (url.hash) {
@@ -382,4 +384,27 @@ it('publishes all five public recipe code workflows before JavaScript runs', () 
     .join('\n')
   expect(code).not.toContain('/api/')
   expect(code).not.toContain('--retry')
+})
+
+it('publishes conditional idempotency and WebSocket guidance and the exact validated socket contract', () => {
+  const idempotency = fs.readFileSync(
+    path.join(directory, 'docs/developer-idempotency/index.html'),
+    'utf8'
+  )
+  expect(idempotency).toContain('idempotency_key_conflict')
+  expect(idempotency).toContain('idempotency_indeterminate')
+  expect(idempotency).toContain('72 hours')
+  const websocket = fs.readFileSync(
+    path.join(directory, 'docs/developer-websocket/index.html'),
+    'utf8'
+  )
+  expect(websocket).toContain('compatible channel and model')
+  expect(websocket).toContain('/docs-contracts/responses-websocket.yaml')
+  expect(websocket).toContain('response.cancel')
+  expect(
+    fs.readFileSync(
+      path.join(directory, 'docs-contracts/responses-websocket.yaml'),
+      'utf8'
+    )
+  ).toBe(fs.readFileSync('../docs/asyncapi/public.yaml', 'utf8'))
 })

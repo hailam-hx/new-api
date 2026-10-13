@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -512,7 +514,7 @@ func openTaskDialectDatabase(t *testing.T, models ...any) (*gorm.DB, common.Data
 }
 
 func TestImmediateTaskSettlementDatabase(t *testing.T) {
-	db, dialect := openTaskDialectDatabase(t, &model.User{}, &model.Channel{}, &model.Task{}, &model.Log{})
+	db, dialect := openTaskDialectDatabase(t, &model.User{}, &model.Channel{}, &model.Task{}, &model.TaskIdempotency{}, &model.Log{})
 	oldDB, oldLogDB := model.DB, model.LOG_DB
 	oldMain, oldLog := common.MainDatabaseType(), common.LogDatabaseType()
 	oldRedis, oldMemory, oldBatch, oldConsume, oldExport := common.RedisEnabled, common.MemoryCacheEnabled, common.BatchUpdateEnabled, common.LogConsumeEnabled, common.DataExportEnabled
@@ -547,7 +549,9 @@ export function buildQueryRequest(){throw new Error("completed submissions must 
 		{"invalid usage", "SUCCESS", -1, 4}, {"expression failure", "SUCCESS", 7, 4}, {"negative result", "SUCCESS", 8, 4}, {"missing usage", "SUCCESS", nil, 4}, {"failed", "FAILURE", 9, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			var submits atomic.Int64
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				submits.Add(1)
 				w.Header().Set("Content-Type", "application/json")
 				body := map[string]any{"status": tc.status}
 				if tc.actual != nil {
@@ -566,6 +570,7 @@ export function buildQueryRequest(){throw new Error("completed submissions must 
 			ch := model.Channel{Name: "test provider", Type: constant.ChannelTypeTaskPlugin}
 			require.NoError(t, db.Create(&ch).Error)
 			c := taskSubmissionTestContext()
+			c.Request.Header.Set("Idempotency-Key", fmt.Sprintf("real-billing-%d", index))
 			c.Set("group", "default")
 			c.Set("username", user.Username)
 			c.Set("task_request", map[string]any{"model": "document-model"})
@@ -576,6 +581,8 @@ export function buildQueryRequest(){throw new Error("completed submissions must 
 			common.SetContextKey(c, constant.ContextKeyChannelType, ch.Type)
 			info := taskSubmissionRelayInfo(nil)
 			info.UserId = user.Id
+			info.TokenId = 7
+			info.CanonicalRequestId = fmt.Sprintf("billing-request-%d", index)
 			info.OriginModelName = "document-model"
 			info.UserGroup = "default"
 			info.UsingGroup = "default"
@@ -586,6 +593,16 @@ export function buildQueryRequest(){throw new Error("completed submissions must 
 			outcome, taskErr := executeTaskSubmission(c, info)
 			require.Nil(t, taskErr)
 			require.NotNil(t, outcome)
+			replayContext := taskSubmissionTestContext()
+			replayContext.Request.Header.Set("Idempotency-Key", fmt.Sprintf("real-billing-%d", index))
+			replayInfo := taskSubmissionRelayInfo(nil)
+			replayInfo.UserId, replayInfo.TokenId = user.Id, 7
+			replayed, replayErr := executeTaskSubmission(replayContext, replayInfo)
+			require.Nil(t, replayErr)
+			require.NotNil(t, replayed)
+			assert.Equal(t, outcome.Task.ID, replayed.Task.ID)
+			assert.Equal(t, int64(1), submits.Load())
+			assert.Nil(t, replayInfo.Billing, "replay must not create another billing session")
 			want := common.QuotaRound(tc.count * 0.01 * common.QuotaPerUnit)
 			assert.Equal(t, want, outcome.Result.Quota)
 			assert.Equal(t, want, info.PriceData.Quota)
@@ -657,4 +674,254 @@ func TestExecuteTaskSubmissionRefundsWhenFinalReserveFails(t *testing.T) {
 	assert.Equal(t, []string{"reserve", "refund"}, events)
 	assert.Equal(t, 1, billing.refunds)
 	assert.False(t, c.Writer.Written())
+}
+
+func TestTaskIdempotencySubmissionReplaysWithoutBilling(t *testing.T) {
+	previousLogConsume := common.LogConsumeEnabled
+	common.LogConsumeEnabled = false
+	t.Cleanup(func() { common.LogConsumeEnabled = previousLogConsume })
+	events := []string{}
+	db := setupTaskSubmissionDatabase(t, true, &events)
+	require.NoError(t, db.AutoMigrate(&model.TaskIdempotency{}, &model.User{}, &model.Channel{}))
+	t.Cleanup(func() {
+		require.NoError(t, db.Migrator().DropTable(&model.TaskIdempotency{}, &model.User{}, &model.Channel{}))
+	})
+	require.NoError(t, db.Create(&model.User{Id: 1, Username: "idempotency-owner", AffCode: "idempotency"}).Error)
+	require.NoError(t, db.Create(&model.Channel{Id: 1}).Error)
+	submits := 0
+	attempt := func(c *gin.Context, info *relaycommon.RelayInfo) (*relay.TaskSubmitResult, *dto.TaskError) {
+		submits++
+		require.NoError(t, service.MarkTaskIdempotencyOutbound(c, info))
+		return &relay.TaskSubmitResult{UpstreamTaskID: "provider-task", Platform: "plugin", Quota: 0, TaskData: []byte(`{"id":"provider-task"}`)}, nil
+	}
+	call := func(token int, body string) (*taskSubmissionOutcome, *dto.TaskError) {
+		c := taskSubmissionTestContext()
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", strings.NewReader(body))
+		c.Request.Header.Set("Idempotency-Key", "logical-operation")
+		c.Request.Header.Set("Content-Type", "application/json")
+		info := taskSubmissionRelayInfo(&taskSubmissionTestBilling{events: &events})
+		info.TokenId = token
+		info.CanonicalRequestId = fmt.Sprintf("request-%d", submits)
+		return executeTaskSubmissionWith(c, info, attempt)
+	}
+	first, taskErr := call(7, `{"model":"plugin-model","seconds":4}`)
+	require.Nil(t, taskErr)
+	require.NotNil(t, first)
+	replayed, taskErr := call(7, `{"seconds":4.0,"model":"plugin-model"}`)
+	require.Nil(t, taskErr)
+	require.NotNil(t, replayed)
+	assert.Equal(t, first.Task.ID, replayed.Task.ID)
+	assert.Equal(t, 1, submits)
+	reserves, settles, refunds := 0, 0, 0
+	for _, event := range events {
+		switch event {
+		case "reserve":
+			reserves++
+		case "settle":
+			settles++
+		case "refund":
+			refunds++
+		}
+	}
+	assert.Equal(t, 1, reserves)
+	assert.Equal(t, 1, settles)
+	assert.Zero(t, refunds)
+	_, taskErr = call(7, `{"model":"plugin-model","seconds":8}`)
+	require.NotNil(t, taskErr)
+	assert.Equal(t, "idempotency_key_conflict", taskErr.Code)
+	assert.Equal(t, http.StatusConflict, taskErr.StatusCode)
+	other, taskErr := call(8, `{"model":"plugin-model","seconds":4}`)
+	require.Nil(t, taskErr)
+	assert.NotEqual(t, first.Task.ID, other.Task.ID)
+	assert.Equal(t, 2, submits)
+}
+
+func TestTaskIdempotencyPreflightRetryAndIndeterminateBarrier(t *testing.T) {
+	events := []string{}
+	db := setupTaskSubmissionDatabase(t, true, &events)
+	require.NoError(t, db.AutoMigrate(&model.TaskIdempotency{}))
+	t.Cleanup(func() { require.NoError(t, db.Migrator().DropTable(&model.TaskIdempotency{})) })
+	call := func(attempt taskSubmitAttempt) (*taskSubmissionOutcome, *dto.TaskError) {
+		c := taskSubmissionTestContext()
+		c.Request.Header.Set("Idempotency-Key", "failure-case")
+		info := taskSubmissionRelayInfo(nil)
+		info.TokenId = 7
+		return executeTaskSubmissionWith(c, info, attempt)
+	}
+	_, taskErr := call(func(*gin.Context, *relaycommon.RelayInfo) (*relay.TaskSubmitResult, *dto.TaskError) {
+		return nil, service.TaskErrorWrapperLocal(errors.New("invalid schema"), "invalid_request", http.StatusBadRequest)
+	})
+	require.NotNil(t, taskErr)
+	var claims int64
+	require.NoError(t, db.Model(&model.TaskIdempotency{}).Count(&claims).Error)
+	assert.Zero(t, claims)
+	attempts := 0
+	_, taskErr = call(func(c *gin.Context, info *relaycommon.RelayInfo) (*relay.TaskSubmitResult, *dto.TaskError) {
+		attempts++
+		require.NoError(t, service.MarkTaskIdempotencyOutbound(c, info))
+		return nil, service.TaskErrorWrapperLocal(errors.New("response parse failed after acceptance"), "read_response_body_failed", http.StatusBadGateway)
+	})
+	require.NotNil(t, taskErr)
+	assert.Equal(t, "idempotency_indeterminate", taskErr.Code)
+	assert.True(t, taskErr.NoRetry)
+	_, taskErr = call(func(*gin.Context, *relaycommon.RelayInfo) (*relay.TaskSubmitResult, *dto.TaskError) {
+		attempts++
+		return nil, nil
+	})
+	require.NotNil(t, taskErr)
+	assert.Equal(t, "idempotency_indeterminate", taskErr.Code)
+	assert.Equal(t, 1, attempts)
+}
+
+func TestTaskIdempotencyConcurrentSubmitHasOneReservationAndTask(t *testing.T) {
+	previousConsume := common.LogConsumeEnabled
+	common.LogConsumeEnabled = false
+	t.Cleanup(func() { common.LogConsumeEnabled = previousConsume })
+	events := []string{}
+	db := setupTaskSubmissionDatabase(t, true, &events)
+	require.NoError(t, db.Callback().Create().Remove("test:task-submit-order"))
+	require.NoError(t, db.AutoMigrate(&model.TaskIdempotency{}, &model.User{}, &model.Channel{}))
+	t.Cleanup(func() {
+		require.NoError(t, db.Migrator().DropTable(&model.TaskIdempotency{}, &model.User{}, &model.Channel{}))
+	})
+	require.NoError(t, db.Create(&model.User{Id: 1, Username: "concurrent-owner", AffCode: "concurrent"}).Error)
+	require.NoError(t, db.Create(&model.Channel{Id: 1}).Error)
+	contextForCall := func() (*gin.Context, *relaycommon.RelayInfo) {
+		c := taskSubmissionTestContext()
+		c.Request.Header.Set("Idempotency-Key", "concurrent-key")
+		info := taskSubmissionRelayInfo(&taskSubmissionTestBilling{events: &events})
+		info.TokenId = 7
+		return c, info
+	}
+	entered, release := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	defer unblock()
+	var submits atomic.Int64
+	attempt := func(c *gin.Context, info *relaycommon.RelayInfo) (*relay.TaskSubmitResult, *dto.TaskError) {
+		submits.Add(1)
+		if err := service.MarkTaskIdempotencyOutbound(c, info); err != nil {
+			return nil, service.TaskErrorWrapperLocal(err, "barrier", 503)
+		}
+		close(entered)
+		<-release
+		return &relay.TaskSubmitResult{UpstreamTaskID: "one-provider-task", Platform: "plugin"}, nil
+	}
+	firstContext, firstInfo := contextForCall()
+	completed := make(chan *taskSubmissionOutcome, 1)
+	firstErrors := make(chan *dto.TaskError, 1)
+	go func() {
+		outcome, err := executeTaskSubmissionWith(firstContext, firstInfo, attempt)
+		firstErrors <- err
+		completed <- outcome
+	}()
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("first request did not reach outbound barrier")
+	}
+	duplicateContext, duplicateInfo := contextForCall()
+	_, taskErr := executeTaskSubmissionWith(duplicateContext, duplicateInfo, attempt)
+	require.NotNil(t, taskErr)
+	assert.Equal(t, "idempotency_indeterminate", taskErr.Code)
+	unblock()
+	require.Nil(t, <-firstErrors)
+	first := <-completed
+	require.NotNil(t, first)
+	replayContext, replayInfo := contextForCall()
+	replayed, taskErr := executeTaskSubmissionWith(replayContext, replayInfo, attempt)
+	require.Nil(t, taskErr)
+	require.NotNil(t, replayed)
+	assert.Equal(t, first.Task.ID, replayed.Task.ID)
+	assert.Equal(t, int64(1), submits.Load())
+	reserves, settles := 0, 0
+	for _, event := range events {
+		if event == "reserve" {
+			reserves++
+		}
+		if event == "settle" {
+			settles++
+		}
+	}
+	assert.Equal(t, 1, reserves)
+	assert.Equal(t, 1, settles)
+	var tasks int64
+	require.NoError(t, db.Model(&model.Task{}).Count(&tasks).Error)
+	assert.Equal(t, int64(1), tasks)
+}
+
+func TestTaskIdempotencyFundedPreflightFailureRequiresReconciliation(t *testing.T) {
+	events := []string{}
+	db := setupTaskSubmissionDatabase(t, true, &events)
+	require.NoError(t, db.AutoMigrate(&model.TaskIdempotency{}))
+	t.Cleanup(func() { require.NoError(t, db.Migrator().DropTable(&model.TaskIdempotency{})) })
+	attempts := 0
+	attempt := func(_ *gin.Context, info *relaycommon.RelayInfo) (*relay.TaskSubmitResult, *dto.TaskError) {
+		attempts++
+		info.TaskIdempotencyFundingAttempted = true
+		info.Billing = &taskSubmissionTestBilling{events: &events}
+		require.NoError(t, info.Billing.Reserve(5))
+		return nil, service.TaskErrorWrapperLocal(errors.New("preflight failure after funding"), "build_request_failed", 500)
+	}
+	call := func() (*taskSubmissionOutcome, *dto.TaskError) {
+		c := taskSubmissionTestContext()
+		c.Request.Header.Set("Idempotency-Key", "funded-preflight")
+		info := taskSubmissionRelayInfo(nil)
+		info.TokenId = 7
+		return executeTaskSubmissionWith(c, info, attempt)
+	}
+	_, taskErr := call()
+	require.NotNil(t, taskErr)
+	_, taskErr = call()
+	require.NotNil(t, taskErr)
+	assert.Equal(t, "idempotency_in_progress", taskErr.Code)
+	assert.Equal(t, 1, attempts)
+	reserves, refunds := 0, 0
+	for _, event := range events {
+		if event == "reserve" {
+			reserves++
+		}
+		if event == "refund" {
+			refunds++
+		}
+	}
+	assert.Equal(t, 1, reserves)
+	assert.Equal(t, 1, refunds, "the existing refund path runs once, but is not treated as durable funding proof")
+	var claims int64
+	require.NoError(t, db.Model(&model.TaskIdempotency{}).Count(&claims).Error)
+	assert.Equal(t, int64(1), claims)
+}
+
+func TestTaskIdempotencyFailedFundingWithoutSessionDoesNotRetryOrRelease(t *testing.T) {
+	events := []string{}
+	db := setupTaskSubmissionDatabase(t, true, &events)
+	require.NoError(t, db.AutoMigrate(&model.TaskIdempotency{}))
+	t.Cleanup(func() { require.NoError(t, db.Migrator().DropTable(&model.TaskIdempotency{})) })
+	previousRetries := common.RetryTimes
+	common.RetryTimes = 3
+	t.Cleanup(func() { common.RetryTimes = previousRetries })
+	attempts := 0
+	attempt := func(_ *gin.Context, info *relaycommon.RelayInfo) (*relay.TaskSubmitResult, *dto.TaskError) {
+		attempts++
+		info.TaskIdempotencyFundingAttempted = true
+		return nil, service.TaskErrorWrapper(errors.New("funding failed with unverified rollback"), "funding_error", http.StatusBadGateway)
+	}
+	call := func() (*taskSubmissionOutcome, *dto.TaskError) {
+		c := taskSubmissionTestContext()
+		c.Request.Header.Set("Idempotency-Key", "funding-without-session")
+		info := taskSubmissionRelayInfo(nil)
+		info.TokenId = 7
+		return executeTaskSubmissionWith(c, info, attempt)
+	}
+	_, taskErr := call()
+	require.NotNil(t, taskErr)
+	assert.Equal(t, "idempotency_indeterminate", taskErr.Code)
+	assert.True(t, taskErr.NoRetry)
+	_, taskErr = call()
+	require.NotNil(t, taskErr)
+	assert.Equal(t, "idempotency_in_progress", taskErr.Code)
+	assert.Equal(t, 1, attempts, "neither gateway retry nor client duplicate can repeat uncertain funding")
+	var claims int64
+	require.NoError(t, db.Model(&model.TaskIdempotency{}).Count(&claims).Error)
+	assert.Equal(t, int64(1), claims)
 }

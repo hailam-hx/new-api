@@ -1,0 +1,235 @@
+asyncapi: 3.0.0
+info:
+  title: new-api Public Responses WebSocket
+  version: 1.0.0
+  description: |
+    Complements the public HTTP OpenAPI contract. This describes the implemented
+    Responses WebSocket only; no webhook or universal cancellation API exists here.
+    Availability requires an enabled compatible channel, its explicit Responses
+    WebSocket opt-in, an authorized model and an upstream supporting this protocol.
+    OpenAI-compatible, NewAPI, Sub2API and native AdvancedCustom Responses routes
+    may qualify; conversion routes and unverified DFLOP profiles do not qualify.
+    A successful HTTP upgrade does not prove that the first model can be routed.
+    Production deployments must terminate TLS and use wss.
+defaultContentType: application/json
+servers:
+  deployment:
+    host: '{host}'
+    protocol: wss
+    description: Operator-selected deployment host; no production domain is prescribed.
+    variables:
+      host:
+        default: localhost
+        description: Replace with the gateway host and optional port.
+channels:
+  responses:
+    address: /v1/responses
+    description: |
+      GET upgrade authenticated by the existing TokenAuth middleware. Send an
+      explicit Authorization Bearer API key. Browser clients may instead offer
+      openai-insecure-api-key.<API_KEY> in Sec-WebSocket-Protocol together with
+      responses. Never persist or log that credential-bearing protocol header.
+      Session cookies and query key parameters do not authenticate this route.
+      Optional responses or realtime subprotocols can be negotiated by the shared
+      upgrader; neither is required. Origin is currently unrestricted for explicit
+      API-key clients. Credentials and model access are rechecked for every create.
+      One create may run at a time; a concurrent create gets local status 409.
+      The first upstream connection locks the model, channel and credential.
+      Client message limit is MAX_REQUEST_BODY_MB MiB (fallback 128 MiB);
+      upstream limit is STREAM_SCANNER_MAX_BUFFER_MB MiB (fallback 128 MiB).
+      Writes have a 30-second deadline. Active upstream idle timeout and inactive
+      session idle timeout use STREAMING_TIMEOUT seconds (fallback 300 seconds).
+      Timeout/disconnect closes peers and finalizes active request billing once.
+      Normal client close is echoed (1000). Oversized client messages close with
+      1009; channel policy closes use 1008. Other shutdowns may appear as 1006.
+      There is no application heartbeat, resume, replay or idempotency guarantee.
+      Never blindly resubmit a paid create after an ambiguous connection failure.
+    servers:
+      - $ref: '#/servers/deployment'
+    bindings:
+      ws:
+        method: GET
+        bindingVersion: 0.1.0
+    messages:
+      create:
+        $ref: '#/components/messages/create'
+      cancel:
+        $ref: '#/components/messages/cancel'
+      localError:
+        $ref: '#/components/messages/localError'
+      upstreamEvent:
+        $ref: '#/components/messages/upstreamEvent'
+operations:
+  receiveCreate:
+    action: receive
+    channel:
+      $ref: '#/channels/responses'
+    messages:
+      - $ref: '#/channels/responses/messages/create'
+  receiveCancel:
+    action: receive
+    channel:
+      $ref: '#/channels/responses'
+    messages:
+      - $ref: '#/channels/responses/messages/cancel'
+  sendEvents:
+    action: send
+    channel:
+      $ref: '#/channels/responses'
+    messages:
+      - $ref: '#/channels/responses/messages/localError'
+      - $ref: '#/channels/responses/messages/upstreamEvent'
+components:
+  schemas:
+    identity:
+      type: string
+      minLength: 1
+      maxLength: 256
+      pattern: '^[A-Za-z0-9_.-]+$'
+    request:
+      type: object
+      required: [model]
+      description: |
+        HTTP Responses request fields retain their existing request validation and
+        channel conversion rules. Unknown vendor fields may be preserved only by
+        configured passthrough. stream, stream_options and background are removed
+        from upstream WebSocket creates. generate is forwarded without a local
+        type constraint. In the wrapped form, the response object supplies request
+        fields; the outer stream_id takes precedence over response.stream_id.
+      properties:
+        model:
+          type: string
+          minLength: 1
+        input: {}
+        max_output_tokens:
+          type: integer
+          minimum: 0
+          maximum: 1073741823
+        stream_id:
+          $ref: '#/components/schemas/identity'
+        generate: {}
+      additionalProperties: true
+  messages:
+    create:
+      name: response.create
+      description: |
+        Validates and authenticates one ordinary billed Responses request. Either
+        flat request fields or the legacy response wrapper is accepted. event_id
+        is used in local errors and is removed from the upstream create. Existing
+        pre-submission channel retry policy remains; no retry after create write.
+      payload:
+        type: object
+        required: [type]
+        properties:
+          type:
+            const: response.create
+          event_id:
+            type: string
+          stream_id:
+            $ref: '#/components/schemas/identity'
+          generate: {}
+          response:
+            $ref: '#/components/schemas/request'
+        anyOf:
+          - required: [response]
+          - allOf:
+              - $ref: '#/components/schemas/request'
+              - not:
+                  required: [response]
+        additionalProperties: true
+      examples:
+        - payload:
+            type: response.create
+            model: operator-enabled-model
+            input: Hello
+            stream_id: planner.A-1
+        - payload:
+            type: response.create
+            response:
+              model: operator-enabled-model
+              input: Hello
+    cancel:
+      name: response.cancel
+      description: |
+        Forwarded only for an active create, after upstream acceptance. One control
+        may be pending. An inactive cancel or another pending control gets local
+        status 400. Upstream cancellation capability and its errors are conditional;
+        this control is not a universal task cancellation or refund guarantee.
+      payload:
+        type: object
+        required: [type]
+        properties:
+          type:
+            const: response.cancel
+          event_id:
+            type: string
+          stream_id:
+            $ref: '#/components/schemas/identity'
+        additionalProperties: true
+      examples:
+        - payload:
+            type: response.cancel
+            event_id: stop-1
+    localError:
+      name: error
+      description: |
+        Gateway-generated error. Invalid JSON/type/schema emits status 400 and the
+        connection may continue. Auth status 401/403 also closes the connection.
+        Routing, rate limit and upstream request errors use existing HTTP status
+        semantics inside this envelope. These are not HTTP responses after upgrade.
+      payload:
+        type: object
+        required: [type, status, error]
+        properties:
+          type:
+            const: error
+          status:
+            type: integer
+          event_id:
+            type: string
+          stream_id:
+            $ref: '#/components/schemas/identity'
+          error:
+            type: object
+            required: [message, type]
+            properties:
+              message:
+                type: string
+              type:
+                type: string
+              code: {}
+              param: {}
+            additionalProperties: true
+        additionalProperties: true
+      examples:
+        - payload:
+            type: error
+            status: 400
+            error:
+              type: invalid_request_error
+              message: Unsupported websocket event
+    upstreamEvent:
+      name: upstreamEvent
+      description: |
+        Upstream frames are forwarded without a gateway-owned exhaustive event
+        enum. Responses events may include created, in_progress, output deltas,
+        usage and errors. Terminal types recognized by the gateway are
+        response.completed, response.done, response.incomplete, response.failed,
+        response.cancelled and response.canceled. Terminal usage settles the
+        request once; disconnect/timeout settles observed output conservatively.
+        Correlated control errors need not terminate the active generation.
+        Upstream malformed frames can be forwarded and recorded as stream errors;
+        this JSON schema describes valid upstream events, not malformed bytes.
+      payload:
+        type: object
+        additionalProperties: true
+      examples:
+        - payload:
+            type: response.completed
+            response:
+              id: example-response
+              status: completed
+              usage:
+                input_tokens: 1
+                output_tokens: 1
+                total_tokens: 2

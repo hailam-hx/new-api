@@ -16,12 +16,21 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { readFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
+import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
 import { publicApiEndpoints } from '../api-reference-data'
+import { buildDeveloperRecipe } from '../developer-recipe-code'
 
 const root = resolve(process.cwd(), '..')
 const specPath = resolve(root, 'docs/openapi/public.json')
@@ -321,4 +330,350 @@ it('rejects duplicate JSON keys and invalid named response examples', async () =
   expect(() =>
     validatePublicContract(spec, publicApiEndpoints, reference, root)
   ).toThrow(/Example type/)
+})
+
+it.each([
+  'removed enum value',
+  'changed authentication',
+  'changed auth scheme',
+  'narrowed numeric input',
+])('hard-fails %s against the original contract', async (mutation) => {
+  const { contractSnapshot, compareContracts } =
+    await import('../../../../scripts/public-openapi-contract.mjs')
+  const original = JSON.parse(readFileSync(specPath, 'utf8'))
+  const changed = structuredClone(original)
+  if (mutation === 'removed enum value') {
+    changed.components.schemas.DeveloperTask.properties.status.enum.pop()
+  }
+  if (mutation === 'changed authentication') {
+    changed.paths['/v1/catalog'].get.security = [{ ImageAccess: [] }]
+  }
+  if (mutation === 'changed auth scheme') {
+    changed.components.securitySchemes.BearerAuth.scheme = 'basic'
+  }
+  if (mutation === 'narrowed numeric input') {
+    const parameter = changed.paths['/v1/tasks'].get.parameters.find(
+      (entry: { name: string }) => entry.name === 'limit'
+    )
+    parameter.schema.maximum = 1
+  }
+  expect(
+    compareContracts(
+      contractSnapshot(original),
+      contractSnapshot(changed)
+    ).some((change) => change.kind === 'BREAKING')
+  ).toBe(true)
+})
+
+it('reads the committed public spec independently of the editable baseline snapshot', async () => {
+  const { readCommittedContract, contractSnapshot, compareContracts } =
+    await import('../../../../scripts/public-openapi-contract.mjs')
+  const committed = readCommittedContract(root)
+  expect(committed.commit).toMatch(/^[a-f0-9]{40}$/)
+  const changed = JSON.parse(readFileSync(specPath, 'utf8'))
+  delete changed.paths['/v1/catalog']
+  expect(
+    compareContracts(committed.snapshot, contractSnapshot(changed))
+  ).toContainEqual({
+    kind: 'BREAKING',
+    at: 'GET /v1/catalog',
+    reason: 'Operation removed',
+  })
+})
+
+it('detects path-level required parameters and accepts new response headers', async () => {
+  const { contractSnapshot, compareContracts } =
+    await import('../../../../scripts/public-openapi-contract.mjs')
+  const original = JSON.parse(readFileSync(specPath, 'utf8'))
+  const changed = structuredClone(original)
+  changed.paths['/v1/catalog'].parameters = [
+    { name: 'region', in: 'query', required: true, schema: { type: 'string' } },
+  ]
+  expect(
+    compareContracts(contractSnapshot(original), contractSnapshot(changed))
+  ).toContainEqual({
+    kind: 'BREAKING',
+    at: 'GET /v1/catalog',
+    reason: 'Parameter added: query/region',
+  })
+  delete changed.paths['/v1/catalog'].parameters
+  changed.paths['/v1/catalog'].get.responses['200'].headers = {
+    'X-Trace': { schema: { type: 'string' } },
+  }
+  expect(
+    compareContracts(
+      contractSnapshot(original),
+      contractSnapshot(changed)
+    ).every((entry) => entry.kind === 'ADDITIVE')
+  ).toBe(true)
+})
+
+it('compares effective operation parameter overrides rather than shadowed path defaults', async () => {
+  const { contractSnapshot, compareContracts } =
+    await import('../../../../scripts/public-openapi-contract.mjs')
+  const original = JSON.parse(readFileSync(specPath, 'utf8'))
+  const changed = structuredClone(original)
+  changed.paths['/v1/tasks'].parameters = [
+    { name: 'limit', in: 'query', schema: { type: 'integer', maximum: 1 } },
+  ]
+  expect(
+    compareContracts(contractSnapshot(original), contractSnapshot(changed))
+  ).toEqual([])
+  changed.paths['/v1/tasks'].get.parameters = changed.paths[
+    '/v1/tasks'
+  ].get.parameters.filter(
+    (parameter: { name: string }) => parameter.name !== 'limit'
+  )
+  expect(
+    compareContracts(
+      contractSnapshot(original),
+      contractSnapshot(changed)
+    ).some((entry) => entry.kind === 'BREAKING')
+  ).toBe(true)
+})
+
+type RecipeFixture = { path: string; body: unknown }
+
+function executeDeveloperRecipe(
+  section: string,
+  fixtures: RecipeFixture[],
+  overrides: Record<string, string> = {}
+) {
+  const workspace = mkdtempSync(resolve(tmpdir(), 'hotx-recipe-fixture-'))
+  const recipe = buildDeveloperRecipe(section, 'https://fixture.invalid/')
+  const env = {
+    ...process.env,
+    PATH: `${workspace}:${process.env.PATH}`,
+    NEW_API_KEY: 'fixture-only-token',
+    NEW_API_MODEL: 'quoted "model" $value; `literal`',
+    START_UNIX_SECONDS: '1',
+    END_UNIX_SECONDS: '2',
+    ESTIMATE_UNIT: 'points',
+    ESTIMATED_COST: '0.125',
+    ...overrides,
+  }
+  try {
+    writeFileSync(resolve(workspace, 'fixtures.json'), JSON.stringify(fixtures))
+    writeFileSync(resolve(workspace, 'calls.json'), '[]')
+    writeFileSync(resolve(workspace, 'jq'), '#!/bin/sh\nexit 99\n', {
+      mode: 0o755,
+    })
+    // Only transport is replaced. The displayed Bash/Python and its JSON parsing
+    // execute verbatim. Every unexpected call fails without touching the network.
+    const transport = String.raw`import json,sys,io
+from pathlib import Path
+from urllib.parse import urlparse
+fixtures = json.loads(Path('fixtures.json').read_text())
+def fixture_request(url, args, payload):
+    calls = json.loads(Path('calls.json').read_text())
+    assert urlparse(url).netloc == 'fixture.invalid', url
+    fixture = fixtures[len(calls)]
+    assert urlparse(url).path == fixture['path'], url
+    calls.append({'url':url,'args':args,'payload':payload})
+    Path('calls.json').write_text(json.dumps(calls))
+    return fixture['body']
+`
+    if (recipe.language === 'python') {
+      const wrapper =
+        transport +
+        String.raw`
+import urllib.request
+def urlopen(request):
+    assert request.headers['Authorization'] == 'Bearer fixture-only-token'
+    payload = json.loads(request.data) if request.data else None
+    body = fixture_request(request.full_url, [], payload)
+    return io.BytesIO(json.dumps(body).encode())
+urllib.request.urlopen = urlopen
+exec(Path('recipe.py').read_text(), {'__name__':'__main__'})
+`
+      writeFileSync(resolve(workspace, 'recipe.py'), recipe.code)
+      writeFileSync(resolve(workspace, 'run.py'), wrapper)
+    } else {
+      const mockCurl = [
+        '#!/usr/bin/env python3\n',
+        transport,
+        String.raw`
+args = sys.argv[1:]
+assert 'Authorization: Bearer fixture-only-token' in args, args
+url = next(value for value in args if value.startswith('https://'))
+payload = json.load(sys.stdin) if '--data-binary' in args else None
+body = fixture_request(url, args, payload)
+if '--output' in args:
+    Path(args[args.index('--output') + 1]).write_bytes(bytes(body))
+else:
+    print(json.dumps(body) if not isinstance(body, str) else body)
+`,
+      ].join('')
+      writeFileSync(resolve(workspace, 'curl'), mockCurl, { mode: 0o755 })
+      writeFileSync(resolve(workspace, 'recipe.sh'), recipe.code)
+    }
+    const command = recipe.language === 'python' ? 'python3' : 'bash'
+    const args = recipe.language === 'python' ? ['run.py'] : ['recipe.sh']
+    const result = spawnSync(command, args, {
+      cwd: workspace,
+      env,
+      encoding: 'utf8',
+      timeout: 10000,
+    })
+    if (result.error) throw result.error
+    const calls = JSON.parse(
+      readFileSync(resolve(workspace, 'calls.json'), 'utf8')
+    )
+    let savedTask: string | undefined
+    let video: number[] | undefined
+    if (section === 'video' && calls.length) {
+      if (existsSync(resolve(workspace, 'video-task-id.txt'))) {
+        savedTask = readFileSync(
+          resolve(workspace, 'video-task-id.txt'),
+          'utf8'
+        )
+      }
+      if (existsSync(resolve(workspace, 'video.mp4'))) {
+        video = [...readFileSync(resolve(workspace, 'video.mp4'))]
+      }
+    }
+    return { ...result, calls, savedTask, video }
+  } finally {
+    rmSync(workspace, { recursive: true, force: true })
+  }
+}
+
+const quotedRecipeModel = 'quoted "model" $value; `literal`'
+
+describe('displayed developer recipes with standard-library JSON fixtures', () => {
+  it('discovers a compatible quoted model and submits its JSON without requiring jq', () => {
+    const result = executeDeveloperRecipe('discover', [
+      {
+        path: '/v1/catalog',
+        body: {
+          models: [
+            { id: 'not-chat', endpoints: [] },
+            {
+              id: quotedRecipeModel,
+              endpoints: [{ method: 'POST', path: '/v1/chat/completions' }],
+            },
+          ],
+        },
+      },
+      { path: '/v1/chat/completions', body: { id: 'fixture-chat' } },
+    ])
+    expect(result.status, result.stderr).toBe(0)
+    expect(result.calls).toHaveLength(2)
+    expect(result.calls[1].payload).toEqual({
+      model: quotedRecipeModel,
+      messages: [{ role: 'user', content: 'Hello' }],
+    })
+  })
+  it('checks exact decimal allowance before submitting the balance recipe once', () => {
+    const result = executeDeveloperRecipe('balance', [
+      {
+        path: '/v1/key/balance',
+        body: { unit: 'points', remaining: '0.125', unlimited: false },
+      },
+      { path: '/v1/chat/completions', body: { id: 'fixture-chat' } },
+    ])
+    expect(result.status, result.stderr).toBe(0)
+    expect(result.calls).toHaveLength(2)
+    expect(result.calls[1].payload.model).toBe(quotedRecipeModel)
+  })
+  it('preserves the usage recipe time range as URL-encoded curl arguments', () => {
+    const result = executeDeveloperRecipe('usage', [
+      { path: '/v1/key/usage', body: { recorded_net: '-0.125' } },
+    ])
+    expect(result.status, result.stderr).toBe(0)
+    expect(result.calls).toHaveLength(1)
+    expect(result.calls[0].args).toEqual(
+      expect.arrayContaining(['--get', '--data-urlencode', 'start=1', 'end=2'])
+    )
+  })
+  it('submits video once, saves its ID with a newline, then fetches binary content after completion', () => {
+    const result = executeDeveloperRecipe('video', [
+      { path: '/v1/videos', body: { id: 'fixture-video' } },
+      { path: '/v1/tasks/fixture-video', body: { status: 'completed' } },
+      { path: '/v1/videos/fixture-video/content', body: [0, 1, 255] },
+    ])
+    expect(result.status, result.stderr).toBe(0)
+    expect(result.calls).toHaveLength(3)
+    expect(result.calls[0].payload).toEqual({
+      model: quotedRecipeModel,
+      prompt: 'A calm ocean',
+    })
+    expect(result.savedTask).toBe('fixture-video\n')
+    expect(result.video).toEqual([0, 1, 255])
+  })
+  it('passes opaque task cursors as one URL-encoded argument and stops at the terminal page', () => {
+    const cursor = 'opaque+/=? "cursor" $value'
+    const result = executeDeveloperRecipe('tasks', [
+      {
+        path: '/v1/tasks',
+        body: { data: [{ id: 'one' }], has_more: true, next_cursor: cursor },
+      },
+      { path: '/v1/tasks', body: { data: [], has_more: false } },
+    ])
+    expect(result.status, result.stderr).toBe(0)
+    expect(result.calls).toHaveLength(2)
+    expect(result.calls[1].args).toContain(`cursor=${cursor}`)
+  })
+  it.each(['future_status', 'failed'])(
+    'retains the saved task and avoids resubmission/content retrieval for %s',
+    (status) => {
+      const result = executeDeveloperRecipe('video', [
+        { path: '/v1/videos', body: { id: 'fixture-video' } },
+        { path: '/v1/tasks/fixture-video', body: { status } },
+      ])
+      expect(result.status).toBe(1)
+      expect(result.calls).toHaveLength(2)
+      expect(result.savedTask).toBe('fixture-video\n')
+      expect(result.video).toBeUndefined()
+    }
+  )
+  it('rejects malformed catalog JSON before submitting paid work', () => {
+    const result = executeDeveloperRecipe('discover', [
+      { path: '/v1/catalog', body: '{malformed' },
+    ])
+    expect(result.status).not.toBe(0)
+    expect(result.calls).toHaveLength(1)
+  })
+  it('rejects insufficient key allowance before submitting paid work', () => {
+    const result = executeDeveloperRecipe('balance', [
+      {
+        path: '/v1/key/balance',
+        body: { unit: 'points', remaining: '0.124', unlimited: false },
+      },
+    ])
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('Insufficient key allowance')
+    expect(result.calls).toHaveLength(1)
+  })
+})
+
+it('documents idempotency only for task-backed mutations and retains ordinary relay and read contracts', () => {
+  const spec = JSON.parse(readFileSync(specPath, 'utf8'))
+  for (const path of [
+    '/v1/videos',
+    '/v1/tasks/{key}',
+    '/v1/responses',
+    '/v1/images/edits',
+    '/doubao/api/v3/contents/generations/tasks',
+  ]) {
+    const operation = spec.paths[path].post
+    expect(operation.parameters).toContainEqual(
+      expect.objectContaining({ name: 'Idempotency-Key', in: 'header' })
+    )
+    expect(operation.responses).toHaveProperty('409')
+    expect(operation.responses).toHaveProperty('503')
+  }
+  for (const [path, method] of [
+    ['/v1/chat/completions', 'post'],
+    ['/v1/responses', 'get'],
+    ['/v1/tasks', 'get'],
+    ['/suno/fetch', 'post'],
+    ['/mj/submit/imagine', 'post'],
+  ]) {
+    expect(
+      (spec.paths[path][method].parameters ?? []).some(
+        (parameter: { name: string }) => parameter.name === 'Idempotency-Key'
+      )
+    ).toBe(false)
+  }
 })

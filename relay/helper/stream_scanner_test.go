@@ -583,3 +583,80 @@ func TestNewStreamScannerCallerLimit(t *testing.T) {
 	assert.Equal(t, "data: ok", scanner.Text())
 	require.NoError(t, scanner.Err())
 }
+
+func TestStreamScannerHandler_ExactTerminalMarker(t *testing.T) {
+	c, resp, info := setupStreamTest(t, strings.NewReader("data: [DONE]suffix\r\ndata: payload\r\ndata: [DONE]\r\n"))
+	var received []string
+	StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
+		received = append(received, data)
+	})
+	assert.Equal(t, []string{"[DONE]suffix", "payload"}, received)
+	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
+}
+
+func TestStreamScannerHandler_QueuedFailureBeforeTerminal(t *testing.T) {
+	c, resp, info := setupStreamTest(t, strings.NewReader("data: invalid-json\ndata: [DONE]\n"))
+	failure := fmt.Errorf("invalid protocol JSON")
+	StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {
+		sr.Stop(failure)
+	})
+	assert.Equal(t, relaycommon.StreamEndReasonHandlerStop, info.StreamStatus.EndReason)
+	assert.ErrorIs(t, info.StreamStatus.EndError, failure)
+}
+
+func TestStreamScannerHandler_UnsetIdleTimeout(t *testing.T) {
+	previous := constant.StreamingTimeout
+	constant.StreamingTimeout = 0
+	t.Cleanup(func() { constant.StreamingTimeout = previous })
+	c, resp, info := setupStreamTest(t, strings.NewReader("data: ok\ndata: [DONE]\n"))
+	require.NotPanics(t, func() {
+		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {})
+	})
+	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
+}
+
+type failedPingWriter struct {
+	gin.ResponseWriter
+	failed chan struct{}
+}
+
+func (w *failedPingWriter) Write(data []byte) (int, error) {
+	close(w.failed)
+	return 0, io.ErrClosedPipe
+}
+
+func TestStreamScannerHandler_PingFailureClosesIdleUpstream(t *testing.T) {
+	setting := operation_setting.GetGeneralSetting()
+	previousEnabled, previousSeconds := setting.PingIntervalEnabled, setting.PingIntervalSeconds
+	setting.PingIntervalEnabled, setting.PingIntervalSeconds = true, 1
+	t.Cleanup(func() { setting.PingIntervalEnabled, setting.PingIntervalSeconds = previousEnabled, previousSeconds })
+	reader, writer := io.Pipe()
+	t.Cleanup(func() { _ = reader.Close(); _ = writer.Close() })
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	c, resp, info := setupStreamTest(t, reader)
+	resp.Body = reader
+	c.Request = c.Request.WithContext(ctx)
+	failed := make(chan struct{})
+	c.Writer = &failedPingWriter{ResponseWriter: c.Writer, failed: failed}
+	finished := make(chan struct{})
+	go func() {
+		StreamScannerHandler(c, resp, info, func(data string, sr *StreamResult) {})
+		close(finished)
+	}()
+	select {
+	case <-failed:
+	case <-time.After(3 * time.Second):
+		t.Fatal("heartbeat was not attempted")
+	}
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		cancel()
+		<-finished
+		t.Fatal("failed heartbeat left the upstream read running")
+	}
+	assert.Equal(t, relaycommon.StreamEndReasonPingFail, info.StreamStatus.EndReason)
+	_, err := writer.Write([]byte("data: too late\n"))
+	require.ErrorIs(t, err, io.ErrClosedPipe)
+}

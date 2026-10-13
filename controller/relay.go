@@ -430,6 +430,7 @@ func RelayTaskFetch(c *gin.Context) {
 }
 
 type taskSubmissionOutcome struct {
+	Replay    bool
 	Result    *relay.TaskSubmitResult
 	Task      *model.Task
 	RelayInfo *relaycommon.RelayInfo
@@ -481,7 +482,21 @@ func executeTaskSubmissionWith(
 	c *gin.Context,
 	relayInfo *relaycommon.RelayInfo,
 	submit taskSubmitAttempt,
-) (*taskSubmissionOutcome, *taskdto.TaskError) {
+) (_ *taskSubmissionOutcome, returnedErr *taskdto.TaskError) {
+	claim, replay, claimErr := service.BeginTaskIdempotency(c, relayInfo)
+	if claimErr != nil {
+		return nil, claimErr
+	}
+	if replay != nil {
+		relayInfo.OriginModelName = replay.Properties.OriginModelName
+		return &taskSubmissionOutcome{Replay: true, Task: replay, RelayInfo: relayInfo, Result: &relay.TaskSubmitResult{
+			UpstreamTaskID: replay.GetUpstreamTaskID(), Platform: replay.Platform, Quota: replay.Quota,
+			TaskData: replay.Data, PluginState: replay.PrivateData.PluginState,
+		}}, nil
+	}
+	if claim != nil {
+		defer service.ReleaseTaskIdempotencyPreflight(relayInfo)
+	}
 	policy := service.RequestPolicy(c)
 	diagnostics := newTaskPluginSubmitDiagnostics(c)
 	diagnostics.start(relayInfo)
@@ -489,6 +504,12 @@ func executeTaskSubmissionWith(
 	var taskErr *taskdto.TaskError
 	durable := false
 	stage := "start"
+	defer func() {
+		if claim != nil && !durable && (relayInfo.TaskIdempotencyOutbound || relayInfo.TaskIdempotencyFundingAttempted) && returnedErr != nil {
+			returnedErr = service.TaskErrorWrapperLocal(errors.New("The funding or upstream outcome is uncertain; do not submit this operation with a new key"), "idempotency_indeterminate", http.StatusConflict)
+			returnedErr.NoRetry = true
+		}
+	}()
 	defer func() {
 		if !durable && relayInfo.Billing != nil {
 			if relayInfo.DFLOPTaskOutbound && service.DFLOPTaskReservationApplies(relayInfo) && (relayInfo.DFLOPTaskHTTPStatus/100 != 4 || relayInfo.DFLOPTaskAccepted) {
@@ -580,7 +601,7 @@ func executeTaskSubmissionWith(
 
 		taskAPIError := taskSubmissionAPIError(taskErr)
 		relayInfo.LastError = taskAPIError
-		if relayInfo.DFLOPTaskOutbound && service.DFLOPTaskReservationApplies(relayInfo) {
+		if relayInfo.TaskIdempotencyOutbound || relayInfo.TaskIdempotencyFundingAttempted && relayInfo.Billing == nil || relayInfo.DFLOPTaskOutbound && service.DFLOPTaskReservationApplies(relayInfo) {
 			taskErr.NoRetry = true
 		}
 		decision := decideTaskRetry(c, taskErr, retryLimit-retryParam.GetRetry())
@@ -646,6 +667,15 @@ func executeTaskSubmissionWith(
 	task.PrivateData.BillingSource = relayInfo.BillingSource
 	task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
 	task.PrivateData.TokenId = relayInfo.TokenId
+	if requestValue, exists := c.Get(pluginruntime.ContextKeyProtocolRequest); exists {
+		if request, ok := requestValue.(pluginruntime.ProtocolRequestContext); ok && request.Protocol == "openai_responses" {
+			if body, ok := request.Body.(map[string]any); ok {
+				if value, ok := body["value"].(map[string]any); ok {
+					task.PrivateData.ResponsesBackground, _ = value["background"].(bool)
+				}
+			}
+		}
+	}
 	task.PrivateData.NodeName = common.NodeName
 	task.PrivateData.BillingContext = &model.TaskBillingContext{
 		ModelPrice:      relayInfo.PriceData.ModelPrice,
@@ -712,7 +742,13 @@ func executeTaskSubmissionWith(
 		}
 	}
 	diagnostics.insertStart(task)
-	if insertErr := task.InsertWithContext(c.Request.Context(), insertOmits...); insertErr != nil {
+	var insertErr error
+	if claim != nil {
+		insertErr = model.InsertTaskWithIdempotency(c.Request.Context(), task, claim.ID, claim.Nonce, insertOmits...)
+	} else {
+		insertErr = task.InsertWithContext(c.Request.Context(), insertOmits...)
+	}
+	if insertErr != nil {
 		common.SysError("insert task error: " + insertErr.Error())
 		taskErr = service.TaskErrorWrapperLocal(errors.New("failed to persist task"), "task_insert_failed", http.StatusInternalServerError)
 		diagnostics.failed("insert", "database_error", taskErr, false)
@@ -812,6 +848,13 @@ func presentTaskSubmission(c *gin.Context, outcome *taskSubmissionOutcome) {
 func respondTaskSubmissionError(c *gin.Context, taskErr *taskdto.TaskError) {
 	service.RecordRequestPolicyTermination(c, taskSubmissionAPIError(taskErr))
 	newTaskPluginSubmitDiagnostics(c).presentError(taskErr)
+	if taskErr != nil && taskErr.LocalError {
+		if message, ok := service.TaskIdempotencyErrorMessage(taskErr.Code); ok {
+			taskErr.Message = message
+			respondTaskError(c, taskErr)
+			return
+		}
+	}
 	if middleware.RespondTaskPluginError(c, taskErr) {
 		return
 	}

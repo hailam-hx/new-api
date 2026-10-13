@@ -182,6 +182,8 @@ it('finds lifecycle policies, recipes and public error guidance in ordinary docs
     ['API Versioning', '/docs/developer-versioning'],
     ['API Changelog', '/docs/developer-changelog'],
     ['Recipes', '/docs/developer-recipes'],
+    ['Idempotency', '/docs/developer-idempotency'],
+    ['Responses WebSocket', '/docs/developer-websocket'],
     ['artifact_not_ready', '/docs/developer-errors-retries'],
   ]) {
     expect(
@@ -199,7 +201,7 @@ it('builds public workflows with a configured base URL and no automatic mutation
   ).code
   expect(discovery).toContain('https://gateway.example/prefix')
   expect(discovery).toContain('/v1/catalog')
-  expect(discovery).toContain('.endpoints[]')
+  expect(discovery).toContain('m["endpoints"]')
   expect(discovery).toContain('/v1/chat/completions')
   const video = buildDeveloperRecipe('video', 'https://gateway.example').code
   expect(video).toContain('/v1/tasks/$task_id')

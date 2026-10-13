@@ -560,6 +560,46 @@ func TestResponsesWSMessageSizeLimit(t *testing.T) {
 	assert.False(t, admitted.Load())
 }
 
+func TestResponsesWSIdleSessionClosesAndReleasesHandler(t *testing.T) {
+	previous := constant.StreamingTimeout
+	constant.StreamingTimeout = 1
+	t.Cleanup(func() { constant.StreamingTimeout = previous })
+	for _, sendMessage := range []bool{false, true} {
+		t.Run(fmt.Sprintf("after_message=%t", sendMessage), func(t *testing.T) {
+			client, server, cleanup := newTestWebSocketPair(t)
+			defer cleanup()
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				ResponsesWebSocketHelper(c, server, func(*http.Request, string, func(*gin.Context) *types.NewAPIError) *types.NewAPIError {
+					t.Error("invalid event admitted to request worker")
+					return nil
+				})
+			}()
+			if sendMessage {
+				require.NoError(t, client.WriteMessage(websocket.TextMessage, []byte(`{"type":"unknown"}`)))
+				_, message, err := client.ReadMessage()
+				require.NoError(t, err)
+				var event responsesWSErrorEvent
+				require.NoError(t, common.Unmarshal(message, &event))
+				assert.Equal(t, http.StatusBadRequest, event.Status)
+			}
+			select {
+			case <-done:
+			case <-time.After(2 * time.Second):
+				t.Error("idle websocket handler retained its connection and workers")
+				_ = client.Close()
+				<-done
+			}
+			require.NoError(t, client.SetReadDeadline(time.Now().Add(time.Second)))
+			_, _, err := client.ReadMessage()
+			assert.Error(t, err)
+		})
+	}
+}
+
 func TestResponsesWSShutdownInterruptsBusyWriter(t *testing.T) {
 	client, server, cleanupClient := newTestWebSocketPair(t)
 	defer cleanupClient()

@@ -88,7 +88,7 @@ func TestDFLOPAudioSpeechProductionTaskSubmissionAndPolling(t *testing.T) {
 			previousLogConsume, previousRedis := common.LogConsumeEnabled, common.RedisEnabled
 			database, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "billing.db")), &gorm.Config{})
 			require.NoError(t, err)
-			require.NoError(t, database.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Task{}, &model.Log{}))
+			require.NoError(t, database.AutoMigrate(&model.User{}, &model.Token{}, &model.Channel{}, &model.Task{}, &model.TaskIdempotency{}, &model.Log{}))
 			model.DB, model.LOG_DB = database, database
 			common.MemoryCacheEnabled, common.BatchUpdateEnabled = false, false
 			common.LogConsumeEnabled, common.RedisEnabled = true, false
@@ -201,6 +201,8 @@ func TestDFLOPAudioSpeechProductionTaskSubmissionAndPolling(t *testing.T) {
 			serveTaskPluginAudioSpeech(c, pinned, deps)
 			if tc.lostResponse {
 				require.NotNil(t, taskErr)
+				assert.Equal(t, "idempotency_indeterminate", taskErr.Code)
+				assert.True(t, taskErr.NoRetry)
 				assert.Equal(t, int32(1), submitCalls.Load())
 				var journal model.Log
 				require.NoError(t, database.Where("content = ?", "BILLING_RESERVATION_PENDING").First(&journal).Error)
@@ -233,6 +235,25 @@ func TestDFLOPAudioSpeechProductionTaskSubmissionAndPolling(t *testing.T) {
 			assert.Equal(t, service.BillingSourceWallet, outcome.RelayInfo.BillingSource)
 			expectedSubmitCalls := int32(1)
 
+			assert.Equal(t, expectedSubmitCalls, submitCalls.Load())
+			assert.Equal(t, submittedInfo.RequestId, firstIdempotencyKey)
+			assert.NotEqual(t, "client-intent-1", firstIdempotencyKey)
+			var beforeReplayUser model.User
+			require.NoError(t, database.First(&beforeReplayUser, 17).Error)
+			replayContext := c.Copy()
+			replayContext.Request = c.Request.Clone(context.Background())
+			replayInfo := *submittedInfo
+			replayInfo.Billing = nil
+			replayInfo.TaskIdempotencyID, replayInfo.TaskIdempotencyNonce, replayInfo.TaskIdempotencyOutbound = 0, "", false
+			replayed, replayErr := executeTaskSubmissionWith(replayContext, &replayInfo, relay.RelayTaskSubmit)
+			require.Nil(t, replayErr)
+			require.NotNil(t, replayed)
+			assert.True(t, replayed.Replay)
+			assert.Equal(t, outcome.Task.ID, replayed.Task.ID)
+			assert.Nil(t, replayInfo.Billing)
+			var afterReplayUser model.User
+			require.NoError(t, database.First(&afterReplayUser, 17).Error)
+			assert.Equal(t, beforeReplayUser.Quota, afterReplayUser.Quota)
 			assert.Equal(t, expectedSubmitCalls, submitCalls.Load())
 			if tc.clientGone {
 				assert.Empty(t, recorder.Body.String())
@@ -579,6 +600,67 @@ func TestDFLOPAcceptedMalformedUsageHoldsAcrossControllerRefund(t *testing.T) {
 			var consumes int64
 			require.NoError(t, db.Model(&model.Log{}).Where("user_id = ? AND type = ?", user.Id, model.LogTypeConsume).Count(&consumes).Error)
 			assert.Zero(t, consumes)
+		})
+	}
+}
+
+func TestTaskIdempotencyCannotBypassKeyAuthentication(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	previousDB, previousLogDB := model.DB, model.LOG_DB
+	previousMain, previousLog := common.MainDatabaseType(), common.LogDatabaseType()
+	previousMaster := common.IsMasterNode
+	t.Setenv("LOG_SQL_DSN", "")
+	previousRedis, previousMemory := common.RedisEnabled, common.MemoryCacheEnabled
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "idempotency-auth.db")), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Token{}, &model.TaskIdempotency{}))
+	model.DB = db
+	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	common.IsMasterNode = false
+	require.NoError(t, model.InitLogDB())
+	common.RedisEnabled, common.MemoryCacheEnabled = false, false
+	t.Cleanup(func() {
+		model.DB, model.LOG_DB = previousDB, previousLogDB
+		common.SetDatabaseTypes(previousMain, previousLog)
+		common.IsMasterNode = previousMaster
+		common.RedisEnabled, common.MemoryCacheEnabled = previousRedis, previousMemory
+		sqlDB, err := db.DB()
+		require.NoError(t, err)
+		_ = sqlDB.Close()
+	})
+	require.NoError(t, db.Create(&model.User{Id: 71, Username: "key-owner", AffCode: "auth-idempotency", Status: common.UserStatusEnabled, Group: "default", Quota: 10000}).Error)
+	for _, token := range []model.Token{
+		{Key: "idemexpired", UserId: 71, Status: common.TokenStatusEnabled, ExpiredTime: common.GetTimestamp() - 10, RemainQuota: 10000},
+		{Key: "idemrevoked", UserId: 71, Status: common.TokenStatusDisabled, ExpiredTime: -1, RemainQuota: 10000},
+		{Key: "idemzero", UserId: 71, Status: common.TokenStatusEnabled, ExpiredTime: -1, RemainQuota: 0},
+	} {
+		require.NoError(t, db.Create(&token).Error)
+	}
+	var submits atomic.Int64
+	engine := gin.New()
+	engine.POST("/v1/videos", middleware.TokenAuth(), func(c *gin.Context) {
+		info := &relaycommon.RelayInfo{UserId: common.GetContextKeyInt(c, constant.ContextKeyUserId), TokenId: common.GetContextKeyInt(c, constant.ContextKeyTokenId), TaskRelayInfo: &relaycommon.TaskRelayInfo{LockedChannel: &model.Channel{Id: 1}}, ChannelMeta: &relaycommon.ChannelMeta{}}
+		_, taskErr := executeTaskSubmissionWith(c, info, func(*gin.Context, *relaycommon.RelayInfo) (*relay.TaskSubmitResult, *taskdto.TaskError) {
+			submits.Add(1)
+			return nil, service.TaskErrorWrapperLocal(fmt.Errorf("unauthorized submit reached"), "fixture", 500)
+		})
+		if taskErr != nil {
+			respondTaskSubmissionError(c, taskErr)
+		}
+	})
+	for _, key := range []string{"missingfixturekey", "idemexpired", "idemrevoked", "idemzero"} {
+		t.Run(key, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "/v1/videos", strings.NewReader(`{"model":"video"}`))
+			request.Header.Set("Authorization", "Bearer sk-"+key)
+			request.Header.Set("Idempotency-Key", "same-logical-work")
+			request.Header.Set("Content-Type", "application/json")
+			recorder := httptest.NewRecorder()
+			engine.ServeHTTP(recorder, request)
+			assert.Equal(t, http.StatusUnauthorized, recorder.Code, recorder.Body.String())
+			var claims int64
+			require.NoError(t, db.Model(&model.TaskIdempotency{}).Count(&claims).Error)
+			assert.Zero(t, claims)
+			assert.Zero(t, submits.Load())
 		})
 	}
 }

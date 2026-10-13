@@ -22,6 +22,7 @@ import (
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/pkg/wsmanager"
 	"github.com/QuantumNous/new-api/relay"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -246,6 +247,66 @@ func TestResponsesWSRequestRunnerUsesExistingMemoryRateLimit(t *testing.T) {
 	assert.Equal(t, 1, called)
 }
 
+func TestResponsesWebSocketHandshakeRequiresExplicitAPIKey(t *testing.T) {
+	_, token := setupResponsesWSRequestTest(t)
+	engine := gin.New()
+	finished := make(chan struct{}, 8)
+	engine.GET("/v1/responses", middleware.TokenAuth(), func(c *gin.Context) {
+		defer func() { finished <- struct{}{} }()
+		ResponsesWebSocket(c)
+	})
+	gateway := httptest.NewServer(engine)
+	defer gateway.Close()
+	for _, tc := range []struct {
+		name      string
+		headers   http.Header
+		protocols []string
+		query     string
+		expired   bool
+		status    int
+		protocol  string
+	}{
+		{name: "bearer", headers: http.Header{"Authorization": {"Bearer sk-" + token.Key}}, status: http.StatusSwitchingProtocols},
+		{name: "browser subprotocol", protocols: []string{"responses", "openai-insecure-api-key.sk-" + token.Key}, status: http.StatusSwitchingProtocols, protocol: "responses"},
+		{name: "missing", status: http.StatusUnauthorized},
+		{name: "invalid", headers: http.Header{"Authorization": {"Bearer sk-invalid"}}, status: http.StatusUnauthorized},
+		{name: "cookie cannot authenticate", headers: http.Header{"Cookie": {"session=not-an-api-key"}}, status: http.StatusUnauthorized},
+		{name: "query cannot authenticate", query: "?key=sk-" + token.Key, status: http.StatusUnauthorized},
+		{name: "expired", headers: http.Header{"Authorization": {"Bearer sk-" + token.Key}}, expired: true, status: http.StatusUnauthorized},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.expired {
+				token.ExpiredTime = time.Now().Add(-time.Minute).Unix()
+				require.NoError(t, token.Update())
+			}
+			dialer := websocket.Dialer{Subprotocols: tc.protocols, HandshakeTimeout: 3 * time.Second}
+			client, response, err := dialer.Dial("ws"+strings.TrimPrefix(gateway.URL, "http")+"/v1/responses"+tc.query, tc.headers)
+			require.NotNil(t, response)
+			assert.Equal(t, tc.status, response.StatusCode)
+			if tc.status != http.StatusSwitchingProtocols {
+				require.Error(t, err)
+				body, readErr := io.ReadAll(response.Body)
+				require.NoError(t, readErr)
+				require.NoError(t, response.Body.Close())
+				assert.NotContains(t, string(body), token.Key)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.protocol, client.Subprotocol())
+			require.NoError(t, client.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, "done"), time.Now().Add(time.Second)))
+			require.NoError(t, client.SetReadDeadline(time.Now().Add(3*time.Second)))
+			_, _, closeErr := client.ReadMessage()
+			assert.True(t, websocket.IsCloseError(closeErr, websocket.CloseNormalClosure), "%v", closeErr)
+			require.NoError(t, client.Close())
+			select {
+			case <-finished:
+			case <-time.After(3 * time.Second):
+				t.Fatal("closed websocket retained its handler")
+			}
+		})
+	}
+}
+
 func TestResponsesWSRequestRunnerSharesRedisSuccessLimitWithHTTP(t *testing.T) {
 	_, token := setupResponsesWSRequestTest(t)
 	redisServer := miniredis.RunT(t)
@@ -299,6 +360,7 @@ func (fixture *responsesWSBillingTest) closeAndWait(t *testing.T) {
 		case <-time.After(3 * time.Second):
 			t.Error("upstream connection was not closed")
 		}
+		assert.Zero(t, wsmanager.CloseChannel(fixture.channel.Id, "test cleanup"), "closed websocket must not retain its channel policy registration")
 	}
 	// Health classification is synchronous at the request boundary; only the
 	// Redis write is asynchronous, see waitPerfCounters.
@@ -327,9 +389,14 @@ func waitPerfCounters(t *testing.T, wantRequests int64) (requests, successes int
 
 func newResponsesWSBillingTest(t *testing.T, expression string, handle func(*websocket.Conn, *http.Request), httpEvents ...string) *responsesWSBillingTest {
 	t.Helper()
+	return newResponsesWSBillingTestWithTimeout(t, 30, expression, handle, httpEvents...)
+}
+
+func newResponsesWSBillingTestWithTimeout(t *testing.T, timeout int, expression string, handle func(*websocket.Conn, *http.Request), httpEvents ...string) *responsesWSBillingTest {
+	t.Helper()
 	user, token := setupResponsesWSRequestTest(t)
 	previousTimeout := constant.StreamingTimeout
-	constant.StreamingTimeout = 30
+	constant.StreamingTimeout = timeout
 	t.Cleanup(func() { constant.StreamingTimeout = previousTimeout })
 	previousBatch, previousLogs, previousCount, previousQuota := common.BatchUpdateEnabled, common.LogConsumeEnabled, constant.CountToken, common.QuotaPerUnit
 	common.BatchUpdateEnabled, common.LogConsumeEnabled, constant.CountToken, common.QuotaPerUnit = false, true, false, 500000
@@ -426,7 +493,7 @@ func TestResponsesInterruptedStreamHealth(t *testing.T) {
 	for _, scenario := range []string{"websocket timeout", "sse timeout", "sse client cancel"} {
 		t.Run(scenario, func(t *testing.T) {
 			events := []string{`{"type":"response.created","response":{"id":"partial","status":"in_progress"}}`, `{"type":"response.output_text.delta","delta":"hello"}`}
-			fixture := newResponsesWSBillingTest(t, `tier("request", fixed(0.002))`, func(ws *websocket.Conn, _ *http.Request) {
+			fixture := newResponsesWSBillingTestWithTimeout(t, 1, `tier("request", fixed(0.002))`, func(ws *websocket.Conn, _ *http.Request) {
 				if _, _, err := ws.ReadMessage(); !assert.NoError(t, err) {
 					return
 				}
@@ -437,7 +504,6 @@ func TestResponsesInterruptedStreamHealth(t *testing.T) {
 				}
 				_, _, _ = ws.ReadMessage()
 			})
-			constant.StreamingTimeout = 1
 			fixture.httpUpstream = func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "text/event-stream")
 				for _, event := range events {
@@ -1077,6 +1143,33 @@ func TestResponsesWebSocketLocalErrorsKeepStreamIdentity(t *testing.T) {
 	assert.Equal(t, "revoked", revoked["event_id"])
 	fixture.closeAndWait(t)
 	assertResponsesWSAccounting(t, fixture, nil)
+}
+
+func TestResponsesWebSocketInvalidMessagesDoNotSubmitOrCharge(t *testing.T) {
+	fixture := newResponsesWSBillingTest(t, `tier("request", fixed(0.002))`, func(ws *websocket.Conn, _ *http.Request) {
+		if _, _, err := ws.ReadMessage(); !assert.NoError(t, err) {
+			return
+		}
+		if !assert.NoError(t, ws.WriteMessage(websocket.TextMessage, []byte(`{"type":"response.completed","response":{"id":"one","status":"completed","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}}`))) {
+			return
+		}
+		_, _, err := ws.ReadMessage()
+		assert.Error(t, err, "no further invalid client event may be submitted upstream")
+	})
+	for _, message := range []string{`{`, `{}`, `{"type":"response.unknown","event_id":"unknown"}`, `{"type":"response.cancel","event_id":"inactive"}`, `{"type":"response.create","input":"missing model"}`} {
+		require.NoError(t, fixture.client.WriteMessage(websocket.TextMessage, []byte(message)))
+		event := readResponsesWSTestEvent(t, fixture.client)
+		assert.Equal(t, "error", event["type"])
+		assert.Equal(t, float64(http.StatusBadRequest), event["status"])
+		assert.Zero(t, fixture.connections.Load())
+	}
+	require.NoError(t, fixture.client.WriteMessage(websocket.TextMessage, []byte(`{"type":"response.create","model":"ws-billing","input":"hi"}`)))
+	assert.Equal(t, "response.completed", readResponsesWSTestEvent(t, fixture.client)["type"])
+	require.NoError(t, fixture.client.WriteMessage(websocket.TextMessage, []byte(`{"type":"unknown"}`)))
+	assert.Equal(t, float64(http.StatusBadRequest), readResponsesWSTestEvent(t, fixture.client)["status"])
+	fixture.closeAndWait(t)
+	assert.Equal(t, int32(1), fixture.connections.Load())
+	assertResponsesWSAccounting(t, fixture, []int{1000})
 }
 
 func TestResponsesWebSocketAmbiguousControlErrorClosesAndSettlesOnce(t *testing.T) {

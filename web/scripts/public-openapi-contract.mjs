@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -161,6 +162,11 @@ export function validatePublicContract(spec, advertised, reference, root) {
       throw new Error(`Non-public path: ${url}`)
     }
     for (const [method, operation] of Object.entries(item)) {
+      if (
+        ['parameters', 'summary', 'description', 'servers'].includes(method)
+      ) {
+        continue
+      }
       if (!methods.includes(method)) {
         throw new Error(`Unexpected path member: ${method}`)
       }
@@ -196,10 +202,7 @@ export function validatePublicContract(spec, advertised, reference, root) {
           }
         }
       }
-      const parameters = [
-        ...(item.parameters ?? []),
-        ...(operation.parameters ?? []),
-      ].map((value) => resolveSchema(value, spec))
+      const parameters = operationParameters(item, operation, spec)
       for (const match of url.matchAll(/\{([^}]+)\}/g)) {
         if (
           !parameters.some(
@@ -295,6 +298,18 @@ export function validatePublicContract(spec, advertised, reference, root) {
   }
 }
 
+function operationParameters(item, operation, spec) {
+  // OpenAPI operation parameters override path-level parameters by name/location.
+  const effective = new Map()
+  for (const parameter of resolveSchema(
+    [...(item.parameters ?? []), ...(operation.parameters ?? [])],
+    spec
+  )) {
+    effective.set(`${parameter.in}/${parameter.name}`, parameter)
+  }
+  return [...effective.values()]
+}
+
 export function contractSnapshot(spec) {
   const snapshot = { version: 1, operations: {} }
   for (const [url, item] of Object.entries(spec.paths)) {
@@ -303,8 +318,20 @@ export function contractSnapshot(spec) {
         const resolved = resolveSchema(operation, spec)
         snapshot.operations[`${method.toUpperCase()} ${url}`] = {
           operationId: operation.operationId,
-          security: operation.security ?? spec.security ?? [],
-          parameters: resolved.parameters ?? [],
+          security: securityContract(operation.security ?? spec.security ?? []),
+          parameters: operationParameters(item, operation, spec),
+          securitySchemes: Object.fromEntries(
+            Object.entries(
+              resolveSchema(spec.components?.securitySchemes ?? {}, spec)
+            ).map(([name, scheme]) => [
+              name,
+              Object.fromEntries(
+                Object.entries(scheme).filter(
+                  ([key]) => key !== 'description' && !key.startsWith('x-')
+                )
+              ),
+            ])
+          ),
           requestBody: resolved.requestBody,
           responses: resolved.responses,
         }
@@ -312,6 +339,18 @@ export function contractSnapshot(spec) {
     }
   }
   return snapshot
+}
+
+function securityContract(security) {
+  return security
+    .map((alternative) =>
+      Object.fromEntries(
+        Object.entries(alternative)
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([scheme, scopes]) => [scheme, [...scopes].sort()])
+      )
+    )
+    .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
 }
 
 export function compareContracts(before, after) {
@@ -368,17 +407,32 @@ export function compareContracts(before, after) {
       }
     }
     if (JSON.stringify(old.enum) !== JSON.stringify(next.enum)) {
-      record(
-        'POTENTIALLY_BREAKING',
-        at,
-        'Enum changed; assess client unknown-value handling'
-      )
+      if (
+        old.enum?.some((value) => next.enum && !next.enum.includes(value)) ||
+        (!old.enum && next.enum)
+      ) {
+        record('BREAKING', at, 'Enum values removed or accepted input narrowed')
+      } else {
+        record(
+          request ? 'ADDITIVE' : 'POTENTIALLY_BREAKING',
+          at,
+          'Enum expanded; assess client unknown-value handling'
+        )
+      }
     }
     for (const key of [
       'minimum',
       'maximum',
       'minLength',
       'maxLength',
+      'minItems',
+      'maxItems',
+      'minProperties',
+      'maxProperties',
+      'exclusiveMinimum',
+      'exclusiveMaximum',
+      'multipleOf',
+      'uniqueItems',
       'pattern',
       'oneOf',
       'anyOf',
@@ -386,7 +440,50 @@ export function compareContracts(before, after) {
       'additionalProperties',
     ]) {
       if (JSON.stringify(old[key]) !== JSON.stringify(next[key])) {
-        record('POTENTIALLY_BREAKING', at, `Constraint changed: ${key}`)
+        const lower = ['minimum', 'minLength', 'minItems', 'minProperties']
+        const upper = ['maximum', 'maxLength', 'maxItems', 'maxProperties']
+        const narrowed =
+          request &&
+          ((lower.includes(key) &&
+            next[key] !== undefined &&
+            (old[key] === undefined || next[key] > old[key])) ||
+            (upper.includes(key) &&
+              next[key] !== undefined &&
+              (old[key] === undefined || next[key] < old[key])) ||
+            (key === 'additionalProperties' &&
+              next[key] === false &&
+              old[key] !== false) ||
+            (key === 'uniqueItems' && next[key] === true && !old[key]) ||
+            (['exclusiveMinimum', 'exclusiveMaximum'].includes(key) &&
+              next[key] === true &&
+              old[key] !== true) ||
+            (['oneOf', 'anyOf'].includes(key) &&
+              old[key]?.some(
+                (branch) =>
+                  !next[key]?.some(
+                    (value) => JSON.stringify(value) === JSON.stringify(branch)
+                  )
+              )) ||
+            (key === 'allOf' &&
+              next[key]?.some(
+                (branch) =>
+                  !old[key]?.some(
+                    (value) => JSON.stringify(value) === JSON.stringify(branch)
+                  )
+              )) ||
+            ([
+              'exclusiveMinimum',
+              'exclusiveMaximum',
+              'multipleOf',
+              'pattern',
+            ].includes(key) &&
+              old[key] === undefined &&
+              next[key] !== undefined))
+        record(
+          narrowed ? 'BREAKING' : 'POTENTIALLY_BREAKING',
+          at,
+          `Constraint changed: ${key}`
+        )
       }
     }
     compareSchema(old.items, next.items, `${at}[]`, request)
@@ -398,7 +495,17 @@ export function compareContracts(before, after) {
       continue
     }
     if (JSON.stringify(old.security) !== JSON.stringify(next.security)) {
-      record('POTENTIALLY_BREAKING', key, 'Security requirements changed')
+      record('BREAKING', key, 'Security requirements changed')
+    }
+    for (const scheme of new Set(
+      [...old.security, ...next.security].flatMap((entry) => Object.keys(entry))
+    )) {
+      if (
+        JSON.stringify(old.securitySchemes?.[scheme]) !==
+        JSON.stringify(next.securitySchemes?.[scheme])
+      ) {
+        record('BREAKING', key, `Security scheme changed: ${scheme}`)
+      }
     }
     for (const parameter of old.parameters) {
       if (
@@ -461,8 +568,21 @@ export function compareContracts(before, after) {
     }
     for (const [code, response] of Object.entries(old.responses)) {
       if (!next.responses[code]) {
-        record('POTENTIALLY_BREAKING', key, `Response status removed: ${code}`)
+        record(
+          /^(2\d\d|101)$/.test(code) ? 'BREAKING' : 'POTENTIALLY_BREAKING',
+          key,
+          `Response status removed: ${code}`
+        )
         continue
+      }
+      for (const header of Object.keys(next.responses[code].headers ?? {})) {
+        if (!response.headers?.[header]) {
+          record(
+            'ADDITIVE',
+            `${key}/response/${code}`,
+            `Response header added: ${header}`
+          )
+        }
       }
       for (const [type, media] of Object.entries(response.content ?? {})) {
         if (!next.responses[code].content?.[type]) {
@@ -482,6 +602,21 @@ export function compareContracts(before, after) {
     if (!before.operations[key]) record('ADDITIVE', key, 'Operation added')
   }
   return changes
+}
+
+// PRs compare to their merge base, not a snapshot editable by the same PR.
+// With no argument, local verification compares against the committed HEAD.
+export function readCommittedContract(root, baseRef = 'HEAD') {
+  const commit = execFileSync('git', ['merge-base', baseRef, 'HEAD'], {
+    cwd: root,
+    encoding: 'utf8',
+  }).trim()
+  const raw = execFileSync(
+    'git',
+    ['show', `${commit}:docs/openapi/public.json`],
+    { cwd: root, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }
+  )
+  return { commit, snapshot: contractSnapshot(parsePublicSpec(raw)) }
 }
 
 if (
@@ -510,17 +645,23 @@ if (
       2
     )
   )
-  const baseline = JSON.parse(
-    fs.readFileSync(
-      path.join(root, 'docs/openapi/public-contract-baseline.json'),
-      'utf8'
-    )
-  )
-  const changes = compareContracts(baseline, contractSnapshot(spec))
+  const baseIndex = process.argv.indexOf('--base-ref')
+  const base = baseIndex < 0 ? 'HEAD' : process.argv[baseIndex + 1]
+  if (!base || base.startsWith('-')) {
+    throw new Error('Expected committed --base-ref')
+  }
+  const baseline = readCommittedContract(root, base)
+  console.log(`Committed public contract baseline: ${baseline.commit}`)
+  const changes = compareContracts(baseline.snapshot, contractSnapshot(spec))
   console.log(JSON.stringify({ compatibility: changes }, null, 2))
-  if (changes.some((change) => change.kind !== 'ADDITIVE')) {
+  for (const change of changes.filter(
+    (entry) => entry.kind === 'POTENTIALLY_BREAKING'
+  )) {
+    console.warn(`::warning::${change.at}: ${change.reason}`)
+  }
+  if (changes.some((change) => change.kind === 'BREAKING')) {
     throw new Error(
-      'Public compatibility review required; assess and explicitly update the reviewed baseline only after approval'
+      'Breaking public contract change: preserve the existing version or introduce a reviewed new version; updating the working-tree snapshot cannot bypass this gate'
     )
   }
 }

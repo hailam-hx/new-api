@@ -210,6 +210,9 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		return nil, service.TaskErrorWrapperLocal(errors.New(message), code, http.StatusBadRequest)
 	}
 	if err := service.PrepareDFLOPTaskBillingIdentity(c, info, string(platform)); err != nil {
+		if info.TaskIdempotencyID > 0 && strings.Contains(err.Error(), "BILLING_RESERVATION_REPLAY") {
+			return nil, service.TaskErrorWrapperLocal(errors.New("The upstream outcome is uncertain; do not resubmit with a new key"), "idempotency_legacy_indeterminate", http.StatusConflict)
+		}
 		return nil, service.TaskErrorWrapperLocal(err, "invalid_idempotency_key", http.StatusBadRequest)
 	}
 	// buildSubmitRequest runs during validation and the unreleased plugin
@@ -340,6 +343,11 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	// 7. 预扣费（仅首次 — 重试时 info.Billing 已存在，跳过）
 	if info.Billing == nil && !info.PriceData.FreeModel {
 		info.ForcePreConsume = true
+		if info.TaskIdempotencyID > 0 {
+			// A failed session constructor may still have attempted funding and
+			// an unverified rollback. Never treat Billing == nil as proof of no debit.
+			info.TaskIdempotencyFundingAttempted = true
+		}
 		if apiErr := service.PreConsumeBilling(c, info.PriceData.Quota, info); apiErr != nil {
 			return nil, service.TaskErrorFromAPIError(apiErr)
 		}
@@ -351,6 +359,11 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		return nil, service.TaskErrorWrapper(err, "build_request_failed", http.StatusInternalServerError)
 	}
 
+	// Persist uncertainty before the first possibly paid outbound call. A failed
+	// write leaves this request preflight-only and prevents provider submission.
+	if err := service.MarkTaskIdempotencyOutbound(c, info); err != nil {
+		return nil, service.TaskErrorWrapperLocal(errors.New("idempotency outbound barrier unavailable"), "idempotency_storage_unavailable", http.StatusServiceUnavailable)
+	}
 	// 9. 发送请求
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {

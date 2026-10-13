@@ -52,3 +52,8 @@ export function compareContracts(
 ): CompatibilityChange[]
 
 export function parsePublicSpec(raw: string): unknown
+
+export function readCommittedContract(
+  root: string,
+  baseRef?: string
+): { commit: string; snapshot: PublicSnapshot }

@@ -107,6 +107,11 @@ type RelayInfo struct {
 	// aliases never participate in channel selection or upstream routing.
 	BillingModelName string
 
+	TaskIdempotencyID               int64
+	TaskIdempotencyNonce            string
+	TaskIdempotencyOutbound         bool
+	TaskIdempotencyFundingAttempted bool
+
 	DFLOPTaskPlugin            string
 	DFLOPTaskOutbound          bool
 	DFLOPTaskUpstreamTaskID    string

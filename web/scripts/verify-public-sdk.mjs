@@ -23,6 +23,11 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import {
+  nodeStreamingRecipe,
+  pythonStreamingRecipe,
+} from './sdk-streaming-fixtures.mjs'
+
 // --install downloads pinned tools only into a temporary directory. Alternatively,
 // --tool-root DIR reuses DIR/node_modules and DIR/venv. Neither changes the repo.
 const root = fileURLToPath(new URL('../../', import.meta.url))
@@ -67,6 +72,7 @@ try {
         'openapi-fetch@0.17.0',
         'typescript@5.9.3',
         '@types/node@26.6.5',
+        'ws@8.18.3',
       ])
     )
     run('python3', ['-m', 'venv', path.join(tools, 'venv')])
@@ -78,6 +84,7 @@ try {
         'openapi-python-client==0.29.1',
         'mypy==2.4.0',
         'openapi-spec-validator==0.9.0',
+        'websockets==15.0.1',
       ])
     )
   }
@@ -174,8 +181,12 @@ const fixtures: Record<string, unknown> = ${JSON.stringify(fixtures)};
 const calls: string[] = [];
 const client = createClient<paths>({ baseUrl: 'https://fixture.invalid', headers: { Authorization: 'Bearer fixture-only-token' }, fetch: async request => {
   assert.equal(request.headers.get('Authorization'), 'Bearer fixture-only-token');
-  assert.equal(request.method, 'GET');
-  const url = new URL(request.url); calls.push(url.pathname);
+  const url = new URL(request.url);
+  if (request.method === 'POST' && url.pathname === '/v1/chat/completions') {
+    const payload = await request.json(); assert.equal(payload.stream, true);
+    return new Response(new ReadableStream({start(controller) {controller.enqueue(new TextEncoder().encode('data: [DONE]\\n\\n')); controller.close();}}), {headers: {'Content-Type': 'text/event-stream'}});
+  }
+  assert.equal(request.method, 'GET'); calls.push(url.pathname);
   if(url.pathname === '/v1/videos/fixture-video/content') return new Response(new Uint8Array([0, 1, 255]), { headers: { 'Content-Type': 'video/mp4' } });
   assert(Object.hasOwn(fixtures, url.pathname));
   if(url.pathname === '/v1/key/usage') assert.equal(url.searchParams.get('start'), '1');
@@ -192,6 +203,10 @@ const task = await client.GET('${taskPath}', { params: { path: { ${taskParameter
 const video = await client.GET('/v1/videos/{task_id}/content', { params: { path: { task_id: 'fixture-video' } }, parseAs: 'arrayBuffer' });
 assert(video.data instanceof ArrayBuffer); assert.deepEqual([...new Uint8Array(video.data)], [0, 1, 255]);
 assert.equal(calls.length, 7);
+const streaming = await client.POST('/v1/chat/completions', {body: {model: 'fixture-model', messages: [{role: 'user', content: 'Hello'}], stream: true}, parseAs: 'stream'});
+assert(streaming.data instanceof ReadableStream);
+const reader = streaming.data.getReader(); assert.equal(new TextDecoder().decode((await reader.read()).value), 'data: [DONE]\\n\\n'); await reader.cancel(); reader.releaseLock();
+console.log('Generated TypeScript raw stream transport PASS; SSE event decoding remains manual');
 if (false) {
   // @ts-expect-error The generated path parameter must be supplied.
   await client.GET('${taskPath}');
@@ -329,6 +344,35 @@ print('Python compile + typed sample + 7 mock transport calls (6 JSON + binary v
     run(python, ['-m', 'mypy', '--follow-imports=silent', 'smoke.py'])
   )
   console.log(run(python, ['smoke.py']))
+  const strict = spawnSync(
+    python,
+    ['-m', 'mypy', 'hotx_public_client', 'smoke.py'],
+    { cwd: workspace, env, encoding: 'utf8' }
+  )
+  const strictOutput = strict.stdout + strict.stderr
+  console.log(
+    `Full generated-package mypy audit (no generated patches):\n${strictOutput}`
+  )
+  if (strict.status !== 0) {
+    const errors = strictOutput
+      .split('\n')
+      .filter((line) => line.includes(': error:'))
+    assert(
+      errors.length === 12 &&
+        errors.every(
+          (line) =>
+            line.startsWith('hotx_public_client/client.py:') &&
+            /__exit__|__aexit__/.test(line)
+        ),
+      'Unexpected strict mypy error outside known generator context-manager template gap'
+    )
+  }
+  await fs.writeFile(path.join(workspace, 'streaming.mjs'), nodeStreamingRecipe)
+  await fs.writeFile(
+    path.join(workspace, 'streaming.py'),
+    pythonStreamingRecipe
+  )
+  console.log(run('node', ['streaming.mjs', python]))
   if (
     /WARNING|Warning\(s\)/.test(generatorOutput) ||
     modules.length !== operations.length
@@ -338,7 +382,7 @@ print('Python compile + typed sample + 7 mock transport calls (6 JSON + binary v
     )
   }
   console.log(
-    `SDK generation smoke PASS: TypeScript and Python generated ${operations.length} operations; Go NOT_TESTED. Network/upstream requests: 0.`
+    `SDK generation smoke PASS: TypeScript and Python generated ${operations.length} operations; Go NOT_TESTED. Paid requests: 0; provider/upstream network requests: 0 (loopback fixtures only).`
   )
 } catch (error) {
   if (error.stdout) console.error(error.stdout.toString())

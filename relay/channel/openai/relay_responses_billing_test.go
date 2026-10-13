@@ -415,3 +415,32 @@ func TestDFLOPResponsesHandlersPreserveActualZeroAndQuarantineMissingUsage(t *te
 		}
 	}
 }
+
+type responsesFlushFailureWriter struct {
+	gin.ResponseWriter
+}
+
+func (w *responsesFlushFailureWriter) Flush() {
+	panic("downstream flush failed")
+}
+
+func TestOaiResponsesStreamStopsOnDownstreamFailureAndKeepsObservedUsage(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	c.Writer = &responsesFlushFailureWriter{ResponseWriter: c.Writer}
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "gpt-5.1",
+		DisablePing:     true,
+		ChannelMeta:     &relaycommon.ChannelMeta{},
+	}
+	resp := &http.Response{Body: io.NopCloser(strings.NewReader(
+		"data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":2,\"output_tokens\":3,\"total_tokens\":5}}}\n\n" +
+			"data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\",\"usage\":{\"input_tokens\":20,\"output_tokens\":30,\"total_tokens\":50}}}\n\n" +
+			"data: [DONE]\n\n")), Header: http.Header{"Content-Type": {"text/event-stream"}}}
+	usage, apiErr := OaiResponsesStreamHandler(c, info, resp)
+	require.Nil(t, apiErr, "accepted streams return observed usage for normal settlement")
+	require.NotNil(t, usage)
+	assert.Equal(t, 5, usage.TotalTokens)
+	assert.Equal(t, relaycommon.StreamEndReasonHandlerStop, info.StreamStatus.EndReason)
+	assert.ErrorContains(t, info.StreamStatus.EndError, "downstream flush failed")
+}

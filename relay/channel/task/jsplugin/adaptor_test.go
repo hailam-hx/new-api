@@ -1731,6 +1731,40 @@ func TestTaskSubmitStreamContract(t *testing.T) {
 	}
 }
 
+func TestTaskSubmitStreamFramingBoundaries(t *testing.T) {
+	plugin, err := pluginruntime.CompilePlugin(documentStreamPlugin, pluginruntime.Options{})
+	require.NoError(t, err)
+	terminal := "data: {\"part\":\"ok\",\"complete\":true}\n\n"
+	atLimit := ":" + strings.Repeat("x", maxTaskPluginPersistedJSONBytes-len(terminal)-2) + "\n" + terminal
+	for _, tc := range []struct {
+		name, body, wantID, wantError string
+	}{
+		{"LF terminal ignores later malformed data", terminal + "data: invalid\n\n", "", ""},
+		{"BOM and inherited event ID", "\ufeffid: first\n\nunknown: ignored\nid: bad\x00id\nevent: final\n" + terminal, "first", ""},
+		{"empty data invokes protocol JSON parser", "data:\n\n" + terminal, "", "SyntaxError"},
+		{"malformed JSON", "data: {\n\n", "", "SyntaxError"},
+		{"unknown field ignored", "malformed-field\n: heartbeat\n" + terminal, "", ""},
+		{"exact event limit", atLimit, "", ""},
+		{"event one byte over limit", ":x" + atLimit[1:], "", "size limit"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			value, err := New(plugin).readSubmitEvents(t.Context(), &http.Response{
+				Header: http.Header{"Content-Type": {"text/event-stream"}},
+				Body:   io.NopCloser(strings.NewReader(tc.body)),
+			}, nil)
+			if tc.wantError != "" {
+				require.ErrorContains(t, err, tc.wantError)
+				return
+			}
+			require.NoError(t, err)
+			state, ok := value.(map[string]any)
+			require.True(t, ok)
+			assert.Equal(t, "ok", state["document"])
+			assert.Equal(t, tc.wantID, state["id"])
+		})
+	}
+}
+
 func TestTaskSubmitStreamCancellationClosesReader(t *testing.T) {
 	plugin, err := pluginruntime.CompilePlugin(documentStreamPlugin, pluginruntime.Options{})
 	require.NoError(t, err)
