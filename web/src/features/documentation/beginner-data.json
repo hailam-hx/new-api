@@ -1,0 +1,713 @@
+{
+  "groups": [
+    "Getting Started",
+    "Models & Pricing",
+    "API",
+    "Integrations",
+    "Account",
+    "Support"
+  ],
+  "articles": [
+    {
+      "slug": "overview",
+      "group": "Getting Started",
+      "title": "New API Documentation",
+      "description": "Start using AI APIs in a few minutes.",
+      "kind": "home",
+      "sources": ["router/relay-router.go", "controller/model.go"],
+      "sections": [
+        {
+          "id": "get-started",
+          "title": "Start in 3 steps",
+          "body": "Send your first request"
+        },
+        {
+          "id": "you-need",
+          "title": "You need three things",
+          "body": "Replace API Key and Model ID in the Quickstart example."
+        },
+        {
+          "id": "popular-guides",
+          "title": "Popular guides",
+          "body": "Popular guides"
+        },
+        {
+          "id": "step-1",
+          "title": "What is New API?",
+          "body": "New API lets your app send a message, create an image or use another supported AI model through one API account. Start with a key, a model and one small request."
+        }
+      ]
+    },
+    {
+      "slug": "quickstart",
+      "group": "Getting Started",
+      "title": "Quickstart",
+      "description": "Send your first AI request in a few minutes.",
+      "kind": "quickstart",
+      "sources": [
+        "web/src/features/keys/components/api-keys-primary-buttons.tsx",
+        "controller/model.go",
+        "router/relay-router.go",
+        "web/src/features/usage-logs/components/columns/common-logs-columns.tsx"
+      ],
+      "sections": [
+        {
+          "id": "create-key",
+          "title": "1. Create an API Key",
+          "body": "Open [API Keys](/keys), choose **Create API Key**, then copy the key. Keep it private."
+        },
+        {
+          "id": "choose-model",
+          "title": "2. Choose a model",
+          "body": "Open [Models](/docs/models), choose a chat model and copy its Model ID."
+        },
+        {
+          "id": "quick-example",
+          "title": "3. Send a request",
+          "body": "Replace `YOUR_API_KEY` and `YOUR_MODEL_ID`, then run the code."
+        },
+        {
+          "id": "response",
+          "title": "4. View the result",
+          "body": "The answer is in `choices[0].message.content`."
+        }
+      ]
+    },
+    {
+      "slug": "api-key",
+      "group": "Getting Started",
+      "title": "API Key",
+      "description": "Create and use your API Key safely.",
+      "kind": "article",
+      "sources": [
+        "web/src/features/keys/components/data-table-row-actions.tsx"
+      ],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Create an API Key",
+          "body": "Open [API Keys](/keys), choose **Create API Key**, give it a name and save. Then use **Copy Key** to copy your key."
+        },
+        {
+          "id": "step-2",
+          "title": "Use your API Key",
+          "body": "API Key is sent in the header of each request. Replace `YOUR_API_KEY` with the key you created."
+        },
+        {
+          "id": "step-3",
+          "title": "If your API Key is exposed",
+          "body": "1. Disable or delete the old API Key.\n2. Create a new API Key.\n3. Update the apps that use it."
+        }
+      ]
+    },
+    {
+      "slug": "models",
+      "group": "Models & Pricing",
+      "title": "Models",
+      "description": "Find a suitable model and copy its Model ID to use it.",
+      "kind": "models",
+      "sources": [
+        "controller/pricing.go",
+        "controller/model.go",
+        "web/src/features/pricing/hooks/use-pricing-data.ts"
+      ],
+      "sections": [
+        {
+          "id": "model-catalog",
+          "title": "Choose an accessible model",
+          "body": "Open [Model Square](/pricing) to review available models and prices. Copy the exact Model ID and check its supported endpoints before using it. A model shown in the catalog may still be unavailable for your API key."
+        }
+      ]
+    },
+    {
+      "slug": "pricing",
+      "group": "Models & Pricing",
+      "title": "Pricing",
+      "description": "View usage prices for HOTX API models.",
+      "kind": "pricing",
+      "sources": [
+        "controller/pricing.go",
+        "web/src/features/pricing/components/model-price-cell.tsx",
+        "web/src/features/usage-logs/components/columns/common-logs-columns.tsx"
+      ],
+      "sections": [
+        {
+          "id": "read-prices",
+          "title": "How to read prices",
+          "body": "Prices use the billing unit shown for each model."
+        },
+        {
+          "id": "current-prices",
+          "title": "Current prices",
+          "body": "Open [Pricing](/pricing) for the current configured prices and billing units. Your final charge depends on the selected model, request and recorded usage."
+        }
+      ]
+    },
+    {
+      "slug": "text-chat",
+      "group": "API",
+      "title": "Chat API",
+      "description": "Send messages to AI and get an answer.",
+      "kind": "chat",
+      "sources": ["router/relay-router.go", "relaykit/dto/openai_request.go"],
+      "sections": [
+        {
+          "id": "endpoint",
+          "title": "Chat endpoint",
+          "body": "Send the conversation in `messages` and choose a model with `model`. [View Models](/docs/models)."
+        },
+        {
+          "id": "you-need",
+          "title": "You need",
+          "body": "Use your Base URL, API Key and Model ID. Get your key from [API Keys](/keys) and choose a chat model in [Models](/docs/models)."
+        },
+        {
+          "id": "quick-example",
+          "title": "Quick example",
+          "body": "Replace `YOUR_API_KEY` and `YOUR_MODEL_ID`, then run the code."
+        },
+        {
+          "id": "response",
+          "title": "Response",
+          "body": "The answer is in `choices[0].message.content`."
+        },
+        {
+          "id": "basic-parameters",
+          "title": "Basic parameters",
+          "body": "| Parameter | Meaning |\n| --- | --- |\n| `model` | The model you want to use |\n| `messages` | The conversation messages |"
+        },
+        {
+          "id": "advanced-options",
+          "title": "Advanced options",
+          "body": "| Parameter | Meaning |\n| --- | --- |\n| `stream` | Receive the answer in pieces |\n| `temperature` | Adjusts randomness if the model supports it |\n| `max_tokens` | Limits answer length if the model supports it |"
+        }
+      ],
+      "protocol": "openai",
+      "keywords": ["POST /v1/chat/completions", "Text / Chat"]
+    },
+    {
+      "slug": "image",
+      "group": "API",
+      "title": "Image API",
+      "description": "Create an image from a description with AI.",
+      "kind": "image",
+      "sources": [
+        "pkg/jsplugin/routing.go",
+        "relay/channel/openai/relay_image.go",
+        "docs/plugin-api/v1.md",
+        "relaykit/dto/openai_image.go",
+        "controller/plugin_protocol_image.go",
+        "relay/helper/valid_request.go"
+      ],
+      "sections": [
+        {
+          "id": "endpoint",
+          "title": "Image endpoint",
+          "body": "Send `model` and `prompt` to create an image. [View image models](/docs/models)."
+        },
+        {
+          "id": "you-need",
+          "title": "You need",
+          "body": "Use your Base URL, API Key, Model ID and prompt. Get your key from [API Keys](/keys) and choose a model that supports image generation in [Models](/docs/models)."
+        },
+        {
+          "id": "quick-example",
+          "title": "Quick example",
+          "body": "Replace `YOUR_API_KEY` and `YOUR_MODEL_ID`, then run the code."
+        },
+        {
+          "id": "response",
+          "title": "Response",
+          "body": "Images are usually in `data[0]`. Depending on the model or `response_format`, the result may contain `url` or `b64_json`.\n\n- `url`: Open the URL to view or save the image.\n- `b64_json`: Decode Base64 to save it as an image file."
+        },
+        {
+          "id": "basic-parameters",
+          "title": "Basic parameters",
+          "body": "| Parameter | Meaning |\n| --- | --- |\n| `model` | The image model you want to use |\n| `prompt` | Describe the image you want to create |"
+        },
+        {
+          "id": "advanced-options",
+          "title": "Advanced options",
+          "body": "| Parameter | Meaning |\n| --- | --- |\n| `size` | Image dimensions, if the model supports it |\n| `n` | Number of images, if the model supports it |\n| `quality` | Image quality, if the model supports it |\n| `response_format` | URL or Base64, if the model supports it |\n\nSupported values vary by model. Check the model details before adding options. Omit options that your model does not support."
+        }
+      ],
+      "keywords": ["POST /v1/images/generations"],
+      "navigationTitle": "Image API"
+    },
+    {
+      "slug": "video",
+      "group": "API",
+      "title": "Video",
+      "description": "Create a video with AI and download it when ready.",
+      "kind": "video",
+      "sources": [
+        "pkg/jsplugin/routing.go",
+        "relaykit/dto/openai_video.go",
+        "relay/relay_task.go",
+        "controller/video_proxy.go",
+        "plugins/tasks/sora/plugin.js",
+        "plugins/tasks/kling/plugin.js"
+      ],
+      "sections": [
+        {
+          "id": "endpoint",
+          "title": "Video endpoint",
+          "body": "Send `model` and `prompt` to create a video task. [View video models](/docs/models)."
+        },
+        {
+          "id": "you-need",
+          "title": "You need",
+          "body": "Use your Base URL, API Key, Model ID and prompt. Choose a model that supports video generation in [Models](/docs/models)."
+        },
+        {
+          "id": "how-it-works",
+          "title": "How video works",
+          "body": "1. Create a video\n\n   `POST /v1/videos`\n2. Check status\n\n   `GET /v1/videos/{task_id}`\n3. Download video\n\n   `GET /v1/videos/{task_id}/content`"
+        },
+        {
+          "id": "create-video",
+          "title": "Create a video",
+          "body": "Replace `YOUR_API_KEY` and `YOUR_MODEL_ID`, then send the request."
+        },
+        {
+          "id": "response",
+          "title": "Response",
+          "body": "`id` is the Task ID. Save it and replace `TASK_ID` in the examples below. Creating a task does not mean the video is ready."
+        },
+        {
+          "id": "check-status",
+          "title": "Check video status",
+          "body": "Video processing takes time. After receiving a Task ID, check its status after a while. Download only when `status` is `completed`.\n\n| Status | Meaning |\n| --- | --- |\n| `queued` | Waiting to start |\n| `in_progress` | Creating the video |\n| `completed` | The video is ready |\n| `failed` | Video generation failed |\n| `unknown` | Status unavailable; check Task Logs |"
+        },
+        {
+          "id": "download-video",
+          "title": "Download video",
+          "body": "When the task is `completed`, this endpoint returns the video file. Replace `TASK_ID` with the `id` returned when you created the video. The example saves it as `video.mp4`."
+        },
+        {
+          "id": "basic-parameters",
+          "title": "Basic parameters",
+          "body": "| Parameter | Meaning |\n| --- | --- |\n| `model` | The video model you want to use |\n| `prompt` | Describe the video you want to create |"
+        },
+        {
+          "id": "advanced-options",
+          "title": "Advanced options",
+          "body": "| Parameter | Meaning |\n| --- | --- |\n| `seconds` / `duration` | Video duration, if the model supports it |\n| `size` | Video dimensions, if the model supports it |\n| `input_reference` / `image` | Reference image, if the model supports it |\n\nSupported values and input formats vary by model. Check [Models](/docs/models) before adding options. Not all models support reference images or the same durations and dimensions."
+        }
+      ],
+      "keywords": [
+        "POST /v1/videos",
+        "GET /v1/videos/{task_id}",
+        "GET /v1/videos/{task_id}/content"
+      ]
+    },
+    {
+      "slug": "audio",
+      "group": "API",
+      "title": "Audio API",
+      "description": "Turn text into speech or audio into text.",
+      "kind": "audio",
+      "sources": [
+        "router/relay-router.go",
+        "relaykit/dto/audio.go",
+        "relay/helper/valid_request.go",
+        "relay/channel/openai/adaptor.go",
+        "relay/channel/openai/audio.go"
+      ],
+      "sections": [
+        {
+          "id": "endpoint",
+          "title": "Audio endpoint",
+          "body": "Turn text into an audio file.",
+          "task": "speech"
+        },
+        {
+          "id": "you-need",
+          "title": "You need",
+          "body": "Use a speech model, a voice supported by that model and the text you want to read.",
+          "task": "speech"
+        },
+        {
+          "id": "quick-example",
+          "title": "Quick example",
+          "body": "Replace `YOUR_API_KEY`, `YOUR_MODEL_ID` and `YOUR_VOICE_ID`. Use a synchronous speech model that supports MP3 output.",
+          "task": "speech"
+        },
+        {
+          "id": "result",
+          "title": "Audio result",
+          "body": "A successful synchronous request returns audio data. These examples save it as `speech.mp3`. Open the file to listen.",
+          "task": "speech"
+        },
+        {
+          "id": "basic-parameters",
+          "title": "Basic parameters",
+          "body": "| Parameter | Meaning |\n| --- | --- |\n| `model` | Speech generation model |\n| `input` | Text to read aloud |\n| `voice` | A voice supported by your model; optional for some models |",
+          "task": "speech"
+        },
+        {
+          "id": "advanced-options",
+          "title": "Advanced options",
+          "body": "| Parameter | Meaning |\n| --- | --- |\n| `response_format` | Audio format such as MP3, if the model supports it |\n| `speed` | Speaking speed, if the model supports it |\n\nSupported voices and formats vary by model. Some models choose a default voice when `voice` is omitted.",
+          "task": "speech"
+        },
+        {
+          "id": "endpoint",
+          "title": "Audio endpoint",
+          "body": "Turn an audio file into text.",
+          "task": "transcription"
+        },
+        {
+          "id": "you-need",
+          "title": "You need",
+          "body": "Use a transcription model and a local audio file.",
+          "task": "transcription"
+        },
+        {
+          "id": "quick-example",
+          "title": "Quick example",
+          "body": "Replace `YOUR_API_KEY`, `YOUR_MODEL_ID` and `YOUR_AUDIO_FILE` with your audio file path.",
+          "task": "transcription"
+        },
+        {
+          "id": "result",
+          "title": "Audio result",
+          "body": "The recognized words are in `text`.",
+          "task": "transcription"
+        },
+        {
+          "id": "basic-parameters",
+          "title": "Basic parameters",
+          "body": "| Parameter | Meaning |\n| --- | --- |\n| `model` | Speech recognition model |\n| `file` | Audio file to transcribe |",
+          "task": "transcription"
+        },
+        {
+          "id": "advanced-options",
+          "title": "Advanced options",
+          "body": "| Parameter | Meaning |\n| --- | --- |\n| `language` | Audio language, if the model supports it |\n| `response_format` | Output format, if the model supports it; JSON is the default |\n\nUse the default JSON response for these examples. Other formats may require reading the response as plain text.",
+          "task": "transcription"
+        }
+      ],
+      "keywords": [
+        "POST /v1/audio/speech",
+        "POST /v1/audio/transcriptions",
+        "TTS",
+        "STT"
+      ],
+      "navigationTitle": "Audio API"
+    },
+    {
+      "slug": "api-reference",
+      "group": "API",
+      "title": "API Reference",
+      "description": "Endpoints, schemas and protocols supported by HOTX API.",
+      "kind": "reference",
+      "sources": [
+        "docs/openapi/relay.json",
+        "router/relay-router.go",
+        "router/task-plugin-protocol-router.go",
+        "pkg/jsplugin/routing.go",
+        "relaykit/dto/openai_request.go",
+        "relaykit/dto/openai_image.go",
+        "relaykit/dto/audio.go",
+        "middleware/auth.go",
+        "middleware/utils.go"
+      ],
+      "sections": [
+        {
+          "id": "authentication",
+          "title": "Authentication",
+          "body": "Use the endpoint table below with your gateway Base URL and API key. Model and channel availability can differ. See [HOTX media tasks](/docs/hotx-media) for the configured asynchronous media routes."
+        }
+      ]
+    },
+    {
+      "slug": "integration-claude-code",
+      "group": "Integrations",
+      "title": "Claude Code",
+      "description": "Connect Claude Code with your gateway key.",
+      "kind": "integration",
+      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Configure",
+          "body": "Create a dedicated [API key](/keys). Set `ANTHROPIC_BASE_URL` to this gateway's origin **without `/v1`**, and `ANTHROPIC_AUTH_TOKEN` to that key. Choose a model that supports Anthropic Messages in [Models](/docs/models). Set `ANTHROPIC_MODEL` to its exact ID, then start Claude Code in the same terminal."
+        },
+        {
+          "id": "step-2",
+          "title": "Test",
+          "body": "Send one short prompt, check `/status` in Claude Code and review [Usage Logs](/usage-logs/common). Client versions and model features differ; this gateway does not enable the count-tokens endpoint. See the [official Claude Code gateway guide](https://code.claude.com/docs/en/llm-gateway-connect)."
+        }
+      ],
+      "protocol": "anthropic"
+    },
+    {
+      "slug": "integration-cursor",
+      "group": "Integrations",
+      "title": "Cursor",
+      "description": "Use your API key in supported Cursor settings.",
+      "kind": "integration",
+      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Configure",
+          "body": "Create a dedicated [API key](/keys). Open Cursor **Settings → Models**. If your version provides **Override OpenAI Base URL**, enter the OpenAI Base URL below, save your key and choose an accessible chat model ID."
+        },
+        {
+          "id": "step-2",
+          "title": "Test",
+          "body": "Send a short chat prompt and check [Usage Logs](/usage-logs/common). Support depends on Cursor's version and provider controls. Your key does not replace every Cursor feature, including Tab completion, and requests pass through Cursor's servers. See the [official Cursor API key guide](https://cursor.com/help/models-and-usage/api-keys)."
+        }
+      ]
+    },
+    {
+      "slug": "integration-cline",
+      "group": "Integrations",
+      "title": "Cline",
+      "description": "Configure an OpenAI Compatible connection.",
+      "kind": "integration",
+      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Configure",
+          "body": "Create a dedicated [API key](/keys). In Cline settings choose **OpenAI Compatible**. Paste the OpenAI Base URL below, your key and the exact Model ID copied from [Models](/docs/models)."
+        },
+        {
+          "id": "step-2",
+          "title": "Test",
+          "body": "Send a short prompt and inspect [Usage Logs](/usage-logs/common). Only enable image or tool features when the model supports them. See the [official Cline setup guide](https://docs.cline.bot/provider-config/openai-compatible)."
+        }
+      ]
+    },
+    {
+      "slug": "integration-compatible-apps",
+      "group": "Integrations",
+      "title": "OpenAI-compatible Apps",
+      "description": "Connect apps that offer a Custom OpenAI API setting.",
+      "kind": "integration",
+      "sources": ["router/relay-router.go", "middleware/auth.go"],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Three settings",
+          "body": "Most compatible apps need **Base URL**, **API Key** and **Model ID**. Use the OpenAI Base URL below, a key from [API Keys](/keys) and an accessible chat model copied from [Models](/docs/models). Avoid adding `/v1` twice if the app appends it."
+        },
+        {
+          "id": "step-2",
+          "title": "Test a small request",
+          "body": "Send one short message, then open [Usage Logs](/usage-logs/common). Basic chat support does not guarantee every app feature. If a setting is missing or the request fails, check the app's own documentation and [Common errors](/docs/error-codes)."
+        }
+      ]
+    },
+    {
+      "slug": "console-wallet",
+      "group": "Account",
+      "title": "Balance & Top-up",
+      "description": "Check your balance and add credit.",
+      "kind": "article",
+      "sources": [
+        "web/src/features/wallet/components/wallet-stats-card.tsx",
+        "web/src/features/wallet/index.tsx"
+      ],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Your balance",
+          "body": "Open [Wallet](/wallet) to see **Current Balance** and the payment or redemption options available on this platform. Your balance decreases as requests use paid services."
+        },
+        {
+          "id": "step-2",
+          "title": "After a payment",
+          "body": "Check [Payment history](/wallet?show_history=true) to confirm the order status. If credit has not arrived, check that status before paying again and contact support with the order ID. Never share your payment credentials."
+        }
+      ],
+      "console": "/wallet"
+    },
+    {
+      "slug": "console-logs",
+      "group": "Account",
+      "title": "Usage & Logs",
+      "description": "See your requests and their actual cost.",
+      "kind": "article",
+      "sources": [
+        "web/src/features/usage-logs/components/columns/common-logs-columns.tsx",
+        "web/src/features/usage-logs/index.tsx"
+      ],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Check a request",
+          "body": "Open [Usage Logs](/usage-logs/common) and find the request by time or model. The log shows its model, usage and **Cost**; available status and error information helps explain failures."
+        },
+        {
+          "id": "step-2",
+          "title": "Check a task",
+          "body": "Use [Task Logs](/usage-logs/task) for video and other async work. Check whether the task is still running, completed or failed before starting it again. The final cost or refund can be recorded after completion."
+        }
+      ],
+      "console": "/usage-logs/common"
+    },
+    {
+      "slug": "billing",
+      "group": "Account",
+      "title": "Billing",
+      "description": "Understand when and how you pay.",
+      "kind": "article",
+      "sources": [
+        "service/billing_session.go",
+        "service/task_billing.go",
+        "service/violation_fee.go",
+        "web/src/features/usage-logs/components/columns/common-logs-columns.tsx"
+      ],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "When am I charged?",
+          "body": "Successful requests are charged using the model's configured price and recorded usage. Text can charge separately for input and output tokens. Image, video and audio use the unit displayed on [Pricing](/docs/pricing)."
+        },
+        {
+          "id": "step-2",
+          "title": "What if a request fails?",
+          "body": "Failed requests normally return reserved balance. Completed work or configured policy fees may still be charged. A timed-out task can keep running, so check [Task Logs](/usage-logs/task) before trying again."
+        },
+        {
+          "id": "step-3",
+          "title": "Where is the exact cost?",
+          "body": "Open [Usage Logs](/usage-logs/common) and read **Cost** for that request. Use [Wallet](/wallet) for your remaining balance. Task charges or refunds can be finalized later; the initial balance change is not always the final cost."
+        }
+      ]
+    },
+    {
+      "slug": "faq",
+      "group": "Support",
+      "title": "FAQ",
+      "description": "Short answers to the questions people ask first.",
+      "kind": "article",
+      "sources": [
+        "middleware/auth.go",
+        "middleware/rate-limit.go",
+        "middleware/distributor.go",
+        "controller/pricing.go"
+      ],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Where do I get my API key?",
+          "body": "Open [API Keys](/keys), create a key and use **Copy Key**."
+        },
+        {
+          "id": "step-2",
+          "title": "What are Base URL and Model ID?",
+          "body": "Base URL is the server address your app connects to. Model ID is the exact model name you copy from [Models](/docs/models). See [Quickstart](/docs/quickstart)."
+        },
+        {
+          "id": "step-3",
+          "title": "Why is my balance insufficient?",
+          "body": "Check [Wallet](/wallet) and your key's quota. Add credit if needed, or check your subscription limits. See [Billing](/docs/billing)."
+        },
+        {
+          "id": "step-4",
+          "title": "Why is a model unavailable?",
+          "body": "Check the model ID, your key's access and the task type. A visible model may be unavailable for your key or temporarily have no working provider. See [Common errors](/docs/error-codes)."
+        },
+        {
+          "id": "step-5",
+          "title": "Which models create images or videos?",
+          "body": "Open [Models](/docs/models) and review the supported endpoints on [Model Square](/pricing). Choose a model that supports your image or video operation; names alone do not prove capability or API key access."
+        },
+        {
+          "id": "step-6",
+          "title": "What do 401, 429 or a timeout mean?",
+          "body": "401 usually means the key is invalid, expired or disabled. 429 means a request limit was reached. On a timeout, check the request or task status before retrying. See [Common errors](/docs/error-codes)."
+        },
+        {
+          "id": "step-7",
+          "title": "How do I check the cost?",
+          "body": "Open [Usage Logs](/usage-logs/common), find the request and read **Cost**."
+        }
+      ]
+    },
+    {
+      "slug": "error-codes",
+      "group": "Support",
+      "title": "Common errors",
+      "description": "Find the cause and the next step.",
+      "kind": "common-errors",
+      "sources": [
+        "middleware/auth.go",
+        "middleware/distributor.go",
+        "middleware/rate-limit.go",
+        "service/billing_session.go",
+        "controller/relay.go"
+      ],
+      "sections": [
+        {
+          "id": "step-1",
+          "title": "Read the message",
+          "body": "Check both the HTTP status and the response message. The same status can have different causes. This gateway uses **403**, not a fixed 402, for insufficient account or key quota."
+        },
+        {
+          "id": "step-2",
+          "title": "Before retrying",
+          "body": "Fix invalid settings first. For limits, wait and try a small request. For image or video timeouts, check [Task Logs](/usage-logs/task) before submitting again; a task may still finish and be charged."
+        }
+      ]
+    },
+    {
+      "slug": "hotx-media",
+      "group": "API",
+      "title": "HOTX media tasks",
+      "description": "Create and retrieve images, videos, music, speech, voices and avatars through the configured media plugin.",
+      "kind": "article",
+      "sources": [
+        "dflop-media.plugin.js (operator-installed v0.3.0)",
+        "pkg/jsplugin/routing.go",
+        "router/task-router.go"
+      ],
+      "keywords": [
+        "POST /dflop-media/images",
+        "POST /dflop-media/edits",
+        "POST /dflop-media/videos",
+        "POST /dflop-media/music",
+        "POST /dflop-media/speech",
+        "POST /dflop-media/voices",
+        "POST /dflop-media/avatars"
+      ],
+      "sections": [
+        {
+          "id": "choose-route",
+          "title": "Choose the media route",
+          "body": "These routes use JSON requests and `Authorization: Bearer YOUR_API_KEY`. Use your gateway origin without `/v1` before the paths below. Select a model that supports the operation; the OpenAI-compatible image, video and audio examples on other pages describe separate routes."
+        },
+        {
+          "id": "operations",
+          "title": "Media endpoints",
+          "body": "| Operation | Submit | Retrieve |\n| --- | --- | --- |\n| Images | `POST /dflop-media/images` | `GET /dflop-media/images/{task_id}` |\n| Image edits | `POST /dflop-media/edits` | `GET /dflop-media/edits/{task_id}` |\n| Videos | `POST /dflop-media/videos` | `GET /dflop-media/videos/{task_id}` |\n| Music | `POST /dflop-media/music` | `GET /dflop-media/music/{task_id}` |\n| Speech | `POST /dflop-media/speech` | `GET /dflop-media/speech/{task_id}` |\n| Voices | `POST /dflop-media/voices` | `GET /dflop-media/voices/{task_id}` |\n| Avatars | `POST /dflop-media/avatars` | `GET /dflop-media/avatars/{task_id}` |"
+        },
+        {
+          "id": "model-id",
+          "title": "Use the exact Model ID",
+          "body": "Copy a model ID from [Models](/docs/models) without adding a `dflop/` prefix. The configured speech, voice-cloning and avatar-creation IDs are `voice-tts-pro`, `voice-clone-pro` and `dh-avatar-create`. Request fields and accepted inputs vary by operation and model. Use the matching route and model; model visibility does not grant access."
+        },
+        {
+          "id": "submit-and-retrieve",
+          "title": "Submit once and keep the task ID",
+          "body": "Save the `id` returned by submission. Replace `{task_id}` with that value when calling the corresponding GET route. Keep the same API key and poll at a controlled interval. The result payload differs by operation; inspect the completed response for its media data or output URL. A timeout does not prove failure: retrieve the existing task before submitting another paid request."
+        },
+        {
+          "id": "task-status",
+          "title": "Task status and completion",
+          "body": "| Status | Meaning |\n| --- | --- |\n| `NOT_START` | Accepted; waiting to start |\n| `QUEUED` | Waiting to run |\n| `IN_PROGRESS` | Processing or awaiting final billing |\n| `SUCCESS` | Completed and final billing recorded |\n| `FAILURE` | Failed; inspect the returned error |\n\nPoll the returned `status` until `SUCCESS` or `FAILURE`. A `99%` indicator in the console Task Logs can mean the media is ready while final billing is still pending. The native response does not guarantee a progress field. Keep polling the same task; do not treat a progress indicator or an unknown status as completion."
+        },
+        {
+          "id": "estimated-and-final-cost",
+          "title": "Estimated and final cost",
+          "body": "The initial reservation is an estimate, not the final charge or a guaranteed spending limit. Final settlement uses the recorded provider cost and can differ from that estimate. Review [Pricing](/pricing) and [Usage Logs](/usage-logs/common). If the console Task Logs remain at `99%`, keep the task ID and contact support; do not interpret a missing billing record as a free result."
+        }
+      ]
+    }
+  ]
+}
